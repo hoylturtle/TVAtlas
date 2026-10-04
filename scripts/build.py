@@ -2,22 +2,16 @@ from pathlib import Path
 import subprocess
 import time
 import sys
+import json
 import re
 
+
 # ============================================================
-# TVAtlas v0.4.1
-# Mainland China Curated Edition
-#
-# 功能：
-# 1. 保留上游 EXTINF 原始字节
-# 2. 不重新编码中文
-# 3. 精确识别 CCTV
-# 4. 筛选主流卫视
-# 5. 同频道最多保留 2 条线路
-# 6. Cctv / cctv / CCTV 统一显示为 CCTV
+# TVAtlas v0.5
+# Config Driven Builder
 # ============================================================
 
-VERSION = "0.4.1"
+VERSION = "0.5"
 
 SOURCE = (
     "https://raw.githubusercontent.com/"
@@ -26,88 +20,40 @@ SOURCE = (
 
 ROOT = Path(__file__).resolve().parent.parent
 
+CONFIG = ROOT / "config" / "channels.json"
 TEMP = ROOT / "source.m3u"
 OUTPUT = ROOT / "tvatlas.m3u"
 
 
 # ============================================================
-# CCTV 白名单
+# 加载配置
 # ============================================================
 
-CCTV_NUMBERS = {
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "5+",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "13",
-    "14",
-    "15",
-    "16",
-    "17",
-}
+def load_config():
+
+    if not CONFIG.exists():
+
+        print("ERROR: config/channels.json not found")
+        sys.exit(1)
+
+    with CONFIG.open(
+        "r",
+        encoding="utf-8"
+    ) as f:
+
+        config = json.load(f)
+
+    return config
 
 
 # ============================================================
-# 主流卫视白名单
-# ============================================================
-
-SATELLITES = [
-    "湖南卫视",
-    "浙江卫视",
-    "江苏卫视",
-    "东方卫视",
-    "北京卫视",
-    "广东卫视",
-    "深圳卫视",
-    "山东卫视",
-    "安徽卫视",
-    "湖北卫视",
-    "河南卫视",
-    "四川卫视",
-    "重庆卫视",
-    "天津卫视",
-    "辽宁卫视",
-    "黑龙江卫视",
-    "江西卫视",
-    "河北卫视",
-    "东南卫视",
-    "广西卫视",
-    "贵州卫视",
-    "云南卫视",
-]
-
-SATELLITE_BYTES = [
-    name.encode("utf-8")
-    for name in SATELLITES
-]
-
-
-# ============================================================
-# 每个频道最多保留多少条线路
-# ============================================================
-
-MAX_LINES_PER_CHANNEL = 2
-
-
-# ============================================================
-# 下载上游 M3U
+# 下载
 # ============================================================
 
 def download():
 
     print("")
-    print("[1/4] Download source")
-    print(SOURCE)
-    print("")
+    print("[1/5] Download source")
 
     command = [
         "curl",
@@ -115,25 +61,11 @@ def download():
         "--fail",
         "--silent",
         "--show-error",
-
-        # 建立连接最长 8 秒
-        "--connect-timeout",
-        "8",
-
-        # 整个下载最长 30 秒
-        "--max-time",
-        "30",
-
-        # 下载失败重试一次
-        "--retry",
-        "1",
-
-        "--retry-delay",
-        "2",
-
-        "-o",
-        str(TEMP),
-
+        "--connect-timeout", "8",
+        "--max-time", "30",
+        "--retry", "1",
+        "--retry-delay", "2",
+        "-o", str(TEMP),
         SOURCE,
     ]
 
@@ -144,55 +76,33 @@ def download():
         subprocess.run(
             command,
             check=True,
-            timeout=40,
+            timeout=40
         )
 
     except subprocess.TimeoutExpired:
 
-        print("")
         print("ERROR: download timeout")
         sys.exit(1)
 
     except subprocess.CalledProcessError as e:
 
-        print("")
         print(
             f"ERROR: curl failed "
-            f"(code={e.returncode})"
+            f"({e.returncode})"
         )
-        sys.exit(1)
 
-    if not TEMP.exists():
-
-        print("")
-        print("ERROR: source file not created")
         sys.exit(1)
 
     size = TEMP.stat().st_size
 
-    if size < 100:
-
-        print("")
-        print("ERROR: source file too small")
-        sys.exit(1)
-
-    elapsed = time.time() - start
-
     print(
         f"OK: {size:,} bytes "
-        f"in {elapsed:.1f}s"
+        f"in {time.time() - start:.1f}s"
     )
 
 
 # ============================================================
-# 获取频道显示名称
-#
-# EXTINF 格式：
-#
-# #EXTINF:-1 ....,Cctv-1 综合
-#
-# 我们只读取逗号后面的 bytes
-# 不进行中文 decode
+# 获取频道显示名
 # ============================================================
 
 def get_name(extinf):
@@ -207,167 +117,102 @@ def get_name(extinf):
 
 
 # ============================================================
-# CCTV 精确识别
+# 名称规范化，仅用于匹配
 # ============================================================
 
-def identify_cctv(name):
+def normalize_match_name(name):
 
-    # 支持：
-    #
-    # CCTV-1
-    # Cctv-1
-    # cctv-1
-    # CCTV1
-    # CCTV-1 综合
-    # CCTV1综合
-    # CCTV-5+
-    # CCTV5+
-
-    upper = name.upper()
-
-    match = re.match(
-        rb"^CCTV[\-\s]?([0-9]{1,2}\+?)",
-        upper
-    )
-
-    if not match:
-        return None
-
-    try:
-
-        number = match.group(1).decode(
-            "ascii"
-        )
-
-    except UnicodeDecodeError:
-
-        return None
-
-    if number not in CCTV_NUMBERS:
-        return None
-
-    return f"CCTV-{number}"
-
-
-# ============================================================
-# 卫视识别
-# ============================================================
-
-def identify_satellite(name):
-
-    for (
-        chinese_name,
-        chinese_bytes
-    ) in zip(
-        SATELLITES,
-        SATELLITE_BYTES
-    ):
-
-        if chinese_bytes in name:
-            return chinese_name
-
-    return None
-
-
-# ============================================================
-# 判断频道身份
-# ============================================================
-
-def identify_channel(extinf):
-
-    name = get_name(extinf)
-
-    # CCTV
-    channel = identify_cctv(name)
-
-    if channel:
-        return channel
-
-    # 卫视
-    channel = identify_satellite(name)
-
-    if channel:
-        return channel
-
-    return None
-
-
-# ============================================================
-# 标准化 EXTINF
-#
-# 重要：
-# 这里只修改 ASCII：
-#
-# Cctv -> CCTV
-# cctv -> CCTV
-#
-# 中文 bytes 完全不动
-# ============================================================
-
-def normalize_extinf(extinf):
-
-    extinf = re.sub(
+    # CCTV 大小写统一
+    name = re.sub(
         rb"(?i)cctv",
         b"CCTV",
-        extinf
+        name
     )
 
-    return extinf
+    # 转大写只影响 ASCII
+    return name.upper()
 
 
 # ============================================================
-# 筛选频道
+# 精确匹配
 # ============================================================
 
-def filter_playlist():
+def channel_matches(
+    source_name,
+    channel
+):
+
+    source = normalize_match_name(
+        source_name
+    )
+
+    for match_text in channel["match"]:
+
+        target = match_text.encode(
+            "utf-8"
+        )
+
+        target = normalize_match_name(
+            target
+        )
+
+        # CCTV 使用前缀边界匹配
+        if target.startswith(b"CCTV"):
+
+            pattern = (
+                rb"^"
+                + re.escape(target)
+                + rb"(?:[\s]|$)"
+            )
+
+            if re.search(
+                pattern,
+                source
+            ):
+                return True
+
+        # 中文卫视允许包含匹配
+        else:
+
+            if target in source:
+                return True
+
+    return False
+
+
+# ============================================================
+# 解析上游频道
+# ============================================================
+
+def parse_source():
 
     print("")
-    print("[2/4] Parse playlist")
-
-    # 全程读取 bytes
-    # 不 decode 整个 M3U
+    print("[2/5] Parse source")
 
     data = TEMP.read_bytes()
 
     lines = data.splitlines()
 
-    # 格式：
-    #
-    # channel_id:
-    # [
-    #   (
-    #       extinf,
-    #       extra_lines,
-    #       url
-    #   )
-    # ]
-
-    found = {}
+    channels = []
 
     i = 0
 
     while i < len(lines):
 
-        line = lines[i]
-
-        if not line.startswith(
+        if not lines[i].startswith(
             b"#EXTINF:"
         ):
 
             i += 1
             continue
 
-        extinf = line
-
-        channel_id = identify_channel(
-            extinf
-        )
-
-        j = i + 1
+        extinf = lines[i]
 
         extras = []
 
         url = None
+
+        j = i + 1
 
         while j < len(lines):
 
@@ -378,192 +223,242 @@ def filter_playlist():
                 j += 1
                 continue
 
-            # EXTINF 后可能还有额外标签
             if candidate.startswith(b"#"):
 
-                extras.append(candidate)
+                extras.append(
+                    candidate
+                )
 
                 j += 1
                 continue
 
-            # 第一个非 # 行认为是 URL
             url = candidate
 
             break
 
-        if channel_id and url:
+        if url:
 
-            entries = found.setdefault(
-                channel_id,
-                []
+            channels.append(
+                {
+                    "extinf": extinf,
+                    "name": get_name(extinf),
+                    "extras": extras,
+                    "url": url
+                }
             )
-
-            # ------------------------------------------------
-            # 相同 URL 不重复
-            # ------------------------------------------------
-
-            duplicate = any(
-                existing[2] == url
-                for existing in entries
-            )
-
-            # ------------------------------------------------
-            # 每个频道最多保留两条线路
-            # ------------------------------------------------
-
-            if (
-                not duplicate
-                and len(entries)
-                < MAX_LINES_PER_CHANNEL
-            ):
-
-                entries.append(
-                    (
-                        extinf,
-                        extras,
-                        url,
-                    )
-                )
 
         i = max(
             j + 1,
             i + 1
         )
 
-    return found
+    print(
+        f"Source entries: {len(channels)}"
+    )
+
+    return channels
 
 
 # ============================================================
-# 输出 TVAtlas
+# 重写 EXTINF
+#
+# 只处理：
+# group-title
+# 最终频道名
+#
+# 其他 tvg-id / tvg-logo 等全部保留
 # ============================================================
 
-def write_playlist(found):
+def rewrite_extinf(
+    extinf,
+    display_name,
+    group
+):
+
+    # CCTV ASCII 统一
+    extinf = re.sub(
+        rb"(?i)cctv",
+        b"CCTV",
+        extinf
+    )
+
+    group_bytes = group.encode(
+        "utf-8"
+    )
+
+    name_bytes = display_name.encode(
+        "utf-8"
+    )
+
+    # --------------------------------
+    # group-title
+    # --------------------------------
+
+    if re.search(
+        rb'group-title="[^"]*"',
+        extinf
+    ):
+
+        extinf = re.sub(
+            rb'group-title="[^"]*"',
+            b'group-title="'
+            + group_bytes
+            + b'"',
+            extinf
+        )
+
+    else:
+
+        extinf = extinf.replace(
+            b"#EXTINF:-1",
+            b'#EXTINF:-1 group-title="'
+            + group_bytes
+            + b'"',
+            1
+        )
+
+    # --------------------------------
+    # 最终显示名称
+    # --------------------------------
+
+    if b"," in extinf:
+
+        metadata = extinf.split(
+            b",",
+            1
+        )[0]
+
+        extinf = (
+            metadata
+            + b","
+            + name_bytes
+        )
+
+    return extinf
+
+
+# ============================================================
+# 构建
+# ============================================================
+
+def build(
+    config,
+    source_channels
+):
 
     print("")
-    print("[3/4] Generate TVAtlas")
+    print("[3/5] Match channels")
 
-    output = [
+    max_lines = config[
+        "settings"
+    ].get(
+        "max_lines_per_channel",
+        2
+    )
+
+    result = []
+
+    for wanted in config["channels"]:
+
+        matches = []
+
+        seen_urls = set()
+
+        for source in source_channels:
+
+            if not channel_matches(
+                source["name"],
+                wanted
+            ):
+                continue
+
+            if source["url"] in seen_urls:
+                continue
+
+            seen_urls.add(
+                source["url"]
+            )
+
+            matches.append(
+                source
+            )
+
+            if len(matches) >= max_lines:
+                break
+
+        result.append(
+            {
+                "config": wanted,
+                "sources": matches
+            }
+        )
+
+        if matches:
+
+            print(
+                f"FOUND: "
+                f"{wanted['name']} "
+                f"({len(matches)})"
+            )
+
+        else:
+
+            print(
+                f"MISS : "
+                f"{wanted['name']}"
+            )
+
+    return result
+
+
+# ============================================================
+# 输出
+# ============================================================
+
+def write_output(result):
+
+    print("")
+    print("[4/5] Generate playlist")
+
+    lines = [
         b"#EXTM3U"
     ]
 
     total = 0
 
+    for item in result:
 
-    # --------------------------------------------------------
-    # CCTV 固定排序
-    # --------------------------------------------------------
+        wanted = item["config"]
 
-    cctv_order = [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "5+",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10",
-        "11",
-        "12",
-        "13",
-        "14",
-        "15",
-        "16",
-        "17",
-    ]
+        for source in item["sources"]:
 
-    ordered_ids = [
-        f"CCTV-{number}"
-        for number in cctv_order
-    ]
-
-
-    # --------------------------------------------------------
-    # CCTV 后面接卫视
-    # --------------------------------------------------------
-
-    ordered_ids.extend(
-        SATELLITES
-    )
-
-
-    # --------------------------------------------------------
-    # 写入
-    # --------------------------------------------------------
-
-    for channel_id in ordered_ids:
-
-        entries = found.get(
-            channel_id,
-            []
-        )
-
-        if not entries:
-
-            print(
-                f"MISS : {channel_id}"
+            extinf = rewrite_extinf(
+                source["extinf"],
+                wanted["name"],
+                wanted["group"]
             )
 
-            continue
-
-        print(
-            f"FOUND: {channel_id} "
-            f"({len(entries)} line(s))"
-        )
-
-        for (
-            extinf,
-            extras,
-            url
-        ) in entries:
-
-            # ================================================
-            # 关键修改
-            #
-            # Cctv / cctv / CCTV
-            # 全部统一为：
-            #
-            # CCTV
-            #
-            # 只操作 ASCII bytes
-            # 不碰中文
-            # ================================================
-
-            extinf = normalize_extinf(
+            lines.append(
                 extinf
             )
 
-            # 原始 EXTINF
-            output.append(
-                extinf
+            lines.extend(
+                source["extras"]
             )
 
-            # 原始额外标签
-            output.extend(
-                extras
-            )
-
-            # 原始直播 URL
-            output.append(
-                url
+            lines.append(
+                source["url"]
             )
 
             total += 1
 
-
-    # --------------------------------------------------------
-    # 输出文件
-    # --------------------------------------------------------
-
-    result = (
-        b"\n".join(output)
+    playlist = (
+        b"\n".join(lines)
         + b"\n"
     )
 
     OUTPUT.write_bytes(
-        result
+        playlist
     )
 
     return total
@@ -579,37 +474,39 @@ def main():
     print(
         "======================================"
     )
-
     print(
         f"TVAtlas v{VERSION}"
     )
-
     print(
-        "Mainland China Curated Edition"
+        "Config Driven Builder"
     )
-
     print(
         "======================================"
     )
 
     start = time.time()
 
+    config = load_config()
+
     try:
 
-        # 下载
         download()
 
-        # 筛选
-        found = filter_playlist()
+        source_channels = (
+            parse_source()
+        )
 
-        # 生成
-        total = write_playlist(
-            found
+        result = build(
+            config,
+            source_channels
+        )
+
+        total = write_output(
+            result
         )
 
         if total == 0:
 
-            print("")
             print(
                 "ERROR: no channels generated"
             )
@@ -618,52 +515,30 @@ def main():
 
     finally:
 
-        # 删除临时大合集
         if TEMP.exists():
-
             TEMP.unlink()
 
-
-    elapsed = (
-        time.time()
-        - start
-    )
-
     print("")
-    print("[4/4] Complete")
-
+    print("[5/5] Complete")
     print(
         "--------------------------------------"
     )
-
     print(
-        f"Output entries : {total}"
+        f"Channels : {total}"
     )
-
     print(
-        f"Build time     : {elapsed:.1f}s"
+        f"Time     : "
+        f"{time.time() - start:.1f}s"
     )
-
     print(
-        f"Output         : {OUTPUT}"
+        f"Output   : {OUTPUT}"
     )
-
     print(
         "--------------------------------------"
     )
-
     print(
-        "Chinese EXTINF : original bytes"
+        "Publish  : GitHub RAW"
     )
-
-    print(
-        "CCTV naming    : normalized to CCTV"
-    )
-
-    print(
-        "Publish        : GitHub RAW"
-    )
-
     print(
         "======================================"
     )
