@@ -10,6 +10,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    timeout-minutes: 2
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,6 +28,12 @@ jobs:
         run: |
           git config user.name "TVAtlas Bot"
           git config user.email "actions@github.com"
+
           git add tvatlas.m3u
-          git diff --cached --quiet || git commit -m "Build Chinese UTF-8 playlist"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "No playlist changes."
+          else
+            git commit -m "Update TVAtlas playlist"
+            git push
+          fi
