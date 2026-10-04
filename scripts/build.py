@@ -4,10 +4,11 @@ import time
 import sys
 import json
 import re
+from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -62,6 +63,19 @@ SOURCES = [
         "url":
         "https://iptv-org.github.io/"
         "iptv/countries/hk.m3u"
+    },
+
+    {
+        "id": "iptvorg-eastasia-hk",
+        "region": "HK",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/eas.m3u",
+    },
+    {
+        "id": "iptvorg-apac-hk",
+        "region": "HK",
+        "priority": 30,
+        "url": "https://iptv-org.github.io/iptv/regions/apac.m3u",
     },
 
     {
@@ -430,6 +444,45 @@ def build_recovery_sources():
         'http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226465/index.m3u8\n',
         encoding="utf-8"
     )
+    hk_recovery = TEMP_DIR / "recovery-hk.m3u"
+    hk_recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://edge6a.v2h-cdn.com/jade/jade.stream/chunklist.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://113.117.74.45:8081/hls/67/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://198.16.100.90:8278/jade_twn/playlist.m3u8?tid=MDAD1890217018902170&ct=19249&tsum=36346362d72a1e85802fa5d3eee3861c\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://sc2022.stream-link.org/tv2306.php?id=h02\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://live.astradamy.com/tvbfc/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://smt.goiptv.us.ci/jade_twn/playlist.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://smt.goiptv.us.ci/Jade_xue/playlist.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://120.84.96.28:808/hls/25/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://107.151.203.111:2209/135/hk.php?id=tvbfct\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://113.64.147.149:808/hls/67/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://113.64.147.170:808/hls/67/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://162.19.247.76:22222/live/tvbfc/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://aktv-stream.m16tv.cfd/stream/aktv/null/AKTV.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://stream1.freetv.fun/fei-cui-8.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://stream1.freetv.fun/ba009d94229ed40a5d9289178463fba7aa31fb0622f8ab2d66c01147828743ab.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://113.64.147.40:808/hls/67/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://pull-l3-cny.douyincdn.com/live/stream-19882782023022818478.m3u8\n',
+        encoding="utf-8"
+    )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
     sg_recovery.write_text(
         '#EXTM3U\n'
@@ -448,6 +501,11 @@ def build_recovery_sources():
         "region": "CN",
         "priority": 50,
         "path": recovery,
+    }, {
+        "id": "recovery-hk",
+        "region": "HK",
+        "priority": 50,
+        "path": hk_recovery,
     }, {
         "id": "recovery-sg",
         "region": "SG",
@@ -519,55 +577,109 @@ def collect_sources():
 
 HEALTH_WORKERS = 16
 HEALTH_CONNECT_TIMEOUT = 3
-HEALTH_MAX_TIME = 6
+HEALTH_MAX_TIME = 10
+
+# URLs confirmed failing in a real TV player. They remain documented here so
+# upstream rediscovery cannot immediately promote them again.
+PLAYER_BLOCKLIST = {
+    "http://103.172.187.30:12000/stream/mytv/null-1/master.m3u8",
+}
+
+
+def curl_bytes(url, max_time=HEALTH_MAX_TIME, byte_range="0-65535"):
+    cmd = [
+        "curl", "-L", "--fail", "--silent", "--show-error",
+        "--connect-timeout", str(HEALTH_CONNECT_TIMEOUT),
+        "--max-time", str(max_time),
+        "-A", f"Mozilla/5.0 TVAtlas/{VERSION}",
+    ]
+    if byte_range:
+        cmd += ["--range", byte_range]
+    cmd.append(url)
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=max_time + 2,
+        check=False,
+    )
+    return proc.returncode, proc.stdout[:131072]
+
+
+def first_hls_uri(text, base_url, want_variant=False):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if want_variant:
+        for i, line in enumerate(lines):
+            if line.startswith("#EXT-X-STREAM-INF"):
+                for nxt in lines[i + 1:]:
+                    if not nxt.startswith("#"):
+                        return urljoin(base_url, nxt)
+    for line in lines:
+        if not line.startswith("#"):
+            return urljoin(base_url, line)
+    return None
 
 
 def check_stream(entry):
-    """Fast bounded probe. It only ranks candidates; it never deletes the last fallback."""
+    """Playback-oriented probe: playlist -> media playlist -> real media bytes."""
     url = entry["url"].decode("utf-8", errors="ignore")
     started = time.time()
-    cmd = [
-        "curl", "-L", "--silent", "--show-error",
-        "--connect-timeout", str(HEALTH_CONNECT_TIMEOUT),
-        "--max-time", str(HEALTH_MAX_TIME),
-        "--range", "0-16383",
-        "-A", f"Mozilla/5.0 TVAtlas/{VERSION}",
-        url,
-    ]
+
+    if url in PLAYER_BLOCKLIST:
+        return False, 0.0, "player-blocklisted"
+
     try:
-        proc = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=HEALTH_MAX_TIME + 2,
-            check=False,
-        )
-        data = proc.stdout[:32768]
+        code, data = curl_bytes(url)
         elapsed = time.time() - started
-        if not data:
-            return False, elapsed, "empty"
+        if code != 0 or not data:
+            return False, elapsed, "empty-or-http-error"
 
         stripped = data.lstrip()
         lower = stripped[:512].lower()
-
-        # Reject obvious web error pages.
         if lower.startswith(b"<!doctype html") or lower.startswith(b"<html"):
             return False, elapsed, "html"
 
-        # HLS playlists must look like HLS, not merely return HTTP 200.
-        if b".m3u8" in entry["url"].lower() or stripped.startswith(b"#EXTM3U"):
-            ok = stripped.startswith(b"#EXTM3U") and (
-                b"#EXT-X-" in data or b"#EXTINF:" in data
-            )
-            return ok, elapsed, "hls" if ok else "invalid-hls"
+        is_hls = ".m3u8" in url.lower() or stripped.startswith(b"#EXTM3U")
+        if not is_hls:
+            return (len(data) >= 188), elapsed, "media-bytes" if len(data) >= 188 else "short"
 
-        # Direct MPEG-TS / other stream: receiving a meaningful payload is enough
-        # for this lightweight build-time ranking probe.
-        if len(data) >= 188:
-            return True, elapsed, "data"
+        if not stripped.startswith(b"#EXTM3U"):
+            return False, elapsed, "invalid-hls"
 
-        return False, elapsed, "short"
+        text = data.decode("utf-8", errors="ignore")
+        media_url = url
 
+        # Master playlist: follow one variant before looking for a segment.
+        if "#EXT-X-STREAM-INF" in text:
+            variant = first_hls_uri(text, url, want_variant=True)
+            if not variant:
+                return False, time.time() - started, "master-no-variant"
+            code, variant_data = curl_bytes(variant)
+            if code != 0 or not variant_data:
+                return False, time.time() - started, "variant-unreachable"
+            variant_text = variant_data.decode("utf-8", errors="ignore")
+            if not variant_text.lstrip().startswith("#EXTM3U"):
+                return False, time.time() - started, "invalid-variant"
+            text = variant_text
+            media_url = variant
+
+        segment = first_hls_uri(text, media_url, want_variant=False)
+        if not segment:
+            return False, time.time() - started, "media-no-segment"
+
+        code, segment_data = curl_bytes(segment, max_time=HEALTH_MAX_TIME, byte_range="0-65535")
+        elapsed = time.time() - started
+        if code != 0 or not segment_data:
+            return False, elapsed, "segment-unreachable"
+        if segment_data.lstrip()[:64].lower().startswith((b"<html", b"<!doctype")):
+            return False, elapsed, "segment-html"
+        if len(segment_data) < 188:
+            return False, elapsed, "segment-short"
+
+        return True, elapsed, "hls-segment"
+
+    except subprocess.TimeoutExpired:
+        return False, time.time() - started, "timeout"
     except Exception as exc:
         return False, time.time() - started, type(exc).__name__
 
@@ -630,19 +742,34 @@ def probe_candidates(results):
                 f"healthy={len(healthy)}/{len(candidates)}"
             )
         elif candidates:
-            # Important: GitHub runners may be geo-blocked while the user's
-            # player is not. Never erase a logical channel solely because the
-            # runner could not verify it.
-            selected = candidates[0]
+            # GitHub runners may be geo-blocked, but a URL explicitly confirmed
+            # broken in a real player must never be emitted as a fallback.
+            eligible = [
+                entry for entry in candidates
+                if entry["url"].decode("utf-8", errors="ignore") not in PLAYER_BLOCKLIST
+            ]
+            selected = eligible[0] if eligible else None
             result["selected"] = selected
-            result["health"] = "fallback-unverified"
+            result["health"] = "fallback-unverified" if selected else "missing-player-blocked"
             result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
-            fallback_channels += 1
-            print(
-                f"FALLBACK: {channel['name']} "
-                f"[{selected['source_id']}] "
-                f"0/{len(candidates)} verified"
-            )
+            if selected:
+                fallback_channels += 1
+                print(
+                    f"FALLBACK: {channel['name']} "
+                    f"[{selected['source_id']}] "
+                    f"0/{len(candidates)} verified"
+                )
+                if channel["id"] == "hk-jade":
+                    for entry in candidates:
+                        ok, elapsed, reason = health.get(entry["url"], (False, 99.0, "not-probed"))
+                        print(
+                            f"JADE-PROBE: source={entry['source_id']} "
+                            f"ok={ok} time={elapsed:.2f}s reason={reason} "
+                            f"url={entry['url'].decode('utf-8', errors='replace')}"
+                        )
+            else:
+                missing_channels += 1
+                print(f"BLOCKED : {channel['name']} no eligible fallback")
         else:
             result["selected"] = None
             result["health"] = "missing"
@@ -845,6 +972,35 @@ def write_playlist(results):
         output.append(
             selected["url"]
         )
+
+        # Jade is geo-sensitive: GitHub's US runner can reject streams that
+        # have real-world playback reports on mainland networks. Expose two
+        # manual backup entries instead of pretending one CI vantage point is
+        # authoritative. Standard M3U has no portable automatic failover field.
+        if channel["id"] == "hk-jade":
+            jade_manual_backups = [
+                (
+                    "翡翠台 · 备用1",
+                    b"https://stream1.freetv.fun/fei-cui-8.m3u8",
+                ),
+                (
+                    "翡翠台 · 备用2",
+                    b"https://stream1.freetv.fun/ba009d94229ed40a5d9289178463fba7aa31fb0622f8ab2d66c01147828743ab.m3u8",
+                ),
+            ]
+            primary_url = selected["url"]
+            for backup_name, backup_url in jade_manual_backups:
+                if backup_url == primary_url:
+                    continue
+                output.append(
+                    rewrite_extinf(
+                        selected["extinf"],
+                        backup_name,
+                        channel["group"]
+                    )
+                )
+                output.extend(selected["extras"])
+                output.append(backup_url)
 
         logical += 1
 
