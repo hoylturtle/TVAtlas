@@ -4,9 +4,10 @@ import time
 import sys
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.7.1"
+VERSION = "0.8"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -380,7 +381,7 @@ def collect_sources():
 
     print("")
     print(
-        "[1/5] Download sources"
+        "[1/6] Download sources"
     )
     print("")
 
@@ -429,6 +430,145 @@ def collect_sources():
     )
 
     return entries
+
+
+
+HEALTH_WORKERS = 16
+HEALTH_CONNECT_TIMEOUT = 3
+HEALTH_MAX_TIME = 6
+
+
+def check_stream(entry):
+    """Fast bounded probe. It only ranks candidates; it never deletes the last fallback."""
+    url = entry["url"].decode("utf-8", errors="ignore")
+    started = time.time()
+    cmd = [
+        "curl", "-L", "--silent", "--show-error",
+        "--connect-timeout", str(HEALTH_CONNECT_TIMEOUT),
+        "--max-time", str(HEALTH_MAX_TIME),
+        "--range", "0-16383",
+        "-A", "Mozilla/5.0 TVAtlas/0.8",
+        url,
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=HEALTH_MAX_TIME + 2,
+            check=False,
+        )
+        data = proc.stdout[:32768]
+        elapsed = time.time() - started
+        if not data:
+            return False, elapsed, "empty"
+
+        stripped = data.lstrip()
+        lower = stripped[:512].lower()
+
+        # Reject obvious web error pages.
+        if lower.startswith(b"<!doctype html") or lower.startswith(b"<html"):
+            return False, elapsed, "html"
+
+        # HLS playlists must look like HLS, not merely return HTTP 200.
+        if b".m3u8" in entry["url"].lower() or stripped.startswith(b"#EXTM3U"):
+            ok = stripped.startswith(b"#EXTM3U") and (
+                b"#EXT-X-" in data or b"#EXTINF:" in data
+            )
+            return ok, elapsed, "hls" if ok else "invalid-hls"
+
+        # Direct MPEG-TS / other stream: receiving a meaningful payload is enough
+        # for this lightweight build-time ranking probe.
+        if len(data) >= 188:
+            return True, elapsed, "data"
+
+        return False, elapsed, "short"
+
+    except Exception as exc:
+        return False, time.time() - started, type(exc).__name__
+
+
+def probe_candidates(results):
+    print("")
+    print("[3/6] Health selection")
+    print("")
+
+    unique = {}
+    for result in results:
+        for entry in result["candidates"]:
+            unique.setdefault(entry["url"], entry)
+
+    print(f"Probe URLs       : {len(unique)}")
+    print(f"Workers          : {HEALTH_WORKERS}")
+    print(f"Per-URL max time : {HEALTH_MAX_TIME}s")
+    print("")
+
+    health = {}
+    with ThreadPoolExecutor(max_workers=HEALTH_WORKERS) as pool:
+        futures = {
+            pool.submit(check_stream, entry): url
+            for url, entry in unique.items()
+        }
+        for future in as_completed(futures):
+            url = futures[future]
+            try:
+                health[url] = future.result()
+            except Exception as exc:
+                health[url] = (False, 99.0, type(exc).__name__)
+
+    healthy_channels = 0
+    fallback_channels = 0
+    missing_channels = 0
+
+    for result in results:
+        channel = result["channel"]
+        candidates = result["candidates"]
+        healthy = []
+
+        for entry in candidates:
+            ok, elapsed, reason = health.get(
+                entry["url"], (False, 99.0, "not-probed")
+            )
+            if ok:
+                healthy.append((entry["priority"], elapsed, entry, reason))
+
+        if healthy:
+            healthy.sort(key=lambda item: (item[0], item[1]))
+            selected = healthy[0][2]
+            result["selected"] = selected
+            result["health"] = "healthy"
+            healthy_channels += 1
+            print(
+                f"HEALTHY : {channel['name']} "
+                f"[{selected['source_id']}] "
+                f"{healthy[0][1]:.2f}s "
+                f"healthy={len(healthy)}/{len(candidates)}"
+            )
+        elif candidates:
+            # Important: GitHub runners may be geo-blocked while the user's
+            # player is not. Never erase a logical channel solely because the
+            # runner could not verify it.
+            selected = candidates[0]
+            result["selected"] = selected
+            result["health"] = "fallback-unverified"
+            fallback_channels += 1
+            print(
+                f"FALLBACK: {channel['name']} "
+                f"[{selected['source_id']}] "
+                f"0/{len(candidates)} verified"
+            )
+        else:
+            result["selected"] = None
+            result["health"] = "missing"
+            missing_channels += 1
+            print(f"MISS    : {channel['name']}")
+
+    print("")
+    print(
+        f"Health summary   : healthy={healthy_channels} "
+        f"fallback={fallback_channels} missing={missing_channels}"
+    )
+    return results
 
 
 def rewrite_extinf(
@@ -491,151 +631,56 @@ def rewrite_extinf(
     )
 
 
-def match_channels(
-    config,
-    entries
-):
-
+def match_channels(config, entries):
     print("")
-    print(
-        "[2/5] Match channels"
-    )
+    print("[2/6] Match channels")
     print("")
 
     results = []
+    ordered = sorted(entries, key=lambda x: x["priority"])
 
-    ordered = sorted(
-        entries,
-        key=lambda x: x["priority"]
-    )
-
-    for channel in config[
-        "channels"
-    ]:
-
-        region = channel.get(
-            "region",
-            "CN"
-        )
-
+    for channel in config["channels"]:
+        region = channel.get("region", "CN")
         candidates = []
 
-        # =================================
-        # 第一轮
-        # 只找相同地区
-        # =================================
-
         for entry in ordered:
-
-            if (
-                entry["region"]
-                != region
-            ):
+            if entry["region"] != region:
                 continue
+            if channel_matches(entry["name"], channel):
+                candidates.append(entry)
 
-            if channel_matches(
-                entry["name"],
-                channel
-            ):
-
-                candidates.append(
-                    entry
-                )
-
-        # =================================
-        # CN 特殊 fallback
-        #
-        # CCTV 等仍然允许 CN 多源
-        # =================================
-
-        if (
-            not candidates
-            and region == "CN"
-        ):
-
+        if not candidates and region == "CN":
             for entry in ordered:
-
-                if channel_matches(
-                    entry["name"],
-                    channel
-                ):
-
-                    candidates.append(
-                        entry
-                    )
-
-        # =================================
-        # URL 去重
-        # =================================
+                if channel_matches(entry["name"], channel):
+                    candidates.append(entry)
 
         unique = []
         seen = set()
-
         for item in candidates:
-
             if item["url"] in seen:
                 continue
+            seen.add(item["url"])
+            unique.append(item)
 
-            seen.add(
-                item["url"]
-            )
+        results.append({
+            "channel": channel,
+            "candidates": unique,
+            "selected": None,
+            "candidate_count": len(unique),
+        })
 
-            unique.append(
-                item
-            )
-
-        candidates = unique
-
-        # =================================
-        # 当前正式版本
-        #
-        # 只发布优先级最高的一条
-        # =================================
-
-        selected = (
-            candidates[0]
-            if candidates
-            else None
+        print(
+            f"{'FOUND' if unique else 'MISS '} : "
+            f"{channel['name']} candidates={len(unique)}"
         )
-
-        results.append(
-            {
-                "channel":
-                channel,
-
-                "selected":
-                selected,
-
-                "candidate_count":
-                len(candidates)
-            }
-        )
-
-        if selected:
-
-            print(
-                f"FOUND: "
-                f"{channel['name']} "
-                f"[{selected['source_id']}] "
-                f"candidates="
-                f"{len(candidates)}"
-            )
-
-        else:
-
-            print(
-                f"MISS : "
-                f"{channel['name']}"
-            )
 
     return results
-
 
 def write_playlist(results):
 
     print("")
     print(
-        "[3/5] Generate playlist"
+        "[4/6] Generate playlist"
     )
 
     output = [
@@ -710,7 +755,7 @@ def validate():
 
     print("")
     print(
-        "[4/5] Validate"
+        "[5/6] Validate"
     )
 
     if not OUTPUT.exists():
@@ -795,6 +840,8 @@ def main():
             entries
         )
 
+        results = probe_candidates(results)
+
         logical, regions = (
             write_playlist(
                 results
@@ -809,7 +856,7 @@ def main():
 
     print("")
     print(
-        "[5/5] Complete"
+        "[6/6] Complete"
     )
 
     print(
