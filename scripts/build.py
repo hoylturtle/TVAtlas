@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.9.5"
+VERSION = "1.0.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -531,7 +531,7 @@ def check_stream(entry):
         "--connect-timeout", str(HEALTH_CONNECT_TIMEOUT),
         "--max-time", str(HEALTH_MAX_TIME),
         "--range", "0-16383",
-        "-A", "Mozilla/5.0 TVAtlas/0.8",
+        "-A", f"Mozilla/5.0 TVAtlas/{VERSION}",
         url,
     ]
     try:
