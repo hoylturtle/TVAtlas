@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -197,7 +197,7 @@ def get_name(extinf):
 
     return (
         extinf
-        .split(b",", 1)[1]
+        .rsplit(b",", 1)[1]
         .strip()
     )
 
@@ -639,7 +639,7 @@ def rewrite_extinf(
 
     metadata = (
         extinf
-        .split(b",", 1)[0]
+        .rsplit(b",", 1)[0]
     )
 
     return (
@@ -839,7 +839,7 @@ def main():
         "Curated Regional Playlist"
     )
     print(
-        "CN / HK / MO / TW"
+        "CN / HK / MO / TW / JP / KR / SG"
     )
     print(
         "===================================="
