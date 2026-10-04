@@ -448,7 +448,11 @@ def build_recovery_sources():
     hk_recovery.write_text(
         '#EXTM3U\n'
         '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://edge6a.v2h-cdn.com/jade/jade.stream/chunklist.m3u8\n',
+        'https://edge6a.v2h-cdn.com/jade/jade.stream/chunklist.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://113.117.74.45:8081/hls/67/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://198.16.100.90:8278/jade_twn/playlist.m3u8?tid=MDAD1890217018902170&ct=19249&tsum=36346362d72a1e85802fa5d3eee3861c\n',
         encoding="utf-8"
     )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
