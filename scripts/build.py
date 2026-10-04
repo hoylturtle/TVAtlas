@@ -1,5 +1,16 @@
 from pathlib import Path
 
+# ============================================================
+# TVAtlas Playlist Generator
+# 中文编码测试版
+#
+# 输出格式：
+# - UTF-8
+# - 无 BOM
+# - LF 换行
+# - 标准 Extended M3U
+# ============================================================
+
 channels = [
     {
         "group": "香港",
@@ -23,23 +34,44 @@ channels = [
     },
 ]
 
-lines = ["#EXTM3U"]
 
-for channel in channels:
-    lines.append(
-        f'#EXTINF:-1 group-title="{channel["group"]}",{channel["name"]}'
+def build_playlist():
+    lines = ["#EXTM3U"]
+
+    for channel in channels:
+        group = channel["group"]
+        name = channel["name"]
+        url = channel["url"]
+
+        lines.append(
+            f'#EXTINF:-1 group-title="{group}",{name}'
+        )
+        lines.append(url)
+
+    # 标准 LF 换行
+    content = "\n".join(lines) + "\n"
+
+    # 输出到项目根目录 /tvatlas.m3u
+    output = Path(__file__).resolve().parent.parent / "tvatlas.m3u"
+
+    # 关键：
+    # 使用标准 UTF-8，不添加 BOM
+    output.write_text(
+        content,
+        encoding="utf-8",
+        newline="\n"
     )
-    lines.append(channel["url"])
 
-content = "\n".join(lines) + "\n"
+    print("======================================")
+    print("TVAtlas playlist generated successfully")
+    print("======================================")
+    print(f"Output   : {output}")
+    print(f"Channels : {len(channels)}")
+    print("Encoding : UTF-8")
+    print("BOM      : No")
+    print("Newline  : LF")
+    print("======================================")
 
-output = Path(__file__).resolve().parent.parent / "tvatlas.m3u"
 
-# utf-8-sig 会在文件开头写入 UTF-8 BOM：
-# EF BB BF
-# 用于提高部分 IPTV 播放器对中文 M3U 的识别兼容性。
-with open(output, "w", encoding="utf-8-sig", newline="\n") as f:
-    f.write(content)
-
-print(f"Generated: {output}")
-print(f"Channels: {len(channels)}")
+if __name__ == "__main__":
+    build_playlist()
