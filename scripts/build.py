@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.9.3"
+VERSION = "0.9.4"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -96,6 +96,12 @@ SOURCES = [
         "region": "KR",
         "priority": 20,
         "url": "https://iptv-org.github.io/iptv/regions/eas.m3u",
+    },
+    {
+        "id": "iptvorg-sea-sg",
+        "region": "SG",
+        "priority": 15,
+        "url": "https://iptv-org.github.io/iptv/regions/sea.m3u",
     },
     {
         "id": "iptvorg-asean-sg",
@@ -414,6 +420,24 @@ def parse_playlist(
     return entries
 
 
+def build_recovery_sources():
+    """Create small, explicit recovery playlists for channels missing from upstream aggregators."""
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    recovery = TEMP_DIR / "recovery-cn.m3u"
+    recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Recovery",海南卫视\n'
+        'http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226465/index.m3u8\n',
+        encoding="utf-8"
+    )
+    return [{
+        "id": "recovery-cn",
+        "region": "CN",
+        "priority": 50,
+        "path": recovery,
+    }]
+
+
 def collect_sources():
 
     print("")
@@ -451,6 +475,11 @@ def collect_sources():
         entries.extend(
             source_entries
         )
+
+    for recovery in build_recovery_sources():
+        source_entries = parse_playlist(recovery["path"], recovery)
+        print(f"OK   {recovery['id']} [{recovery['region']}] {len(source_entries)} entries")
+        entries.extend(source_entries)
 
     if not entries:
 
