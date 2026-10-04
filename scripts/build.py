@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -114,6 +114,54 @@ SOURCES = [
         "region": "SG",
         "priority": 30,
         "url": "https://iptv-org.github.io/iptv/regions/apac.m3u",
+    },
+    {
+        "id": "iptvorg-my",
+        "region": "MY",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/my.m3u",
+    },
+    {
+        "id": "iptvorg-th",
+        "region": "TH",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/th.m3u",
+    },
+    {
+        "id": "iptvorg-ph",
+        "region": "PH",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/ph.m3u",
+    },
+    {
+        "id": "iptvorg-au",
+        "region": "AU",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/au.m3u",
+    },
+    {
+        "id": "iptvorg-sea-my",
+        "region": "MY",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/sea.m3u",
+    },
+    {
+        "id": "iptvorg-sea-th",
+        "region": "TH",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/sea.m3u",
+    },
+    {
+        "id": "iptvorg-sea-ph",
+        "region": "PH",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/sea.m3u",
+    },
+    {
+        "id": "iptvorg-oce-au",
+        "region": "AU",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/oce.m3u",
     },
     {
         "id": "iptvorg-tw",
