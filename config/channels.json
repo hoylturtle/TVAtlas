@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "settings": {
     "max_lines_per_channel": 1
   },
@@ -747,6 +747,122 @@
       "region": "SG",
       "match": [
         "Vasantham"
+      ]
+    },
+    {
+      "id": "my-bernama",
+      "name": "Bernama TV",
+      "group": "马来西亚 · 新闻",
+      "region": "MY",
+      "match": [
+        "Bernama TV",
+        "Bernama"
+      ]
+    },
+    {
+      "id": "my-tvs",
+      "name": "TVS",
+      "group": "马来西亚 · 综合",
+      "region": "MY",
+      "match": [
+        "TVS"
+      ]
+    },
+    {
+      "id": "my-rtm1",
+      "name": "TV1",
+      "group": "马来西亚 · 综合",
+      "region": "MY",
+      "match": [
+        "TV1",
+        "RTM TV1"
+      ]
+    },
+    {
+      "id": "my-rtm2",
+      "name": "TV2",
+      "group": "马来西亚 · 综合",
+      "region": "MY",
+      "match": [
+        "TV2",
+        "RTM TV2"
+      ]
+    },
+    {
+      "id": "th-thaipbs",
+      "name": "Thai PBS",
+      "group": "泰国 · 公共电视",
+      "region": "TH",
+      "match": [
+        "Thai PBS"
+      ]
+    },
+    {
+      "id": "th-nbt",
+      "name": "NBT",
+      "group": "泰国 · 综合",
+      "region": "TH",
+      "match": [
+        "NBT",
+        "NBT 2HD"
+      ]
+    },
+    {
+      "id": "th-tptv",
+      "name": "TPTV",
+      "group": "泰国 · 公共电视",
+      "region": "TH",
+      "match": [
+        "TPTV"
+      ]
+    },
+    {
+      "id": "ph-ptv",
+      "name": "PTV",
+      "group": "菲律宾 · 综合",
+      "region": "PH",
+      "match": [
+        "PTV",
+        "People's Television Network"
+      ]
+    },
+    {
+      "id": "ph-ibc",
+      "name": "IBC",
+      "group": "菲律宾 · 综合",
+      "region": "PH",
+      "match": [
+        "IBC",
+        "Intercontinental Broadcasting Corporation"
+      ]
+    },
+    {
+      "id": "au-abc-news",
+      "name": "ABC News",
+      "group": "澳大利亚 · 新闻",
+      "region": "AU",
+      "match": [
+        "ABC News",
+        "ABC News Australia"
+      ]
+    },
+    {
+      "id": "au-abc-tv",
+      "name": "ABC TV",
+      "group": "澳大利亚 · 综合",
+      "region": "AU",
+      "match": [
+        "ABC TV"
+      ]
+    },
+    {
+      "id": "au-sbs",
+      "name": "SBS",
+      "group": "澳大利亚 · 综合",
+      "region": "AU",
+      "match": [
+        "SBS",
+        "SBS Australia"
       ]
     }
   ]
