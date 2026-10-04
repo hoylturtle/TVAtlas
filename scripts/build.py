@@ -456,7 +456,11 @@ def build_recovery_sources():
         '#EXTINF:-1 group-title="Recovery",Jade\n'
         'https://sc2022.stream-link.org/tv2306.php?id=h02\n'
         '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://live.astradamy.com/tvbfc/index.m3u8\n',
+        'https://live.astradamy.com/tvbfc/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://smt.goiptv.us.ci/jade_twn/playlist.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://smt.goiptv.us.ci/Jade_xue/playlist.m3u8\n',
         encoding="utf-8"
     )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
