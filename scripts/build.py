@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.8.1"
+VERSION = "0.9.0"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -72,6 +72,24 @@ SOURCES = [
         "iptv/countries/mo.m3u"
     },
 
+    {
+        "id": "iptvorg-jp",
+        "region": "JP",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/jp.m3u",
+    },
+    {
+        "id": "iptvorg-kr",
+        "region": "KR",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/kr.m3u",
+    },
+    {
+        "id": "iptvorg-sg",
+        "region": "SG",
+        "priority": 10,
+        "url": "https://iptv-org.github.io/iptv/countries/sg.m3u",
+    },
     {
         "id": "iptvorg-tw",
         "region": "TW",
