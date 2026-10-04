@@ -973,6 +973,35 @@ def write_playlist(results):
             selected["url"]
         )
 
+        # Jade is geo-sensitive: GitHub's US runner can reject streams that
+        # have real-world playback reports on mainland networks. Expose two
+        # manual backup entries instead of pretending one CI vantage point is
+        # authoritative. Standard M3U has no portable automatic failover field.
+        if channel["id"] == "hk-jade":
+            jade_manual_backups = [
+                (
+                    "翡翠台 · 备用1",
+                    b"https://stream1.freetv.fun/fei-cui-8.m3u8",
+                ),
+                (
+                    "翡翠台 · 备用2",
+                    b"https://stream1.freetv.fun/ba009d94229ed40a5d9289178463fba7aa31fb0622f8ab2d66c01147828743ab.m3u8",
+                ),
+            ]
+            primary_url = selected["url"]
+            for backup_name, backup_url in jade_manual_backups:
+                if backup_url == primary_url:
+                    continue
+                output.append(
+                    rewrite_extinf(
+                        selected["extinf"],
+                        backup_name,
+                        channel["group"]
+                    )
+                )
+                output.extend(selected["extras"])
+                output.append(backup_url)
+
         logical += 1
 
         region = channel.get(
