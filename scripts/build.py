@@ -444,6 +444,13 @@ def build_recovery_sources():
         'http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226465/index.m3u8\n',
         encoding="utf-8"
     )
+    hk_recovery = TEMP_DIR / "recovery-hk.m3u"
+    hk_recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://edge6a.v2h-cdn.com/jade/jade.stream/chunklist.m3u8\n',
+        encoding="utf-8"
+    )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
     sg_recovery.write_text(
         '#EXTM3U\n'
@@ -462,6 +469,11 @@ def build_recovery_sources():
         "region": "CN",
         "priority": 50,
         "path": recovery,
+    }, {
+        "id": "recovery-hk",
+        "region": "HK",
+        "priority": 50,
+        "path": hk_recovery,
     }, {
         "id": "recovery-sg",
         "region": "SG",
