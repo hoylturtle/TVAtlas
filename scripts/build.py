@@ -452,7 +452,11 @@ def build_recovery_sources():
         '#EXTINF:-1 group-title="Recovery",Jade\n'
         'http://113.117.74.45:8081/hls/67/index.m3u8\n'
         '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://198.16.100.90:8278/jade_twn/playlist.m3u8?tid=MDAD1890217018902170&ct=19249&tsum=36346362d72a1e85802fa5d3eee3861c\n',
+        'http://198.16.100.90:8278/jade_twn/playlist.m3u8?tid=MDAD1890217018902170&ct=19249&tsum=36346362d72a1e85802fa5d3eee3861c\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://sc2022.stream-link.org/tv2306.php?id=h02\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://live.astradamy.com/tvbfc/index.m3u8\n',
         encoding="utf-8"
     )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
@@ -731,6 +735,14 @@ def probe_candidates(results):
                     f"[{selected['source_id']}] "
                     f"0/{len(candidates)} verified"
                 )
+                if channel["id"] == "hk-jade":
+                    for entry in candidates:
+                        ok, elapsed, reason = health.get(entry["url"], (False, 99.0, "not-probed"))
+                        print(
+                            f"JADE-PROBE: source={entry['source_id']} "
+                            f"ok={ok} time={elapsed:.2f}s reason={reason} "
+                            f"url={entry['url'].decode('utf-8', errors='replace')}"
+                        )
             else:
                 missing_channels += 1
                 print(f"BLOCKED : {channel['name']} no eligible fallback")
