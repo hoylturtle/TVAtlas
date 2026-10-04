@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.8"
+VERSION = "0.8.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
