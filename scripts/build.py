@@ -4,10 +4,11 @@ import time
 import sys
 import json
 import re
+from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -519,55 +520,109 @@ def collect_sources():
 
 HEALTH_WORKERS = 16
 HEALTH_CONNECT_TIMEOUT = 3
-HEALTH_MAX_TIME = 6
+HEALTH_MAX_TIME = 10
+
+# URLs confirmed failing in a real TV player. They remain documented here so
+# upstream rediscovery cannot immediately promote them again.
+PLAYER_BLOCKLIST = {
+    "http://103.172.187.30:12000/stream/mytv/null-1/master.m3u8",
+}
+
+
+def curl_bytes(url, max_time=HEALTH_MAX_TIME, byte_range="0-65535"):
+    cmd = [
+        "curl", "-L", "--fail", "--silent", "--show-error",
+        "--connect-timeout", str(HEALTH_CONNECT_TIMEOUT),
+        "--max-time", str(max_time),
+        "-A", f"Mozilla/5.0 TVAtlas/{VERSION}",
+    ]
+    if byte_range:
+        cmd += ["--range", byte_range]
+    cmd.append(url)
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=max_time + 2,
+        check=False,
+    )
+    return proc.returncode, proc.stdout[:131072]
+
+
+def first_hls_uri(text, base_url, want_variant=False):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if want_variant:
+        for i, line in enumerate(lines):
+            if line.startswith("#EXT-X-STREAM-INF"):
+                for nxt in lines[i + 1:]:
+                    if not nxt.startswith("#"):
+                        return urljoin(base_url, nxt)
+    for line in lines:
+        if not line.startswith("#"):
+            return urljoin(base_url, line)
+    return None
 
 
 def check_stream(entry):
-    """Fast bounded probe. It only ranks candidates; it never deletes the last fallback."""
+    """Playback-oriented probe: playlist -> media playlist -> real media bytes."""
     url = entry["url"].decode("utf-8", errors="ignore")
     started = time.time()
-    cmd = [
-        "curl", "-L", "--silent", "--show-error",
-        "--connect-timeout", str(HEALTH_CONNECT_TIMEOUT),
-        "--max-time", str(HEALTH_MAX_TIME),
-        "--range", "0-16383",
-        "-A", f"Mozilla/5.0 TVAtlas/{VERSION}",
-        url,
-    ]
+
+    if url in PLAYER_BLOCKLIST:
+        return False, 0.0, "player-blocklisted"
+
     try:
-        proc = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=HEALTH_MAX_TIME + 2,
-            check=False,
-        )
-        data = proc.stdout[:32768]
+        code, data = curl_bytes(url)
         elapsed = time.time() - started
-        if not data:
-            return False, elapsed, "empty"
+        if code != 0 or not data:
+            return False, elapsed, "empty-or-http-error"
 
         stripped = data.lstrip()
         lower = stripped[:512].lower()
-
-        # Reject obvious web error pages.
         if lower.startswith(b"<!doctype html") or lower.startswith(b"<html"):
             return False, elapsed, "html"
 
-        # HLS playlists must look like HLS, not merely return HTTP 200.
-        if b".m3u8" in entry["url"].lower() or stripped.startswith(b"#EXTM3U"):
-            ok = stripped.startswith(b"#EXTM3U") and (
-                b"#EXT-X-" in data or b"#EXTINF:" in data
-            )
-            return ok, elapsed, "hls" if ok else "invalid-hls"
+        is_hls = ".m3u8" in url.lower() or stripped.startswith(b"#EXTM3U")
+        if not is_hls:
+            return (len(data) >= 188), elapsed, "media-bytes" if len(data) >= 188 else "short"
 
-        # Direct MPEG-TS / other stream: receiving a meaningful payload is enough
-        # for this lightweight build-time ranking probe.
-        if len(data) >= 188:
-            return True, elapsed, "data"
+        if not stripped.startswith(b"#EXTM3U"):
+            return False, elapsed, "invalid-hls"
 
-        return False, elapsed, "short"
+        text = data.decode("utf-8", errors="ignore")
+        media_url = url
 
+        # Master playlist: follow one variant before looking for a segment.
+        if "#EXT-X-STREAM-INF" in text:
+            variant = first_hls_uri(text, url, want_variant=True)
+            if not variant:
+                return False, time.time() - started, "master-no-variant"
+            code, variant_data = curl_bytes(variant)
+            if code != 0 or not variant_data:
+                return False, time.time() - started, "variant-unreachable"
+            variant_text = variant_data.decode("utf-8", errors="ignore")
+            if not variant_text.lstrip().startswith("#EXTM3U"):
+                return False, time.time() - started, "invalid-variant"
+            text = variant_text
+            media_url = variant
+
+        segment = first_hls_uri(text, media_url, want_variant=False)
+        if not segment:
+            return False, time.time() - started, "media-no-segment"
+
+        code, segment_data = curl_bytes(segment, max_time=HEALTH_MAX_TIME, byte_range="0-65535")
+        elapsed = time.time() - started
+        if code != 0 or not segment_data:
+            return False, elapsed, "segment-unreachable"
+        if segment_data.lstrip()[:64].lower().startswith((b"<html", b"<!doctype")):
+            return False, elapsed, "segment-html"
+        if len(segment_data) < 188:
+            return False, elapsed, "segment-short"
+
+        return True, elapsed, "hls-segment"
+
+    except subprocess.TimeoutExpired:
+        return False, time.time() - started, "timeout"
     except Exception as exc:
         return False, time.time() - started, type(exc).__name__
 
