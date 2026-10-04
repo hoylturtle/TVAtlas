@@ -437,6 +437,8 @@ def build_recovery_sources():
         'https://mediacorp-videosbclive.akamaized.net/dd724cfb0e8e4cdc921bbc4ac94614bf/ap-southeast-1/6057994443001/profile_1/chunklist.m3u8\n'
         '#EXTINF:-1 group-title="Recovery",Channel 5\n'
         'https://dlau142f16b92.cloudfront.net/hls/ch5ctv/master02.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Channel 8\n'
+        'https://d34e90s3s13i7n.cloudfront.net/hls/ch8ctv/master02.m3u8\n'
         '#EXTINF:-1 group-title="Recovery",Vasantham\n'
         'https://d39v9xz8f7n8tk.cloudfront.net/hls/vsnthmctv/master02.m3u8\n',
         encoding="utf-8"
