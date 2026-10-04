@@ -66,6 +66,19 @@ SOURCES = [
     },
 
     {
+        "id": "iptvorg-eastasia-hk",
+        "region": "HK",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/eas.m3u",
+    },
+    {
+        "id": "iptvorg-apac-hk",
+        "region": "HK",
+        "priority": 30,
+        "url": "https://iptv-org.github.io/iptv/regions/apac.m3u",
+    },
+
+    {
         "id": "iptvorg-mo",
         "region": "MO",
         "priority": 10,
@@ -685,19 +698,26 @@ def probe_candidates(results):
                 f"healthy={len(healthy)}/{len(candidates)}"
             )
         elif candidates:
-            # Important: GitHub runners may be geo-blocked while the user's
-            # player is not. Never erase a logical channel solely because the
-            # runner could not verify it.
-            selected = candidates[0]
+            # GitHub runners may be geo-blocked, but a URL explicitly confirmed
+            # broken in a real player must never be emitted as a fallback.
+            eligible = [
+                entry for entry in candidates
+                if entry["url"].decode("utf-8", errors="ignore") not in PLAYER_BLOCKLIST
+            ]
+            selected = eligible[0] if eligible else None
             result["selected"] = selected
-            result["health"] = "fallback-unverified"
+            result["health"] = "fallback-unverified" if selected else "missing-player-blocked"
             result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
-            fallback_channels += 1
-            print(
-                f"FALLBACK: {channel['name']} "
-                f"[{selected['source_id']}] "
-                f"0/{len(candidates)} verified"
-            )
+            if selected:
+                fallback_channels += 1
+                print(
+                    f"FALLBACK: {channel['name']} "
+                    f"[{selected['source_id']}] "
+                    f"0/{len(candidates)} verified"
+                )
+            else:
+                missing_channels += 1
+                print(f"BLOCKED : {channel['name']} no eligible fallback")
         else:
             result["selected"] = None
             result["health"] = "missing"
