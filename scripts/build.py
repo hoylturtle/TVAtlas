@@ -2,17 +2,20 @@ from pathlib import Path
 import subprocess
 import time
 import sys
+import re
 
 # ============================================================
-# TVAtlas v0.3.1
-# Fast / Safe Build
+# TVAtlas v0.4
+# Mainland China Curated Edition
 #
-# 目标：
-# 1. 保留上游原始字节，避免中文乱码
-# 2. 下载最长 30 秒
-# 3. 下载失败立即结束，不再无限等待
-# 4. 输出清晰日志
+# 1. 保留上游 EXTINF 原始字节
+# 2. 不重写中文
+# 3. 精确识别 CCTV
+# 4. 保留卫视
+# 5. 同频道暂时最多保留 2 条线路
 # ============================================================
+
+VERSION = "0.4"
 
 SOURCE = (
     "https://raw.githubusercontent.com/"
@@ -20,37 +23,26 @@ SOURCE = (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-
 TEMP = ROOT / "source.m3u"
 OUTPUT = ROOT / "tvatlas.m3u"
 
 
 # ============================================================
-# 白名单
+# CCTV
 # ============================================================
 
-WHITELIST = [
-    # CCTV
-    "CCTV-1", "CCTV1",
-    "CCTV-2", "CCTV2",
-    "CCTV-3", "CCTV3",
-    "CCTV-4", "CCTV4",
-    "CCTV-5", "CCTV5",
-    "CCTV-5+", "CCTV5+",
-    "CCTV-6", "CCTV6",
-    "CCTV-7", "CCTV7",
-    "CCTV-8", "CCTV8",
-    "CCTV-9", "CCTV9",
-    "CCTV-10", "CCTV10",
-    "CCTV-11", "CCTV11",
-    "CCTV-12", "CCTV12",
-    "CCTV-13", "CCTV13",
-    "CCTV-14", "CCTV14",
-    "CCTV-15", "CCTV15",
-    "CCTV-16", "CCTV16",
-    "CCTV-17", "CCTV17",
+CCTV_NUMBERS = {
+    "1", "2", "3", "4", "5", "5+",
+    "6", "7", "8", "9", "10", "11",
+    "12", "13", "14", "15", "16", "17"
+}
 
-    # 卫视
+
+# ============================================================
+# 主流卫视
+# ============================================================
+
+SATELLITES = [
     "湖南卫视",
     "浙江卫视",
     "江苏卫视",
@@ -75,6 +67,14 @@ WHITELIST = [
     "云南卫视",
 ]
 
+SATELLITE_BYTES = [
+    x.encode("utf-8") for x in SATELLITES
+]
+
+
+# 每个频道最多保留两条候选线路
+MAX_LINES_PER_CHANNEL = 2
+
 
 # ============================================================
 # 下载
@@ -83,11 +83,7 @@ WHITELIST = [
 def download():
 
     print("")
-    print("[1/3] Downloading source...")
-    print(SOURCE)
-    print("")
-
-    start = time.time()
+    print("[1/4] Download source")
 
     command = [
         "curl",
@@ -95,24 +91,17 @@ def download():
         "--fail",
         "--silent",
         "--show-error",
-
-        # 建立连接最多 8 秒
         "--connect-timeout", "8",
-
-        # 整个下载最多 30 秒
         "--max-time", "30",
-
-        # 失败重试一次
         "--retry", "1",
         "--retry-delay", "2",
-
         "-o", str(TEMP),
-
         SOURCE,
     ]
 
-    try:
+    start = time.time()
 
+    try:
         subprocess.run(
             command,
             check=True,
@@ -120,69 +109,119 @@ def download():
         )
 
     except subprocess.TimeoutExpired:
-
-        print("")
-        print("ERROR: Download exceeded 40 seconds.")
+        print("ERROR: download timeout")
         sys.exit(1)
 
     except subprocess.CalledProcessError as e:
-
-        print("")
-        print(f"ERROR: Download failed. curl code={e.returncode}")
+        print(f"ERROR: curl failed ({e.returncode})")
         sys.exit(1)
 
-    elapsed = time.time() - start
-
     if not TEMP.exists():
-
-        print("ERROR: Source file not created.")
+        print("ERROR: source not created")
         sys.exit(1)
 
     size = TEMP.stat().st_size
 
-    if size < 100:
-
-        print("ERROR: Source file is unexpectedly small.")
-        sys.exit(1)
-
     print(
-        f"OK: downloaded {size:,} bytes "
-        f"in {elapsed:.1f}s"
+        f"OK: {size:,} bytes "
+        f"in {time.time() - start:.1f}s"
     )
 
 
 # ============================================================
-# 字节级筛选
+# 获取频道显示名称
 # ============================================================
 
-def wanted(extinf):
+def get_name(extinf):
 
-    upper = extinf.upper()
+    if b"," not in extinf:
+        return b""
 
-    for keyword in WHITELIST:
-
-        if keyword.encode("utf-8").upper() in upper:
-            return True
-
-    return False
+    return extinf.split(b",", 1)[1].strip()
 
 
-def filter_channels():
+# ============================================================
+# CCTV 精确识别
+# ============================================================
+
+def identify_cctv(name):
+
+    # CCTV-1
+    # CCTV1
+    # CCTV-1 综合
+    # CCTV1综合
+    # CCTV-5+
+    # CCTV5+
+
+    upper = name.upper()
+
+    match = re.match(
+        rb"^CCTV[\-\s]?([0-9]{1,2}\+?)",
+        upper
+    )
+
+    if not match:
+        return None
+
+    number = match.group(1).decode("ascii")
+
+    if number not in CCTV_NUMBERS:
+        return None
+
+    return f"CCTV-{number}"
+
+
+# ============================================================
+# 卫视识别
+# ============================================================
+
+def identify_satellite(name):
+
+    for chinese_name, chinese_bytes in zip(
+        SATELLITES,
+        SATELLITE_BYTES
+    ):
+        if chinese_bytes in name:
+            return chinese_name
+
+    return None
+
+
+# ============================================================
+# 频道身份
+# ============================================================
+
+def identify_channel(extinf):
+
+    name = get_name(extinf)
+
+    channel = identify_cctv(name)
+
+    if channel:
+        return channel
+
+    channel = identify_satellite(name)
+
+    if channel:
+        return channel
+
+    return None
+
+
+# ============================================================
+# 筛选
+# ============================================================
+
+def filter_playlist():
 
     print("")
-    print("[2/3] Filtering channels...")
-
-    # 关键：
-    # 全程 bytes
-    # 不 decode 中文
+    print("[2/4] Parse playlist")
 
     data = TEMP.read_bytes()
-
     lines = data.splitlines()
 
-    output = [b"#EXTM3U"]
-
-    selected = 0
+    # channel_id -> [(extinf, extras, url)]
+    found = {}
 
     i = 0
 
@@ -195,9 +234,10 @@ def filter_channels():
             continue
 
         extinf = line
+        channel_id = identify_channel(extinf)
 
         j = i + 1
-        extra = []
+        extras = []
         url = None
 
         while j < len(lines):
@@ -209,46 +249,93 @@ def filter_channels():
                 continue
 
             if candidate.startswith(b"#"):
-                extra.append(candidate)
+                extras.append(candidate)
                 j += 1
                 continue
 
             url = candidate
             break
 
-        if url is not None and wanted(extinf):
+        if channel_id and url:
 
-            # EXTINF 原字节直接复制
-            output.append(extinf)
+            entries = found.setdefault(
+                channel_id,
+                []
+            )
 
-            # 保留 EXTINF 后的额外标签
-            output.extend(extra)
+            # 相同 URL 不重复
+            duplicate = any(
+                existing[2] == url
+                for existing in entries
+            )
 
-            # URL 原字节直接复制
-            output.append(url)
-
-            selected += 1
+            if (
+                not duplicate
+                and len(entries) < MAX_LINES_PER_CHANNEL
+            ):
+                entries.append(
+                    (extinf, extras, url)
+                )
 
         i = max(j + 1, i + 1)
+
+    return found
+
+
+# ============================================================
+# 输出
+# ============================================================
+
+def write_playlist(found):
+
+    print("")
+    print("[3/4] Generate TVAtlas")
+
+    output = [b"#EXTM3U"]
+
+    total = 0
+
+    # CCTV 固定排序
+    cctv_order = [
+        "1", "2", "3", "4", "5", "5+",
+        "6", "7", "8", "9", "10", "11",
+        "12", "13", "14", "15", "16", "17"
+    ]
+
+    ordered_ids = [
+        f"CCTV-{x}"
+        for x in cctv_order
+    ]
+
+    ordered_ids.extend(SATELLITES)
+
+    for channel_id in ordered_ids:
+
+        entries = found.get(channel_id, [])
+
+        if not entries:
+            print(f"MISS : {channel_id}")
+            continue
+
+        print(
+            f"FOUND: {channel_id} "
+            f"({len(entries)} line(s))"
+        )
+
+        for extinf, extras, url in entries:
+
+            # 全部使用原始 bytes
+            output.append(extinf)
+            output.extend(extras)
+            output.append(url)
+
+            total += 1
 
     result = b"\n".join(output) + b"\n"
 
     OUTPUT.write_bytes(result)
 
-    print(f"OK: selected {selected} source entries")
-    print(f"Output size: {len(result):,} bytes")
-
-    return selected
-
-
-# ============================================================
-# 清理
-# ============================================================
-
-def cleanup():
-
-    if TEMP.exists():
-        TEMP.unlink()
+    return total
 
 
 # ============================================================
@@ -259,37 +346,38 @@ def main():
 
     print("")
     print("======================================")
-    print("        TVAtlas v0.3.1")
-    print("      Fast / Safe Builder")
+    print(f"TVAtlas v{VERSION}")
+    print("Mainland China Curated Edition")
     print("======================================")
 
-    total_start = time.time()
+    start = time.time()
 
     try:
 
         download()
 
-        selected = filter_channels()
+        found = filter_playlist()
 
-        if selected == 0:
-            print("")
-            print("ERROR: No channels matched.")
+        total = write_playlist(found)
+
+        if total == 0:
+            print("ERROR: no channels generated")
             sys.exit(1)
 
     finally:
 
-        cleanup()
+        if TEMP.exists():
+            TEMP.unlink()
 
-    elapsed = time.time() - total_start
-
     print("")
-    print("[3/3] Build completed")
-    print("")
-    print(f"Channels : {selected}")
-    print(f"Time     : {elapsed:.1f}s")
-    print(f"Output   : {OUTPUT}")
-    print("")
-    print("Chinese metadata: original bytes preserved")
+    print("[4/4] Complete")
+    print("--------------------------------------")
+    print(f"Output entries : {total}")
+    print(f"Build time     : {time.time()-start:.1f}s")
+    print(f"Output         : {OUTPUT}")
+    print("--------------------------------------")
+    print("Chinese EXTINF : original bytes")
+    print("Publish        : GitHub RAW")
     print("======================================")
 
 
