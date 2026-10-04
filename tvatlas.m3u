@@ -1,13 +1,9 @@
 #EXTM3U
-
-#EXTINF:-1 group-title="🇭🇰 香港",RTHK 31
+#EXTINF:-1 group-title="Hong Kong",RTHK 31
 https://rthktv31-live.akamaized.net/hls/live/2036818/RTHKTV31/master.m3u8
-
-#EXTINF:-1 group-title="🇭🇰 香港",RTHK 32
+#EXTINF:-1 group-title="Hong Kong",RTHK 32
 https://rthktv32-live.akamaized.net/hls/live/2036819/RTHKTV32/master.m3u8
-
-#EXTINF:-1 group-title="🇭🇰 香港",凤凰中文
+#EXTINF:-1 group-title="Hong Kong",Phoenix Chinese
 https://playtv-live.ifeng.com/live/06OLEGEGM4G_tv1.m3u8
-
-#EXTINF:-1 group-title="🇭🇰 香港",凤凰资讯
+#EXTINF:-1 group-title="Hong Kong",Phoenix Info
 https://playtv-live.ifeng.com/live/06OLEEWQKN4_tv1.m3u8
