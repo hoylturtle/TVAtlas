@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.9.2"
+VERSION = "0.9.3"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -90,6 +90,24 @@ SOURCES = [
         "region": "SG",
         "priority": 10,
         "url": "https://iptv-org.github.io/iptv/countries/sg.m3u",
+    },
+    {
+        "id": "iptvorg-eastasia-kr",
+        "region": "KR",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/eas.m3u",
+    },
+    {
+        "id": "iptvorg-asean-sg",
+        "region": "SG",
+        "priority": 20,
+        "url": "https://iptv-org.github.io/iptv/regions/asean.m3u",
+    },
+    {
+        "id": "iptvorg-apac-sg",
+        "region": "SG",
+        "priority": 30,
+        "url": "https://iptv-org.github.io/iptv/regions/apac.m3u",
     },
     {
         "id": "iptvorg-tw",
@@ -556,6 +574,7 @@ def probe_candidates(results):
             selected = healthy[0][2]
             result["selected"] = selected
             result["health"] = "healthy"
+            result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
             healthy_channels += 1
             print(
                 f"HEALTHY : {channel['name']} "
@@ -570,6 +589,7 @@ def probe_candidates(results):
             selected = candidates[0]
             result["selected"] = selected
             result["health"] = "fallback-unverified"
+            result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
             fallback_channels += 1
             print(
                 f"FALLBACK: {channel['name']} "
@@ -579,6 +599,7 @@ def probe_candidates(results):
         else:
             result["selected"] = None
             result["health"] = "missing"
+            result["probe_results"] = {}
             missing_channels += 1
             print(f"MISS    : {channel['name']}")
 
@@ -712,7 +733,10 @@ def write_diagnostics(results):
                 "source": entry["source_id"],
                 "priority": entry["priority"],
                 "url": entry["url"].decode("utf-8", errors="replace"),
-                "selected": bool(selected and entry["url"] == selected["url"])
+                "selected": bool(selected and entry["url"] == selected["url"]),
+                "probe_ok": bool(result.get("probe_results", {}).get(entry["url"], (False, 0, "not-probed"))[0]),
+                "probe_seconds": round(float(result.get("probe_results", {}).get(entry["url"], (False, 0, "not-probed"))[1]), 3),
+                "probe_reason": result.get("probe_results", {}).get(entry["url"], (False, 0, "not-probed"))[2]
             })
         report["channels"].append({
             "id": result["channel"]["id"],
