@@ -27,6 +27,7 @@ jobs:
         run: python scripts/build.py
 
       - name: Commit generated playlist
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name "TVAtlas Bot"
           git config user.email "actions@github.com"
