@@ -472,7 +472,15 @@ def build_recovery_sources():
         '#EXTINF:-1 group-title="Recovery",Jade\n'
         'http://162.19.247.76:22222/live/tvbfc/index.m3u8\n'
         '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://aktv-stream.m16tv.cfd/stream/aktv/null/AKTV.m3u8\n',
+        'http://aktv-stream.m16tv.cfd/stream/aktv/null/AKTV.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://stream1.freetv.fun/fei-cui-8.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://stream1.freetv.fun/ba009d94229ed40a5d9289178463fba7aa31fb0622f8ab2d66c01147828743ab.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'http://113.64.147.40:808/hls/67/index.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Jade\n'
+        'https://pull-l3-cny.douyincdn.com/live/stream-19882782023022818478.m3u8\n',
         encoding="utf-8"
     )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
