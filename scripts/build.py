@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -430,11 +430,27 @@ def build_recovery_sources():
         'http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226465/index.m3u8\n',
         encoding="utf-8"
     )
+    sg_recovery = TEMP_DIR / "recovery-sg.m3u"
+    sg_recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="Recovery",CNA\n'
+        'https://mediacorp-videosbclive.akamaized.net/dd724cfb0e8e4cdc921bbc4ac94614bf/ap-southeast-1/6057994443001/profile_1/chunklist.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Channel 5\n'
+        'https://dlau142f16b92.cloudfront.net/hls/ch5ctv/master02.m3u8\n'
+        '#EXTINF:-1 group-title="Recovery",Vasantham\n'
+        'https://d39v9xz8f7n8tk.cloudfront.net/hls/vsnthmctv/master02.m3u8\n',
+        encoding="utf-8"
+    )
     return [{
         "id": "recovery-cn",
         "region": "CN",
         "priority": 50,
         "path": recovery,
+    }, {
+        "id": "recovery-sg",
+        "region": "SG",
+        "priority": 50,
+        "path": sg_recovery,
     }]
 
 
