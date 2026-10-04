@@ -6,7 +6,7 @@ import json
 import re
 
 
-VERSION = "0.7"
+VERSION = "0.7.1"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -14,134 +14,93 @@ OUTPUT = ROOT / "tvatlas.m3u"
 TEMP_DIR = ROOT / ".tvatlas_temp"
 
 
-# ============================================================
-# Sources
-#
-# region:
-# CN = 中国大陆
-# HK = 香港
-# MO = 澳门
-# TW = 台湾
-#
-# priority 越小越优先
-# ============================================================
-
 SOURCES = [
-
-    # ========================
-    # MAINLAND CHINA
-    # ========================
 
     {
         "id": "cs3306",
         "region": "CN",
         "priority": 1,
-        "url": (
-            "https://raw.githubusercontent.com/"
-            "cs3306/IPTV-Sources/main/data/output/"
-            "iptv_collection.m3u"
-        ),
+        "url":
+        "https://raw.githubusercontent.com/"
+        "cs3306/IPTV-Sources/main/data/output/"
+        "iptv_collection.m3u"
     },
 
     {
         "id": "bestfan-all",
         "region": "CN",
         "priority": 2,
-        "url": (
-            "https://raw.githubusercontent.com/"
-            "best-fan/iptv-sources/main/cn_all.m3u8"
-        ),
+        "url":
+        "https://raw.githubusercontent.com/"
+        "best-fan/iptv-sources/main/cn_all.m3u8"
     },
 
     {
         "id": "bestfan-cctv",
         "region": "CN",
         "priority": 3,
-        "url": (
-            "https://raw.githubusercontent.com/"
-            "best-fan/iptv-sources/main/cn_cctv.m3u8"
-        ),
+        "url":
+        "https://raw.githubusercontent.com/"
+        "best-fan/iptv-sources/main/cn_cctv.m3u8"
     },
 
     {
         "id": "bestfan-province",
         "region": "CN",
         "priority": 4,
-        "url": (
-            "https://raw.githubusercontent.com/"
-            "best-fan/iptv-sources/main/cn_province.m3u8"
-        ),
+        "url":
+        "https://raw.githubusercontent.com/"
+        "best-fan/iptv-sources/main/cn_province.m3u8"
     },
-
-    # ========================
-    # HONG KONG
-    # ========================
 
     {
         "id": "iptvorg-hk",
         "region": "HK",
         "priority": 10,
-        "url": (
-            "https://iptv-org.github.io/"
-            "iptv/countries/hk.m3u"
-        ),
+        "url":
+        "https://iptv-org.github.io/"
+        "iptv/countries/hk.m3u"
     },
-
-    # ========================
-    # MACAU
-    # ========================
 
     {
         "id": "iptvorg-mo",
         "region": "MO",
         "priority": 10,
-        "url": (
-            "https://iptv-org.github.io/"
-            "iptv/countries/mo.m3u"
-        ),
+        "url":
+        "https://iptv-org.github.io/"
+        "iptv/countries/mo.m3u"
     },
-
-    # ========================
-    # TAIWAN
-    # ========================
 
     {
         "id": "iptvorg-tw",
         "region": "TW",
         "priority": 10,
-        "url": (
-            "https://iptv-org.github.io/"
-            "iptv/countries/tw.m3u"
-        ),
-    },
+        "url":
+        "https://iptv-org.github.io/"
+        "iptv/countries/tw.m3u"
+    }
 ]
 
 
-# ============================================================
-# Config
-# ============================================================
-
 def load_config():
 
-    if not CONFIG.exists():
-        print("ERROR: config/channels.json not found")
-        sys.exit(1)
-
     try:
+
         with CONFIG.open(
             "r",
             encoding="utf-8"
         ) as f:
+
             return json.load(f)
 
     except Exception as e:
-        print(f"ERROR: config failed: {e}")
+
+        print(
+            f"ERROR config: {e}"
+        )
+
         sys.exit(1)
 
-
-# ============================================================
-# Download
-# ============================================================
 
 def download_source(source):
 
@@ -155,18 +114,21 @@ def download_source(source):
         / f"{source['id']}.m3u"
     )
 
-    command = [
+    cmd = [
         "curl",
         "-L",
         "--fail",
         "--silent",
         "--show-error",
-        "--connect-timeout", "8",
-        "--max-time", "30",
-        "--retry", "1",
-        "--retry-delay", "1",
-        "-o", str(path),
-        source["url"],
+        "--connect-timeout",
+        "8",
+        "--max-time",
+        "30",
+        "--retry",
+        "1",
+        "-o",
+        str(path),
+        source["url"]
     ]
 
     start = time.time()
@@ -174,7 +136,7 @@ def download_source(source):
     try:
 
         subprocess.run(
-            command,
+            cmd,
             check=True,
             timeout=40
         )
@@ -182,39 +144,32 @@ def download_source(source):
     except Exception as e:
 
         print(
-            f"WARN : {source['id']} "
-            f"download failed: {e}"
+            f"WARN {source['id']}: {e}"
         )
 
         return None
 
-    if not path.exists():
-        return None
-
-    size = path.stat().st_size
-
-    if size < 50:
+    if (
+        not path.exists()
+        or path.stat().st_size < 50
+    ):
 
         print(
-            f"WARN : {source['id']} "
-            f"file too small"
+            f"WARN {source['id']}: "
+            f"invalid file"
         )
 
         return None
 
     print(
-        f"OK   : {source['id']} "
+        f"OK   {source['id']} "
         f"[{source['region']}] "
-        f"{size:,} bytes "
-        f"{time.time() - start:.1f}s"
+        f"{path.stat().st_size:,} bytes "
+        f"{time.time()-start:.1f}s"
     )
 
     return path
 
-
-# ============================================================
-# M3U helpers
-# ============================================================
 
 def get_name(extinf):
 
@@ -228,57 +183,46 @@ def get_name(extinf):
     )
 
 
-def decode_name(value):
+def clean_text(value):
 
-    try:
-        return value.decode(
-            "utf-8",
-            errors="replace"
-        ).strip()
-
-    except Exception:
-        return ""
-
-
-def normalize_name(name):
-
-    name = re.sub(
-        rb"(?i)cctv",
-        b"CCTV",
-        name
+    value = re.sub(
+        rb"\[[^\]]*\]",
+        b"",
+        value
     )
 
-    name = re.sub(
+    value = re.sub(
+        rb"\([^\)]*(?:720|1080|2160|4K|576|480)[^\)]*\)",
+        b"",
+        value,
+        flags=re.I
+    )
+
+    value = re.sub(
         rb"\s+",
         b"",
-        name
+        value
     )
 
-    return name.upper()
+    return value.upper()
 
 
-# ============================================================
-# CCTV matching
-# ============================================================
+def extract_cctv(name):
 
-def extract_cctv_number(name):
-
-    normalized = normalize_name(name)
+    value = clean_text(name)
 
     match = re.match(
         rb"^CCTV-?([0-9]{1,2})(\+?)",
-        normalized
+        value
     )
 
     if not match:
         return None
 
-    try:
-        number = match.group(1).decode(
-            "ascii"
-        )
-    except Exception:
-        return None
+    number = (
+        match.group(1)
+        .decode("ascii")
+    )
 
     if match.group(2):
         return number + "+"
@@ -286,7 +230,7 @@ def extract_cctv_number(name):
     return number
 
 
-def config_cctv_number(channel):
+def config_cctv(channel):
 
     cid = channel["id"].lower()
 
@@ -304,29 +248,23 @@ def config_cctv_number(channel):
     return None
 
 
-# ============================================================
-# Channel matching
-# ============================================================
-
 def channel_matches(
     source_name,
     channel
 ):
 
-    wanted_cctv = (
-        config_cctv_number(channel)
+    wanted_cctv = config_cctv(
+        channel
     )
 
     if wanted_cctv:
 
         return (
-            extract_cctv_number(
-                source_name
-            )
+            extract_cctv(source_name)
             == wanted_cctv
         )
 
-    source = normalize_name(
+    source = clean_text(
         source_name
     )
 
@@ -335,27 +273,26 @@ def channel_matches(
         []
     ):
 
-        target = normalize_name(
+        target = clean_text(
             alias.encode("utf-8")
         )
 
-        if target in source:
+        if source == target:
             return True
 
     return False
 
-
-# ============================================================
-# Parse playlist
-# ============================================================
 
 def parse_playlist(
     path,
     source
 ):
 
-    data = path.read_bytes()
-    lines = data.splitlines()
+    lines = (
+        path
+        .read_bytes()
+        .splitlines()
+    )
 
     entries = []
 
@@ -363,15 +300,16 @@ def parse_playlist(
 
     while i < len(lines):
 
-        if not lines[i].startswith(
+        line = lines[i]
+
+        if not line.startswith(
             b"#EXTINF:"
         ):
 
             i += 1
             continue
 
-        extinf = lines[i]
-
+        extinf = line
         extras = []
         url = None
 
@@ -380,7 +318,8 @@ def parse_playlist(
         while j < len(lines):
 
             candidate = (
-                lines[j].strip()
+                lines[j]
+                .strip()
             )
 
             if not candidate:
@@ -388,9 +327,13 @@ def parse_playlist(
                 j += 1
                 continue
 
-            if candidate.startswith(b"#"):
+            if candidate.startswith(
+                b"#"
+            ):
 
-                extras.append(candidate)
+                extras.append(
+                    candidate
+                )
 
                 j += 1
                 continue
@@ -403,25 +346,25 @@ def parse_playlist(
             entries.append(
                 {
                     "source_id":
-                        source["id"],
+                    source["id"],
 
                     "region":
-                        source["region"],
+                    source["region"],
 
                     "priority":
-                        source["priority"],
+                    source["priority"],
 
                     "extinf":
-                        extinf,
+                    extinf,
 
                     "name":
-                        get_name(extinf),
+                    get_name(extinf),
 
                     "extras":
-                        extras,
+                    extras,
 
                     "url":
-                        url,
+                    url
                 }
             )
 
@@ -433,19 +376,15 @@ def parse_playlist(
     return entries
 
 
-# ============================================================
-# Collect all sources
-# ============================================================
-
 def collect_sources():
 
     print("")
-    print("[1/6] Download sources")
+    print(
+        "[1/5] Download sources"
+    )
     print("")
 
-    all_entries = []
-
-    successful = 0
+    entries = []
 
     for source in sorted(
         SOURCES,
@@ -459,27 +398,26 @@ def collect_sources():
         if not path:
             continue
 
-        entries = parse_playlist(
-            path,
-            source
+        source_entries = (
+            parse_playlist(
+                path,
+                source
+            )
         )
 
         print(
-            f"     {source['id']} "
-            f"[{source['region']}]: "
-            f"{len(entries)} entries"
+            f"     "
+            f"{len(source_entries)} entries"
         )
 
-        all_entries.extend(
-            entries
+        entries.extend(
+            source_entries
         )
 
-        successful += 1
-
-    if successful == 0:
+    if not entries:
 
         print(
-            "ERROR: all sources failed"
+            "ERROR: no source data"
         )
 
         sys.exit(1)
@@ -487,19 +425,15 @@ def collect_sources():
     print("")
     print(
         f"Total candidates: "
-        f"{len(all_entries)}"
+        f"{len(entries)}"
     )
 
-    return all_entries
+    return entries
 
-
-# ============================================================
-# EXTINF rewrite
-# ============================================================
 
 def rewrite_extinf(
     extinf,
-    display_name,
+    name,
     group
 ):
 
@@ -509,12 +443,12 @@ def rewrite_extinf(
         extinf
     )
 
-    group_bytes = group.encode(
-        "utf-8"
+    group_bytes = (
+        group.encode("utf-8")
     )
 
-    name_bytes = display_name.encode(
-        "utf-8"
+    name_bytes = (
+        name.encode("utf-8")
     )
 
     if re.search(
@@ -545,27 +479,17 @@ def rewrite_extinf(
             1
         )
 
-    if b"," in extinf:
+    metadata = (
+        extinf
+        .split(b",", 1)[0]
+    )
 
-        metadata = (
-            extinf.split(
-                b",",
-                1
-            )[0]
-        )
+    return (
+        metadata
+        + b","
+        + name_bytes
+    )
 
-        extinf = (
-            metadata
-            + b","
-            + name_bytes
-        )
-
-    return extinf
-
-
-# ============================================================
-# Existing CN playlist matching
-# ============================================================
 
 def match_channels(
     config,
@@ -573,229 +497,35 @@ def match_channels(
 ):
 
     print("")
-    print("[2/6] Match formal channels")
-    print("")
-
-    max_lines = (
-        config
-        .get("settings", {})
-        .get(
-            "max_lines_per_channel",
-            2
-        )
+    print(
+        "[2/5] Match channels"
     )
+    print("")
 
     results = []
 
-    # 正式大陆频道仍允许使用全部来源 fallback
     ordered = sorted(
         entries,
         key=lambda x: x["priority"]
     )
 
-    for wanted in config["channels"]:
+    for channel in config[
+        "channels"
+    ]:
+
+        region = channel.get(
+            "region",
+            "CN"
+        )
 
         candidates = []
 
-        seen_urls = set()
-        seen_sources = set()
-
-        # --------------------------------
+        # =================================
         # 第一轮
-        # 尽量选不同 source_id
-        # --------------------------------
+        # 只找相同地区
+        # =================================
 
         for entry in ordered:
-
-            if not channel_matches(
-                entry["name"],
-                wanted
-            ):
-                continue
-
-            if entry["url"] in seen_urls:
-                continue
-
-            if (
-                entry["source_id"]
-                in seen_sources
-            ):
-                continue
-
-            candidates.append(entry)
-
-            seen_urls.add(
-                entry["url"]
-            )
-
-            seen_sources.add(
-                entry["source_id"]
-            )
-
-            if (
-                len(candidates)
-                >= max_lines
-            ):
-                break
-
-        # --------------------------------
-        # 第二轮
-        # 如果不同来源不足，再允许同源第二条
-        # --------------------------------
-
-        if (
-            len(candidates)
-            < max_lines
-        ):
-
-            for entry in ordered:
-
-                if not channel_matches(
-                    entry["name"],
-                    wanted
-                ):
-                    continue
-
-                if entry["url"] in seen_urls:
-                    continue
-
-                candidates.append(entry)
-
-                seen_urls.add(
-                    entry["url"]
-                )
-
-                if (
-                    len(candidates)
-                    >= max_lines
-                ):
-                    break
-
-        results.append(
-            {
-                "config": wanted,
-                "sources": candidates
-            }
-        )
-
-        if candidates:
-
-            source_names = ", ".join(
-                x["source_id"]
-                for x in candidates
-            )
-
-            print(
-                f"FOUND: "
-                f"{wanted['name']} "
-                f"[{source_names}]"
-            )
-
-        else:
-
-            print(
-                f"MISS : "
-                f"{wanted['name']}"
-            )
-
-    return results
-
-
-# ============================================================
-# Write current formal playlist
-# ============================================================
-
-def write_output(results):
-
-    print("")
-    print("[3/6] Generate playlist")
-
-    output = [
-        b"#EXTM3U"
-    ]
-
-    logical = 0
-    stream_lines = 0
-
-    for result in results:
-
-        wanted = result["config"]
-
-        sources = result["sources"]
-
-        if not sources:
-            continue
-
-        logical += 1
-
-        for source in sources:
-
-            output.append(
-                rewrite_extinf(
-                    source["extinf"],
-                    wanted["name"],
-                    wanted["group"]
-                )
-            )
-
-            output.extend(
-                source["extras"]
-            )
-
-            output.append(
-                source["url"]
-            )
-
-            stream_lines += 1
-
-    OUTPUT.write_bytes(
-        b"\n".join(output)
-        + b"\n"
-    )
-
-    return logical, stream_lines
-
-
-# ============================================================
-# Region Discovery
-#
-# 这次不猜关键词
-# 直接根据来源 region 分类
-# ============================================================
-
-def discover_regions(entries):
-
-    print("")
-    print("[4/6] Region source discovery")
-
-    region_names = {
-        "HK": "HONG KONG",
-        "MO": "MACAU",
-        "TW": "TAIWAN",
-    }
-
-    for region in [
-        "HK",
-        "MO",
-        "TW",
-    ]:
-
-        print("")
-        print(
-            "======================================"
-        )
-
-        print(
-            f"{region_names[region]}"
-        )
-
-        print(
-            "======================================"
-        )
-
-        found = {}
-
-        for entry in entries:
 
             if (
                 entry["region"]
@@ -803,97 +533,190 @@ def discover_regions(entries):
             ):
                 continue
 
-            name = decode_name(
-                entry["name"]
-            )
+            if channel_matches(
+                entry["name"],
+                channel
+            ):
 
-            if not name:
-                continue
+                candidates.append(
+                    entry
+                )
 
-            if name not in found:
+        # =================================
+        # CN 特殊 fallback
+        #
+        # CCTV 等仍然允许 CN 多源
+        # =================================
 
-                found[name] = {
-                    "sources": set(),
-                    "urls": set(),
-                }
-
-            found[name][
-                "sources"
-            ].add(
-                entry["source_id"]
-            )
-
-            found[name][
-                "urls"
-            ].add(
-                entry["url"]
-            )
-
-        if not found:
-
-            print(
-                "No candidates found."
-            )
-            continue
-
-        for name in sorted(
-            found.keys(),
-            key=lambda x: x.upper()
+        if (
+            not candidates
+            and region == "CN"
         ):
 
-            info = found[name]
+            for entry in ordered:
 
-            sources = ", ".join(
-                sorted(
-                    info["sources"]
-                )
+                if channel_matches(
+                    entry["name"],
+                    channel
+                ):
+
+                    candidates.append(
+                        entry
+                    )
+
+        # =================================
+        # URL 去重
+        # =================================
+
+        unique = []
+        seen = set()
+
+        for item in candidates:
+
+            if item["url"] in seen:
+                continue
+
+            seen.add(
+                item["url"]
             )
 
-            print("")
-            print(
-                f"CHANNEL: {name}"
+            unique.append(
+                item
             )
 
-            print(
-                f"  SOURCE : {sources}"
-            )
+        candidates = unique
 
-            print(
-                f"  LINES  : "
-                f"{len(info['urls'])}"
-            )
+        # =================================
+        # 当前正式版本
+        #
+        # 只发布优先级最高的一条
+        # =================================
 
-        print("")
-        print(
-            f"TOTAL {region}: "
-            f"{len(found)} "
-            f"candidate names"
+        selected = (
+            candidates[0]
+            if candidates
+            else None
         )
 
+        results.append(
+            {
+                "channel":
+                channel,
 
-# ============================================================
-# Validate
-# ============================================================
+                "selected":
+                selected,
 
-def validate_output():
+                "candidate_count":
+                len(candidates)
+            }
+        )
+
+        if selected:
+
+            print(
+                f"FOUND: "
+                f"{channel['name']} "
+                f"[{selected['source_id']}] "
+                f"candidates="
+                f"{len(candidates)}"
+            )
+
+        else:
+
+            print(
+                f"MISS : "
+                f"{channel['name']}"
+            )
+
+    return results
+
+
+def write_playlist(results):
 
     print("")
-    print("[5/6] Validate output")
+    print(
+        "[3/5] Generate playlist"
+    )
+
+    output = [
+        b"#EXTM3U"
+    ]
+
+    logical = 0
+
+    region_counts = {
+        "CN": 0,
+        "HK": 0,
+        "MO": 0,
+        "TW": 0
+    }
+
+    for result in results:
+
+        selected = result[
+            "selected"
+        ]
+
+        if not selected:
+            continue
+
+        channel = result[
+            "channel"
+        ]
+
+        output.append(
+            rewrite_extinf(
+                selected["extinf"],
+                channel["name"],
+                channel["group"]
+            )
+        )
+
+        output.extend(
+            selected["extras"]
+        )
+
+        output.append(
+            selected["url"]
+        )
+
+        logical += 1
+
+        region = channel.get(
+            "region",
+            "CN"
+        )
+
+        region_counts[
+            region
+        ] = (
+            region_counts
+            .get(region, 0)
+            + 1
+        )
+
+    OUTPUT.write_bytes(
+        b"\n".join(output)
+        + b"\n"
+    )
+
+    return (
+        logical,
+        region_counts
+    )
+
+
+def validate():
+
+    print("")
+    print(
+        "[4/5] Validate"
+    )
 
     if not OUTPUT.exists():
 
         print(
             "ERROR: output missing"
-        )
-
-        sys.exit(1)
-
-    size = OUTPUT.stat().st_size
-
-    if size < 50:
-
-        print(
-            "ERROR: output too small"
         )
 
         sys.exit(1)
@@ -905,26 +728,25 @@ def validate_output():
     ):
 
         print(
-            "ERROR: invalid M3U"
+            "ERROR: invalid playlist"
         )
 
         sys.exit(1)
 
     print(
-        f"OK: {size:,} bytes"
+        f"OK: "
+        f"{len(data):,} bytes"
     )
 
-
-# ============================================================
-# Cleanup
-# ============================================================
 
 def cleanup():
 
     if not TEMP_DIR.exists():
         return
 
-    for path in TEMP_DIR.iterdir():
+    for path in (
+        TEMP_DIR.iterdir()
+    ):
 
         try:
 
@@ -937,45 +759,34 @@ def cleanup():
     try:
         TEMP_DIR.rmdir()
 
-    except OSError:
+    except Exception:
         pass
 
-
-# ============================================================
-# Main
-# ============================================================
 
 def main():
 
     print("")
     print(
-        "======================================"
+        "===================================="
     )
-
     print(
         f"TVAtlas v{VERSION}"
     )
-
     print(
-        "Region Source Architecture"
+        "Curated Regional Playlist"
     )
-
     print(
         "CN / HK / MO / TW"
     )
-
     print(
-        "======================================"
+        "===================================="
     )
 
     start = time.time()
 
-    logical = 0
-    lines = 0
-
-    config = load_config()
-
     try:
+
+        config = load_config()
 
         entries = collect_sources()
 
@@ -984,76 +795,69 @@ def main():
             entries
         )
 
-        logical, lines = (
-            write_output(
+        logical, regions = (
+            write_playlist(
                 results
             )
         )
 
-        discover_regions(
-            entries
-        )
-
-        validate_output()
+        validate()
 
     finally:
 
         cleanup()
 
     print("")
-    print("[6/6] Complete")
-
     print(
-        "--------------------------------------"
+        "[5/5] Complete"
     )
 
     print(
-        f"Logical channels : {logical}"
+        "------------------------------------"
     )
 
     print(
-        f"Stream lines     : {lines}"
+        f"Logical channels : "
+        f"{logical}"
+    )
+
+    print(
+        f"CN               : "
+        f"{regions.get('CN', 0)}"
+    )
+
+    print(
+        f"HK               : "
+        f"{regions.get('HK', 0)}"
+    )
+
+    print(
+        f"MO               : "
+        f"{regions.get('MO', 0)}"
+    )
+
+    print(
+        f"TW               : "
+        f"{regions.get('TW', 0)}"
+    )
+
+    print(
+        f"Stream lines     : "
+        f"{logical}"
     )
 
     print(
         f"Build time       : "
-        f"{time.time() - start:.1f}s"
+        f"{time.time()-start:.1f}s"
     )
 
     print(
-        f"Output           : {OUTPUT}"
+        "Publish          : "
+        "GitHub RAW"
     )
 
     print(
-        "--------------------------------------"
-    )
-
-    print(
-        "CN sources : "
-        "cs3306 + best-fan"
-    )
-
-    print(
-        "HK source  : "
-        "iptv-org HK"
-    )
-
-    print(
-        "MO source  : "
-        "iptv-org MO"
-    )
-
-    print(
-        "TW source  : "
-        "iptv-org TW"
-    )
-
-    print(
-        "Publish    : GitHub RAW"
-    )
-
-    print(
-        "======================================"
+        "===================================="
     )
 
 
