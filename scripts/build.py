@@ -1,16 +1,17 @@
 from pathlib import Path
-from urllib.request import Request, urlopen
+import subprocess
+import time
+import sys
 
 # ============================================================
-# TVAtlas v0.3
-# 中国大陆核心频道
+# TVAtlas v0.3.1
+# Fast / Safe Build
 #
-# 核心原则：
-# 1. 下载已验证中文正常的 IPTV-Sources 原始 M3U
-# 2. 不 decode 整个文件
-# 3. 不重新生成中文 EXTINF
-# 4. 使用 UTF-8 bytes 直接匹配
-# 5. 命中的频道块原样写回
+# 目标：
+# 1. 保留上游原始字节，避免中文乱码
+# 2. 下载最长 30 秒
+# 3. 下载失败立即结束，不再无限等待
+# 4. 输出清晰日志
 # ============================================================
 
 SOURCE = (
@@ -18,72 +19,38 @@ SOURCE = (
     "cs3306/IPTV-Sources/main/data/output/iptv_collection.m3u"
 )
 
-OUTPUT = Path(__file__).resolve().parent.parent / "tvatlas.m3u"
+ROOT = Path(__file__).resolve().parent.parent
+
+TEMP = ROOT / "source.m3u"
+OUTPUT = ROOT / "tvatlas.m3u"
 
 
-# ------------------------------------------------------------
-# 第一阶段白名单
-# 使用频道名称关键词筛选
-# ------------------------------------------------------------
+# ============================================================
+# 白名单
+# ============================================================
 
 WHITELIST = [
+    # CCTV
+    "CCTV-1", "CCTV1",
+    "CCTV-2", "CCTV2",
+    "CCTV-3", "CCTV3",
+    "CCTV-4", "CCTV4",
+    "CCTV-5", "CCTV5",
+    "CCTV-5+", "CCTV5+",
+    "CCTV-6", "CCTV6",
+    "CCTV-7", "CCTV7",
+    "CCTV-8", "CCTV8",
+    "CCTV-9", "CCTV9",
+    "CCTV-10", "CCTV10",
+    "CCTV-11", "CCTV11",
+    "CCTV-12", "CCTV12",
+    "CCTV-13", "CCTV13",
+    "CCTV-14", "CCTV14",
+    "CCTV-15", "CCTV15",
+    "CCTV-16", "CCTV16",
+    "CCTV-17", "CCTV17",
 
-    # ===== CCTV =====
-    "CCTV-1",
-    "CCTV1",
-
-    "CCTV-2",
-    "CCTV2",
-
-    "CCTV-3",
-    "CCTV3",
-
-    "CCTV-4",
-    "CCTV4",
-
-    "CCTV-5",
-    "CCTV5",
-
-    "CCTV-5+",
-    "CCTV5+",
-
-    "CCTV-6",
-    "CCTV6",
-
-    "CCTV-7",
-    "CCTV7",
-
-    "CCTV-8",
-    "CCTV8",
-
-    "CCTV-9",
-    "CCTV9",
-
-    "CCTV-10",
-    "CCTV10",
-
-    "CCTV-11",
-    "CCTV11",
-
-    "CCTV-12",
-    "CCTV12",
-
-    "CCTV-13",
-    "CCTV13",
-
-    "CCTV-14",
-    "CCTV14",
-
-    "CCTV-15",
-    "CCTV15",
-
-    "CCTV-16",
-    "CCTV16",
-
-    "CCTV-17",
-    "CCTV17",
-
-    # ===== 主要卫视 =====
+    # 卫视
     "湖南卫视",
     "浙江卫视",
     "江苏卫视",
@@ -109,61 +76,111 @@ WHITELIST = [
 ]
 
 
-# ------------------------------------------------------------
+# ============================================================
 # 下载
-# ------------------------------------------------------------
+# ============================================================
 
 def download():
 
-    request = Request(
+    print("")
+    print("[1/3] Downloading source...")
+    print(SOURCE)
+    print("")
+
+    start = time.time()
+
+    command = [
+        "curl",
+        "-L",
+        "--fail",
+        "--silent",
+        "--show-error",
+
+        # 建立连接最多 8 秒
+        "--connect-timeout", "8",
+
+        # 整个下载最多 30 秒
+        "--max-time", "30",
+
+        # 失败重试一次
+        "--retry", "1",
+        "--retry-delay", "2",
+
+        "-o", str(TEMP),
+
         SOURCE,
-        headers={
-            "User-Agent": "Mozilla/5.0 TVAtlas/0.3"
-        }
+    ]
+
+    try:
+
+        subprocess.run(
+            command,
+            check=True,
+            timeout=40
+        )
+
+    except subprocess.TimeoutExpired:
+
+        print("")
+        print("ERROR: Download exceeded 40 seconds.")
+        sys.exit(1)
+
+    except subprocess.CalledProcessError as e:
+
+        print("")
+        print(f"ERROR: Download failed. curl code={e.returncode}")
+        sys.exit(1)
+
+    elapsed = time.time() - start
+
+    if not TEMP.exists():
+
+        print("ERROR: Source file not created.")
+        sys.exit(1)
+
+    size = TEMP.stat().st_size
+
+    if size < 100:
+
+        print("ERROR: Source file is unexpectedly small.")
+        sys.exit(1)
+
+    print(
+        f"OK: downloaded {size:,} bytes "
+        f"in {elapsed:.1f}s"
     )
 
-    with urlopen(request, timeout=60) as response:
-        return response.read()
 
+# ============================================================
+# 字节级筛选
+# ============================================================
 
-# ------------------------------------------------------------
-# 判断 EXTINF 是否属于白名单
-#
-# 注意：
-# keyword.encode("utf-8")
-# 只负责生成匹配用 bytes
-#
-# 原始 EXTINF 本身不会 decode / encode
-# ------------------------------------------------------------
-
-def is_wanted(extinf):
+def wanted(extinf):
 
     upper = extinf.upper()
 
     for keyword in WHITELIST:
 
-        keyword_bytes = keyword.encode("utf-8").upper()
-
-        if keyword_bytes in upper:
+        if keyword.encode("utf-8").upper() in upper:
             return True
 
     return False
 
 
-# ------------------------------------------------------------
-# 解析并筛选
-# ------------------------------------------------------------
+def filter_channels():
 
-def filter_playlist(data):
+    print("")
+    print("[2/3] Filtering channels...")
 
-    # splitlines() 在 bytes 上操作
-    # 不发生字符解码
+    # 关键：
+    # 全程 bytes
+    # 不 decode 中文
+
+    data = TEMP.read_bytes()
 
     lines = data.splitlines()
 
-    output = [
-        b"#EXTM3U"
-    ]
+    output = [b"#EXTM3U"]
 
     selected = 0
 
@@ -173,82 +190,106 @@ def filter_playlist(data):
 
         line = lines[i]
 
-        if line.startswith(b"#EXTINF:"):
+        if not line.startswith(b"#EXTINF:"):
+            i += 1
+            continue
 
-            extinf = line
+        extinf = line
 
-            # 找该频道真正的 URL
-            j = i + 1
+        j = i + 1
+        extra = []
+        url = None
 
-            extra_lines = []
+        while j < len(lines):
 
-            while j < len(lines):
+            candidate = lines[j]
 
-                candidate = lines[j]
+            if not candidate:
+                j += 1
+                continue
 
-                if not candidate:
-                    j += 1
-                    continue
+            if candidate.startswith(b"#"):
+                extra.append(candidate)
+                j += 1
+                continue
 
-                # EXTINF 后可能存在额外标签
-                if candidate.startswith(b"#"):
+            url = candidate
+            break
 
-                    extra_lines.append(candidate)
-                    j += 1
-                    continue
+        if url is not None and wanted(extinf):
 
-                url = candidate
+            # EXTINF 原字节直接复制
+            output.append(extinf)
 
-                if is_wanted(extinf):
+            # 保留 EXTINF 后的额外标签
+            output.extend(extra)
 
-                    # 最关键：
-                    # 原始 EXTINF 字节原封不动写入
+            # URL 原字节直接复制
+            output.append(url)
 
-                    output.append(extinf)
+            selected += 1
 
-                    for extra in extra_lines:
-                        output.append(extra)
+        i = max(j + 1, i + 1)
 
-                    output.append(url)
+    result = b"\n".join(output) + b"\n"
 
-                    selected += 1
+    OUTPUT.write_bytes(result)
 
-                i = j
+    print(f"OK: selected {selected} source entries")
+    print(f"Output size: {len(result):,} bytes")
 
-        i += 1
-
-    return b"\n".join(output) + b"\n", selected
+    return selected
 
 
-# ------------------------------------------------------------
+# ============================================================
+# 清理
+# ============================================================
+
+def cleanup():
+
+    if TEMP.exists():
+        TEMP.unlink()
+
+
+# ============================================================
 # MAIN
-# ------------------------------------------------------------
+# ============================================================
 
 def main():
 
+    print("")
     print("======================================")
-    print("TVAtlas v0.3")
-    print("Byte-safe curated playlist")
+    print("        TVAtlas v0.3.1")
+    print("      Fast / Safe Builder")
     print("======================================")
 
-    data = download()
+    total_start = time.time()
 
-    print(f"Downloaded : {len(data)} bytes")
+    try:
 
-    playlist, selected = filter_playlist(data)
+        download()
 
-    # 直接写 bytes
-    # 不进行任何 encode/decode
+        selected = filter_channels()
 
-    OUTPUT.write_bytes(playlist)
+        if selected == 0:
+            print("")
+            print("ERROR: No channels matched.")
+            sys.exit(1)
 
-    print("--------------------------------------")
-    print(f"Selected   : {selected}")
-    print(f"Output size: {len(playlist)} bytes")
-    print(f"Output     : {OUTPUT}")
-    print("--------------------------------------")
-    print("EXTINF     : original bytes preserved")
-    print("Encoding   : untouched")
+    finally:
+
+        cleanup()
+
+    elapsed = time.time() - total_start
+
+    print("")
+    print("[3/3] Build completed")
+    print("")
+    print(f"Channels : {selected}")
+    print(f"Time     : {elapsed:.1f}s")
+    print(f"Output   : {OUTPUT}")
+    print("")
+    print("Chinese metadata: original bytes preserved")
     print("======================================")
 
 
