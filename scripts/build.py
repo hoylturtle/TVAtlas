@@ -7,11 +7,12 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
 OUTPUT = ROOT / "tvatlas.m3u"
+DIAGNOSTICS = ROOT / "tvatlas-diagnostics.json"
 TEMP_DIR = ROOT / ".tvatlas_temp"
 
 
@@ -694,6 +695,37 @@ def match_channels(config, entries):
 
     return results
 
+def write_diagnostics(results):
+    report = {
+        "version": VERSION,
+        "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "summary": {"healthy": 0, "fallback-unverified": 0, "missing": 0},
+        "channels": []
+    }
+    for result in results:
+        status = result.get("health", "missing")
+        report["summary"][status] = report["summary"].get(status, 0) + 1
+        selected = result.get("selected")
+        candidates = []
+        for entry in result.get("candidates", []):
+            candidates.append({
+                "source": entry["source_id"],
+                "priority": entry["priority"],
+                "url": entry["url"].decode("utf-8", errors="replace"),
+                "selected": bool(selected and entry["url"] == selected["url"])
+            })
+        report["channels"].append({
+            "id": result["channel"]["id"],
+            "name": result["channel"]["name"],
+            "region": result["channel"].get("region", "CN"),
+            "status": status,
+            "candidate_count": len(candidates),
+            "candidates": candidates
+        })
+    DIAGNOSTICS.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+    print(f"Diagnostics       : {DIAGNOSTICS.name}")
+
+
 def write_playlist(results):
 
     print("")
@@ -859,6 +891,8 @@ def main():
         )
 
         results = probe_candidates(results)
+
+        write_diagnostics(results)
 
         logical, regions = (
             write_playlist(
