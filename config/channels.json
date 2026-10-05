@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.2",
   "settings": {
     "max_lines_per_channel": 1
   },
@@ -409,7 +409,8 @@
       "group": "香港 · 综合",
       "region": "HK",
       "match": [
-        "HOY TV"
+        "HOY TV",
+        "HOY 77"
       ]
     },
     {
@@ -418,7 +419,8 @@
       "group": "香港 · 新闻",
       "region": "HK",
       "match": [
-        "HOY Infotainment"
+        "HOY Infotainment",
+        "HOY 78"
       ]
     },
     {
@@ -445,7 +447,8 @@
       "group": "香港 · 公共电视",
       "region": "HK",
       "match": [
-        "RTHK TV 31"
+        "RTHK TV 31",
+        "RTHK 31"
       ]
     },
     {
@@ -454,7 +457,8 @@
       "group": "香港 · 公共电视",
       "region": "HK",
       "match": [
-        "RTHK TV 32"
+        "RTHK TV 32",
+        "RTHK 32"
       ]
     },
     {
@@ -463,7 +467,8 @@
       "group": "香港 · 公共电视",
       "region": "HK",
       "match": [
-        "RTHK TV 33"
+        "RTHK TV 33",
+        "RTHK 33"
       ]
     },
     {
@@ -472,7 +477,8 @@
       "group": "香港 · 公共电视",
       "region": "HK",
       "match": [
-        "RTHK TV 34"
+        "RTHK TV 34",
+        "RTHK 34"
       ]
     },
     {
@@ -481,7 +487,8 @@
       "group": "香港 · 公共电视",
       "region": "HK",
       "match": [
-        "RTHK TV 35"
+        "RTHK TV 35",
+        "RTHK 35"
       ]
     },
     {
