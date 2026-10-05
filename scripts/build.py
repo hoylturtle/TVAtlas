@@ -924,8 +924,8 @@ def rewrite_extinf(
     # Upstream EPG metadata can be wrong even when the display name matches
     # (we observed CCTV-1 carrying CCTV12 metadata). Prefer the curated TVAtlas
     # display name over poisoned upstream tvg-name/tvg-id fields.
-    metadata = re.sub(rb'\s+tvg-name="[^"]*"', b"", metadata)
     if name.upper().startswith("CCTV-"):
+        metadata = re.sub(rb'\s+tvg-name="[^"]*"', b"", metadata)
         metadata = re.sub(rb'\s+tvg-id="[^"]*"', b"", metadata)
 
     return (
@@ -1065,28 +1065,34 @@ def write_playlist(results):
             selected["url"]
         )
 
-        # Multi-line output for Hong Kong channels. Players such as OrangeIPTV
-        # merge identical channel names and can fail over automatically.
-        # Keep the best line first and cap the list to avoid bloating clients.
-        if region := channel.get("region", "CN"):
-            if region == "HK":
-                ranked = result.get("ranked", [])
-                emitted = {selected["url"]}
-                for alternate in ranked:
-                    if len(emitted) >= 3:
-                        break
-                    if alternate["url"] in emitted:
-                        continue
-                    output.append(
-                        rewrite_extinf(
-                            alternate["extinf"],
-                            channel["name"],
-                            channel["group"]
-                        )
+        # Orange-style multi-line model: identical curated channel names are
+        # emitted with multiple URLs. Compatible players merge them into one
+        # channel and switch lines on playback failure.
+        region = channel.get("region", "CN")
+        is_cctv = config_cctv(channel) is not None
+        if region == "HK" or is_cctv:
+            ranked = result.get("ranked", [])
+            emitted = {selected["url"]}
+            max_lines = 4 if is_cctv else 3
+            for alternate in ranked:
+                if len(emitted) >= max_lines:
+                    break
+                if alternate["url"] in emitted:
+                    continue
+                # Defensive second gate for CCTV: never emit a URL whose
+                # embedded CCTV number contradicts the curated channel.
+                if is_cctv and url_conflicts_with_channel(alternate["url"], channel):
+                    continue
+                output.append(
+                    rewrite_extinf(
+                        alternate["extinf"],
+                        channel["name"],
+                        channel["group"]
                     )
-                    output.extend(alternate["extras"])
-                    output.append(alternate["url"])
-                    emitted.add(alternate["url"])
+                )
+                output.extend(alternate["extras"])
+                output.append(alternate["url"])
+                emitted.add(alternate["url"])
 
         logical += 1
 
