@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -73,6 +73,30 @@ SOURCES = [
         "region": "CN",
         "priority": 18,
         "url": "https://tv.iill.top/m3u/Gather",
+    },
+    {
+        "id": "free-tv-hk",
+        "region": "HK",
+        "priority": 6,
+        "url": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_hong_kong.m3u8",
+    },
+    {
+        "id": "guovin-hk-pool",
+        "region": "HK",
+        "priority": 7,
+        "url": "https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u",
+    },
+    {
+        "id": "yuechan-global",
+        "region": "HK",
+        "priority": 8,
+        "url": "https://raw.githubusercontent.com/YueChan/Live/main/Global.m3u",
+    },
+    {
+        "id": "kimentanm-aptv",
+        "region": "HK",
+        "priority": 9,
+        "url": "https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u",
     },
     {
         "id": "iptvorg-hk",
@@ -322,6 +346,19 @@ def config_cctv(channel):
         return match.group(1)
 
     return None
+
+
+def url_conflicts_with_channel(url, channel):
+    """Reject obvious upstream mislabels such as a CCTV-12 URL named CCTV-1."""
+    wanted = config_cctv(channel)
+    if not wanted:
+        return False
+    text = url.decode("utf-8", errors="ignore").upper()
+    m = re.search(r"CCTV[-_]?([0-9]{1,2})(PLUS|\+)?", text)
+    if not m:
+        return False
+    found = m.group(1) + ("+" if m.group(2) else "")
+    return found != wanted
 
 
 def channel_matches(
@@ -615,9 +652,9 @@ def collect_sources():
 
 
 
-HEALTH_WORKERS = 16
+HEALTH_WORKERS = 32
 HEALTH_CONNECT_TIMEOUT = 3
-HEALTH_MAX_TIME = 10
+HEALTH_MAX_TIME = 8
 
 # URLs confirmed failing in a real TV player. They remain documented here so
 # upstream rediscovery cannot immediately promote them again.
@@ -878,6 +915,13 @@ def rewrite_extinf(
         .rsplit(b",", 1)[0]
     )
 
+    # Upstream EPG metadata can be wrong even when the display name matches
+    # (we observed CCTV-1 carrying CCTV12 metadata). Prefer the curated TVAtlas
+    # display name over poisoned upstream tvg-name/tvg-id fields.
+    metadata = re.sub(rb'\s+tvg-name="[^"]*"', b"", metadata)
+    if name.upper().startswith("CCTV-"):
+        metadata = re.sub(rb'\s+tvg-id="[^"]*"', b"", metadata)
+
     return (
         metadata
         + b","
@@ -901,12 +945,14 @@ def match_channels(config, entries):
             if entry["region"] != region:
                 continue
             if channel_matches(entry["name"], channel):
-                candidates.append(entry)
+                if not url_conflicts_with_channel(entry["url"], channel):
+                    candidates.append(entry)
 
         if not candidates and region == "CN":
             for entry in ordered:
                 if channel_matches(entry["name"], channel):
-                    candidates.append(entry)
+                    if not url_conflicts_with_channel(entry["url"], channel):
+                        candidates.append(entry)
 
         unique = []
         seen = set()
