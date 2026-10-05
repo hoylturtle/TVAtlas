@@ -11,7 +11,7 @@ on:
       - "config/**"
       - ".github/workflows/build.yml"
   schedule:
-    - cron: "17 19 * * *"
+    - cron: "0 0,12 * * *"
 
 permissions:
   contents: write
@@ -24,7 +24,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    timeout-minutes: 5
+    timeout-minutes: 8
 
     steps:
       - name: Checkout repository
