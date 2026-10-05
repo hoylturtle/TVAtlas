@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -660,6 +660,7 @@ HEALTH_MAX_TIME = 8
 # upstream rediscovery cannot immediately promote them again.
 PLAYER_BLOCKLIST = {
     "http://103.172.187.30:12000/stream/mytv/null-1/master.m3u8",
+    "http://120.84.96.28:808/hls/25/index.m3u8",
 }
 
 
@@ -809,6 +810,9 @@ def probe_candidates(results):
             healthy.sort(key=lambda item: (item[0], item[1]))
             selected = healthy[0][2]
             result["selected"] = selected
+            # Keep all verified candidates ordered for players that merge
+            # duplicate channel names into automatic failover lines.
+            result["ranked"] = [item[2] for item in healthy]
             result["health"] = "healthy"
             result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
             healthy_channels += 1
@@ -827,6 +831,7 @@ def probe_candidates(results):
             ]
             selected = eligible[0] if eligible else None
             result["selected"] = selected
+            result["ranked"] = eligible
             result["health"] = "fallback-unverified" if selected else "missing-player-blocked"
             result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
             if selected:
@@ -849,6 +854,7 @@ def probe_candidates(results):
                 print(f"BLOCKED : {channel['name']} no eligible fallback")
         else:
             result["selected"] = None
+            result["ranked"] = []
             result["health"] = "missing"
             result["probe_results"] = {}
             missing_channels += 1
@@ -1059,42 +1065,28 @@ def write_playlist(results):
             selected["url"]
         )
 
-        # Jade is geo-sensitive: GitHub's US runner can reject streams that
-        # have real-world playback reports on mainland networks. Expose two
-        # manual backup entries instead of pretending one CI vantage point is
-        # authoritative. Standard M3U has no portable automatic failover field.
-        if channel["id"] == "hk-jade":
-            jade_manual_backups = [
-                (
-                    "翡翠台 · 广东线路1",
-                    b"http://120.84.96.28:808/hls/25/index.m3u8",
-                ),
-                (
-                    "翡翠台 · 广东线路2",
-                    b"http://113.64.147.149:808/hls/67/index.m3u8",
-                ),
-                (
-                    "翡翠台 · 广东线路3",
-                    b"http://113.64.147.170:808/hls/67/index.m3u8",
-                ),
-                (
-                    "翡翠台 · 公共备用",
-                    b"https://stream1.freetv.fun/fei-cui-8.m3u8",
-                ),
-            ]
-            primary_url = selected["url"]
-            for backup_name, backup_url in jade_manual_backups:
-                if backup_url == primary_url:
-                    continue
-                output.append(
-                    rewrite_extinf(
-                        selected["extinf"],
-                        backup_name,
-                        channel["group"]
+        # Multi-line output for Hong Kong channels. Players such as OrangeIPTV
+        # merge identical channel names and can fail over automatically.
+        # Keep the best line first and cap the list to avoid bloating clients.
+        if region := channel.get("region", "CN"):
+            if region == "HK":
+                ranked = result.get("ranked", [])
+                emitted = {selected["url"]}
+                for alternate in ranked:
+                    if len(emitted) >= 3:
+                        break
+                    if alternate["url"] in emitted:
+                        continue
+                    output.append(
+                        rewrite_extinf(
+                            alternate["extinf"],
+                            channel["name"],
+                            channel["group"]
+                        )
                     )
-                )
-                output.extend(selected["extras"])
-                output.append(backup_url)
+                    output.extend(alternate["extras"])
+                    output.append(alternate["url"])
+                    emitted.add(alternate["url"])
 
         logical += 1
 
