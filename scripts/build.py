@@ -1065,6 +1065,23 @@ def write_playlist(results):
             + 1
         )
 
+    # Temporary network diagnostics. These are intentionally fixed paths so
+    # Android testing can distinguish mainland reachability from overseas CDN
+    # and Guangdong gateway reachability.
+    diagnostics = [
+        ("诊断01 · 全球HLS基准(Mux)", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
+        ("诊断02 · 香港RTHK31(Akamai)", "https://rthktv31-live.akamaized.net/hls/live/2036818/RTHKTV31/master.m3u8"),
+        ("诊断03 · 香港RTHK31(官方入口)", "https://www.rthk.hk/feeds/dtt/rthktv31_https.m3u8"),
+        ("诊断04 · 广东IP翡翠线路", "http://120.84.96.28:808/hls/25/index.m3u8"),
+        ("诊断05 · 新加坡CNA(CloudFront)", "https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index_4.m3u8"),
+        ("诊断06 · 日本NHK华语(Akamai)", "https://nhkw-zh-hlscomp.akamaized.net/8thz5iufork8wjip/playlist.m3u8"),
+    ]
+    for test_name, test_url in diagnostics:
+        output.append(
+            ('#EXTINF:-1 group-title="网络诊断 · 临时",' + test_name).encode("utf-8")
+        )
+        output.append(test_url.encode("utf-8"))
+
     OUTPUT.write_bytes(
         b"\n".join(output)
         + b"\n"
