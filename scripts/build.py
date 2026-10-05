@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -455,6 +455,23 @@ def parse_playlist(
 def build_recovery_sources():
     """Create small, explicit recovery playlists for channels missing from upstream aggregators."""
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    hk_stable = TEMP_DIR / "stable-hk.m3u"
+    hk_stable.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="HK Stable",RTHK TV 31\n'
+        'https://www.rthk.hk/feeds/dtt/rthktv31_https.m3u8\n'
+        '#EXTINF:-1 group-title="HK Stable",RTHK TV 32\n'
+        'https://www.rthk.hk/feeds/dtt/rthktv32_https.m3u8\n'
+        '#EXTINF:-1 group-title="HK Stable",RTHK TV 33\n'
+        'https://rthktv33-live.akamaized.net/hls/live/2101641/RTHKTV33/stream03/streamPlaylist.m3u8\n'
+        '#EXTINF:-1 group-title="HK Stable",RTHK TV 34\n'
+        'https://rthktv34-live.akamaized.net/hls/live/2101642/RTHKTV34/stream02/streamPlaylist.m3u8\n'
+        '#EXTINF:-1 group-title="HK Stable",HOY TV\n'
+        'https://hoytv-live-stream.hoy.tv/ch77/index-fhd.m3u8\n'
+        '#EXTINF:-1 group-title="HK Stable",HOY Infotainment\n'
+        'https://hoytv-live-stream.hoy.tv/ch78/index-fhd.m3u8\n',
+        encoding="utf-8"
+    )
     recovery = TEMP_DIR / "recovery-cn.m3u"
     recovery.write_text(
         '#EXTM3U\n'
@@ -515,6 +532,11 @@ def build_recovery_sources():
         encoding="utf-8"
     )
     return [{
+        "id": "stable-hk",
+        "region": "HK",
+        "priority": 1,
+        "path": hk_stable,
+    }, {
         "id": "recovery-cn",
         "region": "CN",
         "priority": 50,
@@ -998,12 +1020,20 @@ def write_playlist(results):
         if channel["id"] == "hk-jade":
             jade_manual_backups = [
                 (
-                    "翡翠台 · 备用1",
-                    b"https://stream1.freetv.fun/fei-cui-8.m3u8",
+                    "翡翠台 · 广东线路1",
+                    b"http://120.84.96.28:808/hls/25/index.m3u8",
                 ),
                 (
-                    "翡翠台 · 备用2",
-                    b"https://stream1.freetv.fun/ba009d94229ed40a5d9289178463fba7aa31fb0622f8ab2d66c01147828743ab.m3u8",
+                    "翡翠台 · 广东线路2",
+                    b"http://113.64.147.149:808/hls/67/index.m3u8",
+                ),
+                (
+                    "翡翠台 · 广东线路3",
+                    b"http://113.64.147.170:808/hls/67/index.m3u8",
+                ),
+                (
+                    "翡翠台 · 公共备用",
+                    b"https://stream1.freetv.fun/fei-cui-8.m3u8",
                 ),
             ]
             primary_url = selected["url"]
