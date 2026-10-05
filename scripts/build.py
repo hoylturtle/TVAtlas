@@ -1131,9 +1131,11 @@ def write_playlist(results):
         + b"\n"
     )
 
+    stream_lines = sum(1 for line in output if line and not line.startswith(b"#"))
     return (
         logical,
-        region_counts
+        region_counts,
+        stream_lines
     )
 
 
@@ -1162,6 +1164,16 @@ def validate():
             "ERROR: invalid playlist"
         )
 
+        sys.exit(1)
+
+    # Regression guard for the Orange-style model. If CCTV-1 has at least two
+    # verified candidates, the generated M3U must contain at least two
+    # identical curated CCTV-1 entries with different URLs.
+    text = data.decode("utf-8", errors="replace")
+    cctv1_entries = text.count(",CCTV-1 综合\n")
+    print(f"CCTV-1 output lines: {cctv1_entries}")
+    if cctv1_entries < 2:
+        print("ERROR: CCTV-1 multi-line output missing")
         sys.exit(1)
 
     print(
@@ -1230,7 +1242,7 @@ def main():
 
         write_diagnostics(results)
 
-        logical, regions = (
+        logical, regions, stream_lines = (
             write_playlist(
                 results
             )
@@ -1278,7 +1290,7 @@ def main():
 
     print(
         f"Stream lines     : "
-        f"{logical}"
+        f"{stream_lines}"
     )
 
     print(
