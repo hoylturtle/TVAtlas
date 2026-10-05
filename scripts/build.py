@@ -57,6 +57,24 @@ SOURCES = [
     },
 
     {
+        "id": "hk-auto-updater",
+        "region": "HK",
+        "priority": 5,
+        "url": "https://raw.githubusercontent.com/zhujiefeng0402/hk-iptv/main/hk_live.m3u",
+    },
+    {
+        "id": "myiptv-ipv4",
+        "region": "CN",
+        "priority": 12,
+        "url": "https://raw.githubusercontent.com/suxuang/myIPTV/refs/heads/main/ipv4.m3u",
+    },
+    {
+        "id": "yang-gather",
+        "region": "CN",
+        "priority": 18,
+        "url": "https://tv.iill.top/m3u/Gather",
+    },
+    {
         "id": "iptvorg-hk",
         "region": "HK",
         "priority": 10,
