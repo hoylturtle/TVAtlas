@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "settings": {
     "max_lines_per_channel": 1
   },
@@ -399,8 +399,15 @@
       "group": "香港 · 综合",
       "region": "HK",
       "match": [
+        "翡翠台",
+        "TVB翡翠台",
+        "TVB Jade",
+        "TVBJade",
+        "Jade",
         "Jade (1080p)",
-        "Jade"
+        "Jade (720p)",
+        "無綫翡翠台",
+        "无线翡翠台"
       ]
     },
     {
