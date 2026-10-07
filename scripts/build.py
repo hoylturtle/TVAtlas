@@ -676,6 +676,7 @@ HEALTH_MAX_TIME = 8
 # URLs confirmed failing in a real TV player. They remain documented here so
 # upstream rediscovery cannot immediately promote them again.
 PLAYER_BLOCKLIST = {
+    "https://stream1.freetv.fun/mei-ya-dian-ying-1.m3u8",  # real-device failure: Mei Ah Movie
     "http://59.120.242.104:9000/live/live2.m3u8",  # real-device failure: Mei Ah Movie
     "https://live.tvfix.org/live/mydy/index.m3u8",  # real-device failure: Mei Ah Movie
     "http://103.172.187.30:12000/stream/mytv/null-1/master.m3u8",
