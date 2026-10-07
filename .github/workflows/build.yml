@@ -54,7 +54,7 @@ jobs:
           git config user.name "TVAtlas Bot"
           git config user.email "actions@github.com"
 
-          git add tvatlas.m3u
+          git add tvatlas.m3u tvatlas-orange.m3u
 
           if git diff --cached --quiet; then
             echo "No playlist changes."
