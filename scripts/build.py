@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -97,6 +97,18 @@ SOURCES = [
         "region": "HK",
         "priority": 9,
         "url": "https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u",
+    },
+    {
+        "id": "myiptv-hk-dynamic",
+        "region": "HK",
+        "priority": 11,
+        "url": "https://raw.githubusercontent.com/suxuang/myIPTV/refs/heads/main/ipv4.m3u",
+    },
+    {
+        "id": "yang-hk-dynamic",
+        "region": "HK",
+        "priority": 12,
+        "url": "https://tv.iill.top/m3u/Gather",
     },
     {
         "id": "iptvorg-hk",
@@ -516,45 +528,10 @@ def build_recovery_sources():
         'http://ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221226465/index.m3u8\n',
         encoding="utf-8"
     )
+    # Jade is intentionally not pinned here. It is rebuilt from live upstream
+    # pools on every Action run so expired relays do not become permanent debt.
     hk_recovery = TEMP_DIR / "recovery-hk.m3u"
-    hk_recovery.write_text(
-        '#EXTM3U\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://edge6a.v2h-cdn.com/jade/jade.stream/chunklist.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://113.117.74.45:8081/hls/67/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://198.16.100.90:8278/jade_twn/playlist.m3u8?tid=MDAD1890217018902170&ct=19249&tsum=36346362d72a1e85802fa5d3eee3861c\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://sc2022.stream-link.org/tv2306.php?id=h02\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://live.astradamy.com/tvbfc/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://smt.goiptv.us.ci/jade_twn/playlist.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://smt.goiptv.us.ci/Jade_xue/playlist.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://120.84.96.28:808/hls/25/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://107.151.203.111:2209/135/hk.php?id=tvbfct\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://113.64.147.149:808/hls/67/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://113.64.147.170:808/hls/67/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://162.19.247.76:22222/live/tvbfc/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://aktv-stream.m16tv.cfd/stream/aktv/null/AKTV.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://stream1.freetv.fun/fei-cui-8.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://stream1.freetv.fun/ba009d94229ed40a5d9289178463fba7aa31fb0622f8ab2d66c01147828743ab.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'http://113.64.147.40:808/hls/67/index.m3u8\n'
-        '#EXTINF:-1 group-title="Recovery",Jade\n'
-        'https://pull-l3-cny.douyincdn.com/live/stream-19882782023022818478.m3u8\n',
-        encoding="utf-8"
-    )
+    hk_recovery.write_text('#EXTM3U\n', encoding="utf-8")
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
     sg_recovery.write_text(
         '#EXTM3U\n'
@@ -831,6 +808,8 @@ def probe_candidates(results):
             ]
             selected = eligible[0] if eligible else None
             result["selected"] = selected
+            # Dynamic channels keep the freshly discovered eligible pool. The
+            # TV/player can still succeed where GitHub's runner is geo-blocked.
             result["ranked"] = eligible
             result["health"] = "fallback-unverified" if selected else "missing-player-blocked"
             result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
