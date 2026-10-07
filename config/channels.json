@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "settings": {
     "max_lines_per_channel": 1
   },
@@ -496,6 +496,22 @@
       "match": [
         "RTHK TV 35",
         "RTHK 35"
+      ]
+    },
+    {
+      "id": "hk-matv-movie",
+      "name": "美亚电影台",
+      "group": "香港 · 电影娱乐",
+      "region": "HK",
+      "match": [
+        "美亚电影",
+        "美亚电影台",
+        "美亚电影台HD",
+        "美亞電影",
+        "美亞電影台",
+        "MATV Movie",
+        "Mei Ah Movie",
+        "Meiya Movie"
       ]
     },
     {
