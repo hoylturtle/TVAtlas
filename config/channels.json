@@ -515,6 +515,99 @@
       ]
     },
     {
+      "id": "hk-tvb-plus",
+      "name": "TVB Plus",
+      "group": "香港 · 综合",
+      "region": "HK",
+      "match": [
+        "TVB Plus",
+        "TVB PLUS",
+        "TVBPlus",
+        "TVB 82",
+        "82 TVB Plus"
+      ]
+    },
+    {
+      "id": "hk-tvb-news",
+      "name": "无线新闻台",
+      "group": "香港 · 新闻",
+      "region": "HK",
+      "match": [
+        "无线新闻台",
+        "無綫新聞台",
+        "TVB News",
+        "TVB News Channel",
+        "TVB新聞台",
+        "TVB新闻台"
+      ]
+    },
+    {
+      "id": "hk-pearl",
+      "name": "明珠台",
+      "group": "香港 · 综合",
+      "region": "HK",
+      "match": [
+        "明珠台",
+        "TVB Pearl",
+        "Pearl",
+        "TVB明珠台",
+        "TVB 明珠台"
+      ]
+    },
+    {
+      "id": "hk-phoenix-hk",
+      "name": "凤凰卫视香港台",
+      "group": "香港 · 综合",
+      "region": "HK",
+      "match": [
+        "凤凰卫视香港台",
+        "鳳凰衛視香港台",
+        "Phoenix Hong Kong Channel",
+        "Phoenix Hong Kong",
+        "凤凰香港台"
+      ]
+    },
+    {
+      "id": "hk-viutv",
+      "name": "ViuTV",
+      "group": "香港 · 综合",
+      "region": "HK",
+      "match": [
+        "ViuTV",
+        "Viu TV",
+        "ViuTV 99",
+        "99 ViuTV"
+      ]
+    },
+    {
+      "id": "hk-viutvsix",
+      "name": "ViuTVsix",
+      "group": "香港 · 综合",
+      "region": "HK",
+      "match": [
+        "ViuTVsix",
+        "ViuTV Six",
+        "ViuTV 96",
+        "96 ViuTVsix"
+      ]
+    },
+    {
+      "id": "hk-hoy-ibc",
+      "name": "HOY 国际财经台",
+      "group": "香港 · 财经",
+      "region": "HK",
+      "match": [
+        "HOY International Business Channel",
+        "HOY IBC",
+        "HOY 76",
+        "76 HOY",
+        "香港国际财经台",
+        "香港國際財經台",
+        "HOY国际财经台",
+        "HOY國際財經台"
+      ]
+    },
+    {
       "id": "mo-oumun",
       "name": "澳视澳门",
       "group": "澳门 · 综合",
