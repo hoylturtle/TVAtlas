@@ -550,7 +550,23 @@ def build_recovery_sources():
     # Jade is intentionally not pinned here. It is rebuilt from live upstream
     # pools on every Action run so expired relays do not become permanent debt.
     hk_recovery = TEMP_DIR / "recovery-hk.m3u"
-    hk_recovery.write_text('#EXTM3U\n', encoding="utf-8")
+    hk_recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="HK Recovery",翡翠台\n'
+        'http://r.jdshipin.com/qClQf\n'
+        '#EXTINF:-1 group-title="HK Recovery",翡翠台\n'
+        'http://r.jdshipin.com/n90gt\n',
+        encoding="utf-8"
+    )
+    mo_recovery = TEMP_DIR / "recovery-mo.m3u"
+    mo_recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="MO Recovery",澳视澳门\n'
+        'http://live4.tdm.com.mo:80/ch1/_definst_/ch1.live/playlist.m3u8\n'
+        '#EXTINF:-1 group-title="MO Recovery",澳视澳门\n'
+        'http://live3.tdm.com.mo:1935/ch1/ch1.live/playlist.m3u8\n',
+        encoding="utf-8"
+    )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
     sg_recovery.write_text(
         '#EXTM3U\n'
@@ -579,6 +595,11 @@ def build_recovery_sources():
         "region": "HK",
         "priority": 50,
         "path": hk_recovery,
+    }, {
+        "id": "recovery-mo",
+        "region": "MO",
+        "priority": 1,
+        "path": mo_recovery,
     }, {
         "id": "recovery-sg",
         "region": "SG",
@@ -701,6 +722,12 @@ def check_stream(entry):
 
     if url in PLAYER_BLOCKLIST:
         return False, 0.0, "player-blocklisted"
+
+    # Real-device feedback has higher value than runner latency. This Jade relay
+    # renders video but produced no audio in the target player, so never promote
+    # it as the universal primary again.
+    if url == "http://r.jdshipin.com/GeWKr":
+        return False, 0.0, "player-audio-incompatible"
 
     try:
         code, data = curl_bytes(url)
