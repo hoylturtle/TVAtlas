@@ -678,6 +678,9 @@ HEALTH_MAX_TIME = 8
 PLAYER_BLOCKLIST = {
     "http://103.172.187.30:12000/stream/mytv/null-1/master.m3u8",
     "http://120.84.96.28:808/hls/25/index.m3u8",
+    "http://r.jdshipin.com/GeWKr",
+    "http://r.jdshipin.com/qClQf",
+    "http://live4.tdm.com.mo:80/ch1/_definst_/ch1.live/playlist.m3u8",
 }
 
 
