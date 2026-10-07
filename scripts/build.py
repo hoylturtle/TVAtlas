@@ -676,6 +676,7 @@ HEALTH_MAX_TIME = 8
 # URLs confirmed failing in a real TV player. They remain documented here so
 # upstream rediscovery cannot immediately promote them again.
 PLAYER_BLOCKLIST = {
+    "https://s1.m16tv.cfd/aktv/hk/AKTV.m3u8",  # real-device failure: Mei Ah Movie
     "http://198.16.64.10:8278/meiyamovie_twn/playlist.m3u8?tid=MFEF1001328410013284&ct=19226&tsum=9839709ca0f37641c5d1ba962c3bc739",  # real-device failure: Mei Ah Movie
     "https://iptv.707626.xyz/live/stream-c5d6f2af/master.m3u8",  # real-device failure: Mei Ah Movie
     "https://stream1.freetv.fun/mei-ya-dian-ying-1.m3u8",  # real-device failure: Mei Ah Movie
