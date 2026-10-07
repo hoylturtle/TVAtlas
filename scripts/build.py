@@ -1102,8 +1102,16 @@ def validate():
             sys.exit(1)
     standard = OUTPUT.read_text(encoding="utf-8", errors="replace")
     orange = ORANGE_OUTPUT.read_text(encoding="utf-8", errors="replace")
-    standard_cctv1 = standard.count(",CCTV-1 综合\\n")
-    orange_cctv1 = orange.count(",CCTV-1 综合\\n")
+    # Count channel records structurally. Do not search for a literal escaped
+    # "\\n": playlists contain real newline characters.
+    def count_channel(text, display_name):
+        return sum(
+            1 for line in text.splitlines()
+            if line.startswith("#EXTINF:") and line.rsplit(",", 1)[-1].strip() == display_name
+        )
+
+    standard_cctv1 = count_channel(standard, "CCTV-1 综合")
+    orange_cctv1 = count_channel(orange, "CCTV-1 综合")
     print(f"Standard CCTV-1 lines: {standard_cctv1}")
     print(f"Orange CCTV-1 lines  : {orange_cctv1}")
     if standard_cctv1 != 1:
