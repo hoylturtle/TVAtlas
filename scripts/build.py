@@ -1010,7 +1010,7 @@ def write_diagnostics(results):
             "candidate_count": len(candidates),
             "candidates": candidates
         })
-    DIAGNOSTICS.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+    DIAGNOSTICS.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Diagnostics       : {DIAGNOSTICS.name}")
 
 
@@ -1054,8 +1054,8 @@ def write_playlists(results):
     print("[4/6] Generate playlists")
     standard, logical, region_counts = build_playlist(results, orange=False)
     orange, _, _ = build_playlist(results, orange=True)
-    OUTPUT.write_bytes(b"\\n".join(standard) + b"\\n")
-    ORANGE_OUTPUT.write_bytes(b"\\n".join(orange) + b"\\n")
+    OUTPUT.write_bytes(b"\n".join(standard) + b"\n")
+    ORANGE_OUTPUT.write_bytes(b"\n".join(orange) + b"\n")
     standard_lines = sum(1 for x in standard if x and not x.startswith(b"#"))
     orange_lines = sum(1 for x in orange if x and not x.startswith(b"#"))
     print(f"Standard lines   : {standard_lines}")
