@@ -112,6 +112,24 @@ SOURCES = [
         "url": "https://tv.iill.top/m3u/Gather",
     },
     {
+        "id": "vip-weizhen-hk-dynamic",
+        "region": "HK",
+        "priority": 13,
+        "url": "https://raw.githubusercontent.com/vip-weizhen/tvlist/main/test.txt",
+    },
+    {
+        "id": "judy-gotv-hk-dynamic",
+        "region": "HK",
+        "priority": 14,
+        "url": "https://raw.githubusercontent.com/judy-gotv/iptv/main/smart.m3u",
+    },
+    {
+        "id": "s14685-hk-dynamic",
+        "region": "HK",
+        "priority": 15,
+        "url": "https://raw.githubusercontent.com/s14685/tv/main/jade.m3u8",
+    },
+    {
         "id": "iptvorg-hk",
         "region": "HK",
         "priority": 10,
