@@ -13,6 +13,7 @@ VERSION = "1.0.5"
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
 OUTPUT = ROOT / "tvatlas.m3u"
+ORANGE_OUTPUT = ROOT / "tvatlas-orange.m3u"
 DIAGNOSTICS = ROOT / "tvatlas-diagnostics.json"
 TEMP_DIR = ROOT / ".tvatlas_temp"
 
@@ -995,170 +996,76 @@ def write_diagnostics(results):
     print(f"Diagnostics       : {DIAGNOSTICS.name}")
 
 
-def write_playlist(results):
-
-    print("")
-    print(
-        "[4/6] Generate playlist"
-    )
-
-    output = [
-        b"#EXTM3U"
-    ]
-
+def build_playlist(results, orange=False):
+    output = [b"#EXTM3U"]
     logical = 0
-
-    region_counts = {
-        "CN": 0,
-        "HK": 0,
-        "MO": 0,
-        "TW": 0
-    }
-
+    region_counts = {}
     for result in results:
-
-        selected = result[
-            "selected"
-        ]
-
+        selected = result["selected"]
         if not selected:
             continue
-
-        channel = result[
-            "channel"
-        ]
-
-        output.append(
-            rewrite_extinf(
-                selected["extinf"],
-                channel["name"],
-                channel["group"]
-            )
-        )
-
-        output.extend(
-            selected["extras"]
-        )
-
-        output.append(
-            selected["url"]
-        )
-
-        # Orange-style multi-line model: identical curated channel names are
-        # emitted with multiple URLs. Compatible players merge them into one
-        # channel and switch lines on playback failure.
-        region = channel.get("region", "CN")
-        is_cctv = config_cctv(channel) is not None
-        if region == "HK" or is_cctv:
-            ranked = result.get("ranked", [])
-            emitted = {selected["url"]}
-            max_lines = 4 if is_cctv else 3
-            for alternate in ranked:
-                if len(emitted) >= max_lines:
-                    break
-                if alternate["url"] in emitted:
-                    continue
-                # Defensive second gate for CCTV: never emit a URL whose
-                # embedded CCTV number contradicts the curated channel.
-                if is_cctv and url_conflicts_with_channel(alternate["url"], channel):
-                    continue
-                output.append(
-                    rewrite_extinf(
-                        alternate["extinf"],
-                        channel["name"],
-                        channel["group"]
-                    )
-                )
-                output.extend(alternate["extras"])
-                output.append(alternate["url"])
-                emitted.add(alternate["url"])
-
+        channel = result["channel"]
+        def emit(entry):
+            output.append(rewrite_extinf(entry["extinf"], channel["name"], channel["group"]))
+            output.extend(entry["extras"])
+            output.append(entry["url"])
+        emit(selected)
+        if orange:
+            region = channel.get("region", "CN")
+            is_cctv = config_cctv(channel) is not None
+            if region == "HK" or is_cctv:
+                emitted = {selected["url"]}
+                max_lines = 4 if is_cctv else 3
+                for alternate in result.get("ranked", []):
+                    if len(emitted) >= max_lines:
+                        break
+                    if alternate["url"] in emitted:
+                        continue
+                    if is_cctv and url_conflicts_with_channel(alternate["url"], channel):
+                        continue
+                    emit(alternate)
+                    emitted.add(alternate["url"])
         logical += 1
+        region = channel.get("region", "CN")
+        region_counts[region] = region_counts.get(region, 0) + 1
+    return output, logical, region_counts
 
-        region = channel.get(
-            "region",
-            "CN"
-        )
 
-        region_counts[
-            region
-        ] = (
-            region_counts
-            .get(region, 0)
-            + 1
-        )
-
-    # Temporary network diagnostics. These are intentionally fixed paths so
-    # Android testing can distinguish mainland reachability from overseas CDN
-    # and Guangdong gateway reachability.
-    diagnostics = [
-        ("诊断01 · 全球HLS基准(Mux)", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"),
-        ("诊断02 · 香港RTHK31(Akamai)", "https://rthktv31-live.akamaized.net/hls/live/2036818/RTHKTV31/master.m3u8"),
-        ("诊断03 · 香港RTHK31(官方入口)", "https://www.rthk.hk/feeds/dtt/rthktv31_https.m3u8"),
-        ("诊断04 · 广东IP翡翠线路", "http://120.84.96.28:808/hls/25/index.m3u8"),
-        ("诊断05 · 新加坡CNA(CloudFront)", "https://d2e1asnsl7br7b.cloudfront.net/7782e205e72f43aeb4a48ec97f66ebbe/index_4.m3u8"),
-        ("诊断06 · 日本NHK华语(Akamai)", "https://nhkw-zh-hlscomp.akamaized.net/8thz5iufork8wjip/playlist.m3u8"),
-    ]
-    for test_name, test_url in diagnostics:
-        output.append(
-            ('#EXTINF:-1 group-title="网络诊断 · 临时",' + test_name).encode("utf-8")
-        )
-        output.append(test_url.encode("utf-8"))
-
-    OUTPUT.write_bytes(
-        b"\n".join(output)
-        + b"\n"
-    )
-
-    stream_lines = sum(1 for line in output if line and not line.startswith(b"#"))
-    return (
-        logical,
-        region_counts,
-        stream_lines
-    )
+def write_playlists(results):
+    print("")
+    print("[4/6] Generate playlists")
+    standard, logical, region_counts = build_playlist(results, orange=False)
+    orange, _, _ = build_playlist(results, orange=True)
+    OUTPUT.write_bytes(b"\\n".join(standard) + b"\\n")
+    ORANGE_OUTPUT.write_bytes(b"\\n".join(orange) + b"\\n")
+    standard_lines = sum(1 for x in standard if x and not x.startswith(b"#"))
+    orange_lines = sum(1 for x in orange if x and not x.startswith(b"#"))
+    print(f"Standard lines   : {standard_lines}")
+    print(f"Orange lines     : {orange_lines}")
+    return logical, region_counts, standard_lines, orange_lines
 
 
 def validate():
-
     print("")
-    print(
-        "[5/6] Validate"
-    )
-
-    if not OUTPUT.exists():
-
-        print(
-            "ERROR: output missing"
-        )
-
+    print("[5/6] Validate")
+    for path in (OUTPUT, ORANGE_OUTPUT):
+        if not path.exists() or not path.read_bytes().startswith(b"#EXTM3U"):
+            print(f"ERROR: invalid playlist {path.name}")
+            sys.exit(1)
+    standard = OUTPUT.read_text(encoding="utf-8", errors="replace")
+    orange = ORANGE_OUTPUT.read_text(encoding="utf-8", errors="replace")
+    standard_cctv1 = standard.count(",CCTV-1 综合\\n")
+    orange_cctv1 = orange.count(",CCTV-1 综合\\n")
+    print(f"Standard CCTV-1 lines: {standard_cctv1}")
+    print(f"Orange CCTV-1 lines  : {orange_cctv1}")
+    if standard_cctv1 != 1:
+        print("ERROR: standard playlist must emit exactly one CCTV-1")
         sys.exit(1)
-
-    data = OUTPUT.read_bytes()
-
-    if not data.startswith(
-        b"#EXTM3U"
-    ):
-
-        print(
-            "ERROR: invalid playlist"
-        )
-
+    if orange_cctv1 < 2:
+        print("ERROR: Orange multi-line CCTV-1 output missing")
         sys.exit(1)
-
-    # Regression guard for the Orange-style model. If CCTV-1 has at least two
-    # verified candidates, the generated M3U must contain at least two
-    # identical curated CCTV-1 entries with different URLs.
-    text = data.decode("utf-8", errors="replace")
-    cctv1_entries = text.count(",CCTV-1 综合\n")
-    print(f"CCTV-1 output lines: {cctv1_entries}")
-    if cctv1_entries < 2:
-        print("ERROR: CCTV-1 multi-line output missing")
-        sys.exit(1)
-
-    print(
-        f"OK: "
-        f"{len(data):,} bytes"
-    )
+    print(f"OK standard: {OUTPUT.stat().st_size:,} bytes")
+    print(f"OK orange  : {ORANGE_OUTPUT.stat().st_size:,} bytes")
 
 
 def cleanup():
@@ -1221,11 +1128,7 @@ def main():
 
         write_diagnostics(results)
 
-        logical, regions, stream_lines = (
-            write_playlist(
-                results
-            )
-        )
+        logical, regions, standard_lines, orange_lines = write_playlists(results)
 
         validate()
 
@@ -1268,8 +1171,13 @@ def main():
     )
 
     print(
-        f"Stream lines     : "
-        f"{stream_lines}"
+        f"Standard lines   : "
+        f"{standard_lines}"
+    )
+
+    print(
+        f"Orange lines     : "
+        f"{orange_lines}"
     )
 
     print(
