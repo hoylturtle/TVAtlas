@@ -1060,6 +1060,8 @@ def build_playlist(results, orange=False):
         if not selected:
             continue
         channel = result["channel"]
+        if channel.get("publish") is False:
+            continue  # discover/diagnose only; do not ship an unverified paid channel
         def emit(entry):
             output.append(rewrite_extinf(entry["extinf"], channel["name"], channel["group"]))
             output.extend(entry["extras"])
