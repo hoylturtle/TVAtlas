@@ -1111,9 +1111,9 @@ def validate():
         if not path.exists():
             raise ValueError(f"missing playlist: {path.name}")
         data = path.read_bytes()
-        if not data.startswith(b"#EXTM3U\\n"):
+        if not data.startswith(b"#EXTM3U\n"):
             raise ValueError(f"invalid header/newline: {path.name}")
-        if b"\\\\n" in data:
+        if b"\\n" in data:
             raise ValueError(f"literal escaped newline found: {path.name}")
         lines = data.decode("utf-8").splitlines()
         records = []
