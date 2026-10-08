@@ -1,5 +1,5 @@
 name: Build TVAtlas Playlist
-# trigger: 2026-10-07 jade-macau-hotfix
+# trigger: 2026-10-08 structural-validation-retry
 
 on:
   workflow_dispatch:
