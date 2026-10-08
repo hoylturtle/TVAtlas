@@ -16,7 +16,7 @@ class ProxyClientPool(private val vault: CredentialVault) {
     private val clients = mutableMapOf<String, OkHttpClient>()
     val direct: OkHttpClient = builder().proxy(Proxy.NO_PROXY).build()
     private fun builder() = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS).callTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
 
     @Synchronized fun update(profiles: List<ProxyProfile>, credentialsChanged: Boolean = false) {

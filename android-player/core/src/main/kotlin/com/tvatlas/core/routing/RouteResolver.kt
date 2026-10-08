@@ -24,7 +24,7 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
             RouteTarget.AUTO else route
         val reason = when {
             context.stream.manualRoute?.type != null && context.stream.manualRoute.type != RouteType.AUTO -> "线路手动设置"
-            context.channel.manualRoute?.type != null && context.channel.manualRoute.type != RouteType.AUTO -> "频道手动设置"
+            context.stream.manualRoute == null && context.channel.manualRoute?.type != null && context.channel.manualRoute.type != RouteType.AUTO -> "频道手动设置"
             rule != null -> rule.id
             manual?.type == RouteType.AUTO -> "手动 AUTO"
             else -> "defaultRoute"

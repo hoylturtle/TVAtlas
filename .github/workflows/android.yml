@@ -4,7 +4,7 @@ on:
   pull_request:
     paths: ['android-player/**', '.github/workflows/android.yml']
   push:
-    branches: [main, feature/tvatlas-android-player]
+    branches: [main, feature/tvatlas-android-player, 'codex/tvatlas-player-*']
     paths: ['android-player/**', '.github/workflows/android.yml']
 permissions:
   contents: read
@@ -38,6 +38,6 @@ jobs:
             android-player/app/build/reports/
       - uses: actions/upload-artifact@v4
         with:
-          name: TVAtlas-Player-debug
+          name: TVAtlas-Player-v0.1.0-debug
           path: android-player/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.ByteArrayOutputStream
 
 data class Library(val playlists: List<Playlist>, val channels: List<Channel>, val profiles: List<ProxyProfile>, val rules: RuleConfig)
 
@@ -36,7 +37,17 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             require(response.isSuccessful) { "播放列表请求失败（HTTP ${response.code}）" }
             val body = requireNotNull(response.body)
             require(body.contentLength() <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
-            val bytes = body.byteStream().use { it.readNBytes(8 * 1024 * 1024 + 1) }
+            val bytes = body.byteStream().use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    require(output.size() + count <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
+                    output.write(buffer, 0, count)
+                }
+                output.toByteArray()
+            }
             require(bytes.size <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
             bytes.toString(Charsets.UTF_8)
         }
