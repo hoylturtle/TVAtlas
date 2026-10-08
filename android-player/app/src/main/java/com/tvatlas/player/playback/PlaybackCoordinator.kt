@@ -1,4 +1,3 @@
-@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 package com.tvatlas.player.playback
 
 import android.content.Context
@@ -30,6 +29,7 @@ data class PlaybackStatus(
     val attempt: RouteAttempt? = null, val error: String? = null, val successAt: Long? = null,
 )
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlaybackCoordinator(
     private val context: Context, private val repository: PlayerRepository,
     private val pool: ProxyClientPool, private val scope: CoroutineScope,

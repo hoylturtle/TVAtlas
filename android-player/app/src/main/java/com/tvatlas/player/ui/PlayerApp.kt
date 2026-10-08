@@ -1,5 +1,4 @@
 @file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 package com.tvatlas.player.ui
 
 import android.app.UiModeManager
@@ -178,6 +177,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
     LaunchedEffect(tv, library.channels.isNotEmpty()) { if (tv && library.channels.isNotEmpty()) runCatching { firstFocus.requestFocus() } }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, modifier: Modifier, diagnostics: Boolean,
     onFullscreen: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()

@@ -11,7 +11,8 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
 
-class ProxyClientPool(private val vault: CredentialVault) {
+class ProxyClientPool(private val readCredentials: (String) -> com.tvatlas.player.storage.Credentials?) {
+    constructor(vault: CredentialVault) : this(vault::get)
     private var profiles = emptyList<ProxyProfile>()
     private val clients = mutableMapOf<String, OkHttpClient>()
     val direct: OkHttpClient = builder().proxy(Proxy.NO_PROXY).build()
@@ -29,7 +30,7 @@ class ProxyClientPool(private val vault: CredentialVault) {
         if (target.type != RouteType.PROXY) throw IOException("Route must be concrete")
         val p = profiles.firstOrNull { it.id == target.profile && it.enabled } ?: throw IOException("Proxy unavailable")
         return clients.getOrPut(p.id) {
-            val credentials = try { vault.get(p.id) } catch (_: Exception) { throw IOException("Proxy credentials unavailable") }
+            val credentials = try { readCredentials(p.id) } catch (_: Exception) { throw IOException("Proxy credentials unavailable") }
             builder().apply {
                 when (p.type) {
                     ProxyType.HTTP -> {
