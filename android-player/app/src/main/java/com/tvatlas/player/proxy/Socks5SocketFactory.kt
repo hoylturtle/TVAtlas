@@ -36,7 +36,7 @@ class Socks5SocketFactory(private val profile: ProxyProfile, private val credent
                     }
                     else -> throw IOException("SOCKS method unavailable")
                 }
-                val host = destination.hostString.toByteArray(Charsets.UTF_8)
+                val host = destination.hostName.toByteArray(Charsets.UTF_8)
                 if (host.size !in 1..255) throw IOException("SOCKS hostname invalid")
                 output.write(byteArrayOf(5, 1, 0, 3, host.size.toByte())); output.write(host)
                 output.write(destination.port ushr 8); output.write(destination.port and 255); output.flush()

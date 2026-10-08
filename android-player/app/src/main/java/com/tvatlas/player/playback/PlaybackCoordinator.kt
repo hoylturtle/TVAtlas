@@ -7,6 +7,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -23,6 +26,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 data class PlaybackStatus(
     val channelId: String? = null, val message: String = "添加播放列表后，选择频道开始观看",
@@ -65,11 +70,20 @@ class PlaybackCoordinator(
             return
         }
         val stream = channel.streams.first { it.id == route.streamId }
+        val mediaRequests = ConcurrentHashMap.newKeySet<String>()
+        val mediaBytes = AtomicLong(0)
         val factory = OkHttpDataSource.Factory(RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target))
+            .setTransferListener(object : TransferListener {
+                override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+                override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+                override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+                override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+                    if (isNetwork && dataSpec.uri.toString() in mediaRequests) mediaBytes.addAndGet(bytesTransferred.toLong())
+                }
+            })
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(factory)).build()
         _player.value = instance
         _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null)
-        var mediaBytes = 0L
         var lastLoadType = C.DATA_TYPE_UNKNOWN
         var loadErrorAt = 0L
         var failing = false
@@ -85,8 +99,11 @@ class PlaybackCoordinator(
             }
         }
         instance.addAnalyticsListener(object : AnalyticsListener {
+            override fun onLoadStarted(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData) {
+                if (mediaLoadData.dataType == C.DATA_TYPE_MEDIA) mediaRequests.add(loadEventInfo.dataSpec.uri.toString())
+            }
             override fun onLoadCompleted(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData) {
-                if (mediaLoadData.dataType == C.DATA_TYPE_MEDIA) mediaBytes += loadEventInfo.bytesLoaded
+                mediaRequests.remove(loadEventInfo.dataSpec.uri.toString())
             }
             override fun onLoadError(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData, error: IOException, wasCanceled: Boolean) {
                 if (!wasCanceled) { lastLoadType = mediaLoadData.dataType; loadErrorAt = SystemClock.elapsedRealtime() }
@@ -118,7 +135,7 @@ class PlaybackCoordinator(
                 val progressing = instance.isPlaying && instance.currentPosition != previousPosition
                 previousPosition = instance.currentPosition
                 if (progressing || !instance.playWhenReady) waitingSince = now
-                if (gate.update(now, progressing, mediaBytes)) {
+                if (gate.update(now, progressing, mediaBytes.get())) {
                     repository.recordSuccess(channel.id, route)
                     if (token == generation && instance === _player.value) {
                         _status.value = _status.value.copy(message = "正在播放 ${channel.name}", error = null, successAt = System.currentTimeMillis())

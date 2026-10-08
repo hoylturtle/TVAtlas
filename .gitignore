@@ -6,3 +6,5 @@ local.properties
 *.apk
 .idea/
 secrets/
+android-player/dist/
+__pycache__/
