@@ -44,7 +44,10 @@ class ProxyClientPool(private val readCredentials: (String) -> com.tvatlas.playe
                         proxy(Proxy.NO_PROXY)
                         socketFactory(Socks5SocketFactory(p, credentials))
                         // Preserve the requested hostname for the SOCKS handshake; the proxy resolves it remotely.
-                        dns(Dns { hostname -> listOf(InetAddress.getByAddress(hostname, byteArrayOf(0, 0, 0, 1))) })
+                        dns(object : Dns {
+                            override fun lookup(hostname: String): List<InetAddress> =
+                                listOf(InetAddress.getByAddress(hostname, byteArrayOf(0, 0, 0, 1)))
+                        })
                     }
                 }
             }.build()

@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalConfiguration
@@ -160,11 +162,14 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                         }
                     }
                     if (group !in collapsed) items(channels, key = { it.id }) { channel ->
+                        var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
                             supportingContent = { Text("${channel.streams.size} 条线路") },
                             trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.primary) },
                             colors = ListItemDefaults.colors(containerColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent),
                             modifier = Modifier.then(if (filtered.firstOrNull()?.id == channel.id && tv) Modifier.focusRequester(firstFocus) else Modifier)
+                                .onFocusChanged { focused = it.isFocused }
+                                .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
                                         event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress) { onDetails(channel); true } else false
@@ -184,7 +189,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
     Column(modifier.background(Color.Black)) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { useController = true; keepScreenOn = true } }, update = { it.player = player },
+            else AndroidView(factory = { PlayerView(it).apply { useController = true; keepScreenOn = true } }, onReset = null, update = { it.player = player },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }

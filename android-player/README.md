@@ -1,21 +1,46 @@
-# TVAtlas Player (Android / Tablet / TV)
+# TVAtlas Player v0.1.0
 
-Early native Android MVP. This lives under TVAtlas temporarily until a dedicated repository is created.
+面向 Android 手机、平板与 Android TV 的 IPTV 播放器。Android 6.0（API 23）及以上。
 
-## Scope
-- Add arbitrary HTTP(S) M3U playlist URLs.
-- Parse UTF-8 M3U channel names and group-title; merge repeated exact names into multiple lines.
-- Media3 ExoPlayer playback with remote-control-friendly native controls.
-- Configure one HTTP or SOCKS proxy locally and choose DIRECT / PROXY / AUTO per channel.
-- AUTO tests direct first, then proxy on player failure, remembering a successful route locally.
-- Proxy applies to media playlist, variant playlists, segments and keys requested through the Media3 OkHttp DataSource. No system VPN permission is required.
-- Secrets must remain in Android local app storage, never in GitHub.
+## 使用
 
-## Limitations
-- First MVP supports HTTP(S) playlists and HLS/HTTP streams; UDP/RTSP/DRM not supported.
-- No proxy subscription parser (Clash/Mihomo YAML or VLESS/Trojan) yet. Enter a working HTTP or SOCKS proxy endpoint.
-- Per-channel proxy is application-layer routing, not Android-wide VPN.
-- Playback success is not evidence of redistribution rights. Use streams you are authorized to access.
-- Not yet CI-built or device-tested; APK is not released.
+1. 在「播放列表」添加名称和 HTTP(S) M3U 地址。
+2. 在「路由」添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
+3. 可选从系统文件选择器导入 JSON 规则。参考 `examples/routes-v1.json`。
+4. 在「直播」选择频道。长按频道查看线路、修改频道或单线路路由。
+5. 「恢复规则」删除手动覆盖；AUTO 使用命中规则的策略和成功历史。
+6. 在「设置」启用诊断可查看脱敏地址、路由、命中规则和失败类别。
 
-Open `android-player` as the Android Studio project. 
+同名频道合并，URL 去重。更新列表保留频道手动路由、仍存在的线路设置和成功历史；无效或空列表不会覆盖原有数据。
+
+手机竖屏显示频道列表和播放区，横屏进入全屏。平板/电视采用双栏。电视方向键选择频道，OK 播放，长按 OK 打开线路菜单；播放器区域上下键换台。所有表单与菜单提供可聚焦按钮。
+
+## 构建与验证
+
+需要 JDK 17、Gradle 8.11.1、Android SDK platform 35 / build-tools 35.0.0。打开此目录作为 Android Studio 工程，或执行：
+
+```sh
+gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.0-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。
+
+核心 JVM 模块无需 Android 设备，测试 M3U/中文/BOM、JSON 校验、规则优先级、手动覆盖、历史顺序、故障分类、AUTO 与成功门槛。应用 JVM 测试模拟 HTTP 跳转路由、HLS 子请求继承和 SOCKS5 认证/远程 DNS。
+
+## 规则语义
+
+`schemaVersion: 1`。支持 channel / channelRegex / group / url / urlContains / domain / domainSuffix / playlistId。一个 match 中多个字段按 AND 匹配。优先级依次为线路手动、频道手动、精确 URL、精确域名、域名后缀/URL 关键词、精确频道、频道正则、分组、播放列表、默认路由。同一级显式 priority 越小越优先；相同 priority 按 JSON 顺序，未指定 priority 排在指定值后。
+
+AUTO 的 `try` 可指定 `["DIRECT", "US", "HK"]`。未指定时为 DIRECT 加启用的代理。仅当历史成功线路和路由仍在当前允许的尝试集合中时才优先使用。强制 DIRECT/PROXY 不会被历史改写。没有命中规则时默认 DIRECT；手动选择 AUTO 可尝试配置的代理。
+
+HLS master、variant、分片和 key 共用播放会话路由；URL/域名规则可覆盖子请求，并对每一次 HTTP 跳转重新判断。单线路或频道的强制路由同样覆盖子请求。
+
+播放器持续 READY/播放推进至少 3 秒，且 READY 后获得新的媒体数据，才写入成功记录。网络/403/451/分片错误尝试下个路由；404/410、清单解析和解码错误跳到下条线路。播放等待超过 20 秒触发切换；用户暂停、停止或离开应用不记录失败。
+
+## 安全与边界
+
+代理用户名和密码通过 Android Keystore AES-GCM 加密，只保存在应用私有目录；关闭备份和设备转移。规则 JSON 不接受 password/token 等未知敏感字段，导出不包含凭证。诊断不显示 URL 路径或查询参数，错误记录仅保存受控类别和 HTTP 状态码。HTTP 与 SOCKS5 使用独立客户端，SOCKS5 认证不使用全局 Authenticator。
+
+v0.1.0 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
+
+CI 编译与模拟网络测试不能替代家庭网络和电视实机验收，参见 `DEVICE_ACCEPTANCE.md`。
