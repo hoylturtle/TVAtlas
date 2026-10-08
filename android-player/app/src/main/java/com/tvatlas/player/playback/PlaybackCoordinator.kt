@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicLong
 
 data class PlaybackStatus(
@@ -70,7 +71,7 @@ class PlaybackCoordinator(
             return
         }
         val stream = channel.streams.first { it.id == route.streamId }
-        val mediaRequests = ConcurrentHashMap.newKeySet<String>()
+        val mediaRequests = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val mediaBytes = AtomicLong(0)
         val factory = OkHttpDataSource.Factory(RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target))
             .setTransferListener(object : TransferListener {

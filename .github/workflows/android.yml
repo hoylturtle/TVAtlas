@@ -34,6 +34,12 @@ jobs:
       - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
       - name: Verify package version and APK signature
         run: python3 scripts/verify_apk.py
+      - name: Show lint findings on failure
+        if: failure()
+        run: |
+          if [ -f app/build/reports/lint-results-debug.txt ]; then
+            cat app/build/reports/lint-results-debug.txt
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
