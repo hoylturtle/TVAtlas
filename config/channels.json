@@ -512,7 +512,9 @@
         "MATV Movie",
         "Mei Ah Movie",
         "Meiya Movie"
-      ]
+      ],
+      "publish": false,
+      "note": "Pending independently verified authorized playback source; retain discovery and diagnostics only."
     },
     {
       "id": "hk-tvb-plus",
