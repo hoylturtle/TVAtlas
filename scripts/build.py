@@ -1103,34 +1103,60 @@ def write_playlists(results):
 
 
 def validate():
+    """Validate M3U structure without requiring optional backup streams."""
     print("")
     print("[5/6] Validate")
-    for path in (OUTPUT, ORANGE_OUTPUT):
-        if not path.exists() or not path.read_bytes().startswith(b"#EXTM3U"):
-            print(f"ERROR: invalid playlist {path.name}")
-            sys.exit(1)
-    standard = OUTPUT.read_text(encoding="utf-8", errors="replace")
-    orange = ORANGE_OUTPUT.read_text(encoding="utf-8", errors="replace")
-    # Count channel records structurally. Do not search for a literal escaped
-    # "\\n": playlists contain real newline characters.
-    def count_channel(text, display_name):
-        return sum(
-            1 for line in text.splitlines()
-            if line.startswith("#EXTINF:") and line.rsplit(",", 1)[-1].strip() == display_name
-        )
 
-    standard_cctv1 = count_channel(standard, "CCTV-1 综合")
-    orange_cctv1 = count_channel(orange, "CCTV-1 综合")
+    def inspect(path):
+        if not path.exists():
+            raise ValueError(f"missing playlist: {path.name}")
+        data = path.read_bytes()
+        if not data.startswith(b"#EXTM3U\\n"):
+            raise ValueError(f"invalid header/newline: {path.name}")
+        if b"\\\\n" in data:
+            raise ValueError(f"literal escaped newline found: {path.name}")
+        lines = data.decode("utf-8").splitlines()
+        records = []
+        current = None
+        for line in lines[1:]:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("#EXTINF:"):
+                if current is not None:
+                    raise ValueError(f"missing URL after EXTINF: {path.name}")
+                current = line.rsplit(",", 1)[-1].strip()
+            elif line.startswith("#"):
+                continue
+            else:
+                if current is None:
+                    raise ValueError(f"orphan stream URL: {path.name}")
+                records.append(current)
+                current = None
+        if current is not None:
+            raise ValueError(f"trailing EXTINF without URL: {path.name}")
+        if not records:
+            raise ValueError(f"empty playlist: {path.name}")
+        return records
+
+    try:
+        standard = inspect(OUTPUT)
+        orange = inspect(ORANGE_OUTPUT)
+    except (ValueError, UnicodeError) as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+
+    standard_cctv1 = standard.count("CCTV-1 综合")
+    orange_cctv1 = orange.count("CCTV-1 综合")
     print(f"Standard CCTV-1 lines: {standard_cctv1}")
     print(f"Orange CCTV-1 lines  : {orange_cctv1}")
-    if standard_cctv1 != 1:
-        print("ERROR: standard playlist must emit exactly one CCTV-1")
+    if standard_cctv1 != 1 or orange_cctv1 < 1:
+        print("ERROR: CCTV-1 primary missing/duplicated")
         sys.exit(1)
     if orange_cctv1 < 2:
-        print("ERROR: Orange multi-line CCTV-1 output missing")
-        sys.exit(1)
-    print(f"OK standard: {OUTPUT.stat().st_size:,} bytes")
-    print(f"OK orange  : {ORANGE_OUTPUT.stat().st_size:,} bytes")
+        print("WARN: no tested CCTV-1 backup available this run")
+    print(f"OK standard: {len(standard)} streams, {OUTPUT.stat().st_size:,} bytes")
+    print(f"OK orange  : {len(orange)} streams, {ORANGE_OUTPUT.stat().st_size:,} bytes")
 
 
 def cleanup():
