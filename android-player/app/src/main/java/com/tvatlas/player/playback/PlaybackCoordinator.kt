@@ -79,7 +79,7 @@ class PlaybackCoordinator(
         }
         val stream = channel.streams.first { it.id == route.streamId }
         val official = MyTvSuperSource.recognizes(stream.url)
-        log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} rule=${route.matchedRule} official=$official")
+        log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} proxy=${pool.label(route.target)} rule=${route.matchedRule} official=$official")
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {

@@ -100,7 +100,7 @@ object MyTvSuperSource {
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                log?.event("ERROR", "HTTP", "$stage failed exception=${e.javaClass.simpleName} elapsedMs=${(System.nanoTime() - started) / 1000000}")
+                log?.event(if (call.isCanceled()) "INFO" else "ERROR", "HTTP", "$stage cancelled=${call.isCanceled()} exception=${e.javaClass.simpleName} elapsedMs=${(System.nanoTime() - started) / 1000000}")
                 if (continuation.isActive) continuation.resumeWithException(IOException("$stage 连接失败，请检查网络和节点"))
             }
             override fun onResponse(call: Call, response: Response) {

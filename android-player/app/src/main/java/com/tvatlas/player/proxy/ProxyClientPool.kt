@@ -30,6 +30,11 @@ class ProxyClientPool(
         this.profiles = profiles
         clients.values.forEach { it.connectionPool.evictAll() }; clients.clear()
     }
+    @Synchronized fun label(target: RouteTarget): String = when (target.type) {
+        RouteType.DIRECT -> "直连"
+        RouteType.AUTO -> "自动"
+        RouteType.PROXY -> profiles.firstOrNull { it.id == target.profile }?.name ?: "节点不可用"
+    }
     fun client(target: RouteTarget): OkHttpClient {
         if (target.type == RouteType.DIRECT) return direct
         if (target.type != RouteType.PROXY) throw IOException("Route must be concrete")

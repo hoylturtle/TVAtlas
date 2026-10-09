@@ -14,7 +14,7 @@ import java.io.ByteArrayOutputStream
 
 data class Library(val playlists: List<Playlist>, val channels: List<Channel>, val profiles: List<ProxyProfile>, val rules: RuleConfig)
 
-class PlayerRepository(private val db: PlayerDatabase, private val directClient: OkHttpClient) {
+class PlayerRepository(private val db: PlayerDatabase, private val directClient: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null) {
     private val dao = db.dao()
     private fun route(text: String?): RouteTarget? = text?.let { RuleCodec.json.decodeFromString<RouteTarget>(it) }
     private fun encoded(route: RouteTarget?) = route?.let { RuleCodec.json.encodeToString(it) }
@@ -34,6 +34,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
     suspend fun refresh(playlist: Playlist) = withContext(Dispatchers.IO) {
         require(httpUri(playlist.url) != null) { "请输入不含凭证的 HTTP(S) 地址" }
         val body = if (com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.PLAYLIST else directClient.newCall(Request.Builder().url(playlist.url).build()).execute().use { response ->
+            log?.event("INFO", "PLAYLIST_HTTP", "status=${response.code} host=${response.request.url.host}")
             require(response.isSuccessful) { "播放列表请求失败（HTTP ${response.code}）" }
             val body = requireNotNull(response.body)
             require(body.contentLength() <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }

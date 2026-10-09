@@ -15,6 +15,7 @@ import java.io.IOException
 class SubscriptionRepository(
     private val db: PlayerDatabase, private val client: OkHttpClient,
     private val vault: CredentialVault, private val core: MihomoRuntime,
+    private val log: com.tvatlas.player.debug.DebugLog? = null,
 ) {
     val subscriptions = db.dao().subscriptions()
     suspend fun add(name: String, url: String): Int {
@@ -30,6 +31,7 @@ class SubscriptionRepository(
         if (httpUri(url) == null) throw SubscriptionException("请输入合法的 HTTP(S) 订阅地址")
         val text = client.newCall(Request.Builder().url(url).header("User-Agent", "ClashMeta/1.19.32 TVAtlas/0.1.4")
             .header("Accept", "application/yaml, text/yaml, text/plain").build()).execute().use { response ->
+            log?.event("INFO", "SUBSCRIPTION_HTTP", "status=${response.code} host=${response.request.url.host}")
             if (!response.isSuccessful) throw SubscriptionException("订阅下载失败（HTTP ${response.code}），已保留旧节点")
             val body = response.body ?: throw SubscriptionException("订阅内容为空")
             if (body.contentLength() > ClashSubscription.MAX_BYTES) throw SubscriptionException("订阅文件超过 2 MB")
