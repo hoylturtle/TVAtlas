@@ -1,11 +1,11 @@
-# TVAtlas Player v0.1.1
+# TVAtlas Player v0.1.2
 
 面向 Android 手机、平板与 Android TV 的 IPTV 播放器。Android 6.0（API 23）及以上。
 
 ## 使用
 
 1. 在「播放列表」添加名称和 HTTP(S) M3U 地址。
-2. 在「路由」选择「添加 Clash/Mihomo 订阅」，填写名称及订阅 URL 并下载导入。也可手动添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
+2. 在「路由」选择「添加 Clash/Mihomo 订阅」，填写名称，粘贴订阅 URL（支持长按粘贴和「粘贴订阅地址」按钮）并下载导入。也可手动添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
 3. 可选从系统文件选择器导入 JSON 规则。参考 `examples/routes-v1.json`。
 4. 在「直播」选择频道。长按频道查看线路、修改频道或单线路路由。
 5. 「恢复规则」删除手动覆盖；AUTO 使用命中规则的策略和成功历史。
@@ -24,7 +24,7 @@ python3 scripts/fetch_mihomo.py
 gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.1-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
+APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.2-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
 
 Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留节点 ID、失败更新保留旧数据，以及本地 SOCKS 监听到节点的实际转发。
 
@@ -54,6 +54,6 @@ HLS master、variant、分片和 key 共用播放会话路由；URL/域名规则
 
 代理用户名和密码通过 Android Keystore AES-GCM 加密，只保存在应用私有目录；关闭备份和设备转移。规则 JSON 不接受 password/token 等未知敏感字段，导出不包含凭证。诊断不显示 URL 路径或查询参数，错误记录仅保存受控类别和 HTTP 状态码。HTTP 与 SOCKS5 使用独立客户端，SOCKS5 认证不使用全局 Authenticator。
 
-v0.1.1 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
+v0.1.2 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
 
 CI 编译与模拟网络测试不能替代家庭网络和电视实机验收，参见 `DEVICE_ACCEPTANCE.md`。
