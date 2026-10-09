@@ -30,7 +30,7 @@ class ChannelPresentationTest {
         compose.onNodeWithText("CCTV 新闻").assertExists()
         compose.onNodeWithText("⌄  新闻").performClick()
         compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
-        compose.onNodeWithText("搜索频道").performTextInput("体育频道")
+        compose.onNodeWithText("搜索频道").performTextInput("体育")
         compose.onNodeWithText("体育频道").assertExists()
         compose.onNodeWithText("搜索频道").performTextClearance()
         compose.onNodeWithText("体育频道").assertDoesNotExist()
