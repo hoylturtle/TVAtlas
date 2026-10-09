@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['codex/tvatlas-player-v0.1.8-guest']
-    paths: ['.github/workflows/inspect-tvb.yml', 'android-player/scripts/inspect_mytvsuper_frontend.py']
+    paths: ['.github/workflows/inspect-tvb.yml', '.github/scripts/inspect_tvb.py']
 permissions:
   contents: read
 jobs:
@@ -13,4 +13,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Inspect public guest route definitions without credentials
-        run: python3 android-player/scripts/inspect_mytvsuper_frontend.py
+        run: python3 .github/scripts/inspect_tvb.py
