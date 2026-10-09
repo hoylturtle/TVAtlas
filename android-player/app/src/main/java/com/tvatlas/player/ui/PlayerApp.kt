@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
@@ -196,7 +197,9 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
                     item(key = "group:$group") {
                         TextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
-                            modifier = Modifier.fillMaxWidth().then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
+                            modifier = Modifier.fillMaxWidth()
+                                .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
+                                .then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
                             Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
                             Text("${channels.size}")
                         }
