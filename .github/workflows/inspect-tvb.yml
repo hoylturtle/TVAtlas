@@ -1,9 +1,6 @@
 name: Inspect Official Frontend
 on:
   workflow_dispatch:
-  push:
-    branches: ['codex/tvatlas-player-v0.1.8-guest']
-    paths: ['.github/workflows/inspect-tvb.yml', '.github/scripts/inspect_tvb.py']
 permissions:
   contents: read
 jobs:

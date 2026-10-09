@@ -1,6 +1,7 @@
 package com.tvatlas.player.source
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -9,7 +10,7 @@ import org.junit.Test
 import java.io.IOException
 
 class MyTvSuperSourceTest {
-    private val session = """{"supported_country":true,"token":"fixture-token","user":{"guest_mode":true}}"""
+    private val session = """{"supported_country":true,"user":{"token":"fixture-token","guest_mode":true}}"""
     private fun checkout(host: String = "edgeware-live.edgeware.tvb.com", stage: String = "free") = """
         {"content_id":"ott_J_h264","protocol":"dash","drm":"cenc_m","video_stage":"$stage",
          "profiles":[{"quality":"high","streaming_path":"https://$host/high/index.mpd?sig=fixture"},
@@ -64,29 +65,44 @@ class MyTvSuperSourceTest {
         val missing = """{"supported_country":true,"country_code":"HK"}"""
         assertThrows(MyTvSuperSource.MissingGuestCredentials::class.java) { MyTvSuperSource.parseSession(missing) }
         val summary = MyTvSuperSource.sessionSummary(session)
-        assertTrue(summary.contains("tokenAtRoot=true"))
+        assertTrue(summary.contains("tokenInUser=true"))
         assertFalse(summary.contains("fixture-token"))
     }
     @Test fun guestInitializationRetriesSessionOnceBeforeCheckout() = runBlocking {
         val paths = mutableListOf<String>()
         var sessions = 0
+        var pairings = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             paths.add(request.url.encodedPath)
+            if (request.url.encodedPath == "/api/auth/pairDevice/") {
+                pairings++
+                assertEquals("POST", request.method)
+                assertNull(request.header("Authorization"))
+                assertEquals("https://www.mytvsuper.com", request.header("Origin"))
+                val buffer = okio.Buffer()
+                request.body!!.writeTo(buffer)
+                val body = kotlinx.serialization.json.Json.parseToJsonElement(buffer.readUtf8()).jsonObject
+                assertEquals(setOf("device_id", "lang", "incognito"), body.keys)
+                assertTrue(body["device_id"]!!.jsonPrimitive.content.matches(Regex("[0-9]{26}")))
+                assertEquals("tc", body["lang"]!!.jsonPrimitive.content)
+                assertEquals(false, body["incognito"]!!.jsonPrimitive.boolean)
+            }
             val body = when {
                 request.url.encodedPath.contains("getSession") -> {
                     sessions++
                     if (sessions == 1) """{"supported_country":true,"country_code":"HK"}""" else session
                 }
-                request.url.host == "www.mytvsuper.com" -> "<html>official guest page</html>"
+                request.url.host == "www.mytvsuper.com" -> """{"success":true}"""
                 else -> checkout()
             }
             Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                 .body(body.toResponseBody()).build()
         }.build()
         assertEquals("fixture-token", MyTvSuperSource.resolve(client).userToken)
+        assertEquals(1, pairings)
         assertEquals(2, sessions)
-        assertEquals(listOf("/api/auth/getSession/self/", "/tc/live/81/", "/api/auth/getSession/self/", "/v1/channel/checkout"), paths)
+        assertEquals(listOf("/api/auth/getSession/self/", "/api/auth/pairDevice/", "/api/auth/getSession/self/", "/v1/channel/checkout"), paths)
     }
     @Test fun missingCredentialsAfterBootstrapFailWithoutLoopingOrCheckout() = runBlocking {
         var requests = 0
@@ -94,11 +110,40 @@ class MyTvSuperSourceTest {
             requests++
             val request = chain.request()
             Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-                .body((if (request.url.encodedPath.contains("getSession")) """{"supported_country":true}""" else "<html></html>").toResponseBody()).build()
+                .body((if (request.url.encodedPath.contains("getSession")) """{"supported_country":true}""" else """{"success":true}""").toResponseBody()).build()
         }.build()
         try { MyTvSuperSource.resolve(client); fail("Expected missing credentials") }
-        catch (e: IOException) { assertTrue(e.message!!.contains("初始化后仍未返回")) }
+        catch (e: IOException) { assertTrue(e.message!!.contains("配对后仍未返回")) }
         assertEquals(3, requests)
+    }
+
+    @Test fun rejectedRegionNeverCreatesGuestDevice() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body("""{"supported_country":false}""".toResponseBody()).build()
+        }.build()
+        try { MyTvSuperSource.resolve(client); fail("Expected region failure") }
+        catch (e: IOException) { assertTrue(e.message!!.contains("当前地区")) }
+        assertEquals(1, requests)
+    }
+    @Test fun failedPairingNeverRequestsCheckoutOrRetriesIndefinitely() = runBlocking {
+        val paths = mutableListOf<String>()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val req = chain.request()
+            paths.add(req.url.encodedPath)
+            val body = if (paths.size == 1) """{"supported_country":true}"""
+                else """{"errors":{"code":"fixture-private-error"}}"""
+            Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(body.toResponseBody()).build()
+        }.build()
+        try { MyTvSuperSource.resolve(client); fail("Expected pairing failure") }
+        catch (e: IOException) { assertTrue(e.message!!.contains("未接受访客设备配对")); assertFalse(e.message!!.contains("fixture-private-error")) }
+        assertEquals(listOf("/api/auth/getSession/self/", "/api/auth/pairDevice/"), paths)
+    }
+    @Test fun nullRootTokenDoesNotHideNestedGuestToken() {
+        assertEquals("fixture-token", MyTvSuperSource.parseSession(session.replaceFirst("{", "{\"token\":null,")))
     }
 
 }

@@ -4,6 +4,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.*
 import okhttp3.*
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -96,20 +98,29 @@ object MyTvSuperSource {
                 return response
             }
             val token = try { parseSession(fetchSession()) } catch (_: MissingGuestCredentials) {
-                log?.event("INFO", "SESSION_BOOTSTRAP", "missing credentials; initialize official guest page once")
-                // Normal official page navigation only. Keep cookies on this route and reject external redirects.
-                val bootstrap = client.newBuilder().followRedirects(true).followSslRedirects(false)
-                    .addNetworkInterceptor { chain ->
-                        val url = chain.request().url
-                        if (url.scheme != "https" || url.host != "www.mytvsuper.com" || url.port != 443)
-                            throw IOException("官方访客初始化跳转地址不受支持")
-                        chain.proceed(chain.request())
-                    }.build()
-                request(bootstrap, Request.Builder().url(PAGE).header("Accept", "text/html")
-                    .header("Referer", "https://www.mytvsuper.com/").build(), "访客初始化", log, readBody = false)
+                log?.event("INFO", "SESSION_BOOTSTRAP", "missing credentials; pair anonymous guest device once")
+                // Public frontend pairDevice guest branch: no account/profile identifiers or persisted credentials.
+                // Match its 16 random decimal digits + epoch seconds tracking identifier shape.
+                val deviceId = kotlin.random.Random.nextLong(1000000000000000L, 10000000000000000L).toString() +
+                    (System.currentTimeMillis() / 1000).toString()
+                val pairingBody = buildJsonObject {
+                    put("device_id", deviceId)
+                    put("lang", "tc")
+                    put("incognito", false)
+                }.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                val paired = request(client, Request.Builder()
+                    .url("https://www.mytvsuper.com/api/auth/pairDevice/")
+                    .header("Accept", "application/json").header("Origin", "https://www.mytvsuper.com")
+                    .header("Referer", PAGE).post(pairingBody).build(), "访客设备配对", log)
+                val pairing = Json.parseToJsonElement(paired) as? JsonObject
+                    ?: throw IOException("官方访客配对响应格式不受支持")
+                val hasErrors = pairing["errors"] != null && pairing["errors"] != JsonNull
+                val success = (pairing["success"] as? JsonPrimitive)?.booleanOrNull
+                log?.event("INFO", "SESSION_PAIR", "hasErrors=$hasErrors success=$success")
+                if (hasErrors || success == false) throw IOException("官方未接受访客设备配对，请导出日志")
                 val initialized = fetchSession()
                 try { parseSession(initialized) } catch (_: MissingGuestCredentials) {
-                    throw IOException("官方页面初始化后仍未返回访客凭据，可能还需要网页访客创建步骤；请导出日志")
+                    throw IOException("官方访客配对后仍未返回有效凭据，请导出日志")
                 }
             }
             log?.event("INFO", "SESSION", "accepted region; received session credentials")
@@ -123,7 +134,7 @@ object MyTvSuperSource {
             return Playback(url, token)
         } finally { synchronized(cookies) { cookies.clear() } }
     }
-    private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?, readBody: Boolean = true): String = suspendCancellableCoroutine { continuation ->
+    private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?): String = suspendCancellableCoroutine { continuation ->
         val started = System.nanoTime()
         log?.event("INFO", "HTTP", "$stage start host=${request.url.host} method=${request.method}")
         val call = client.newCall(request)
@@ -138,7 +149,6 @@ object MyTvSuperSource {
                 val result = runCatching {
                     response.use {
                         if (!it.isSuccessful) throw IOException("$stage 请求失败（HTTP ${it.code}）")
-                        if (!readBody) return@use ""
                         val body = it.body ?: throw IOException("官方返回空响应")
                         val bytes = body.byteStream().use { stream ->
                             val out = java.io.ByteArrayOutputStream()
