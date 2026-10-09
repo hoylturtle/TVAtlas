@@ -1,11 +1,11 @@
-# TVAtlas Player v0.1.0
+# TVAtlas Player v0.1.1
 
 面向 Android 手机、平板与 Android TV 的 IPTV 播放器。Android 6.0（API 23）及以上。
 
 ## 使用
 
 1. 在「播放列表」添加名称和 HTTP(S) M3U 地址。
-2. 在「路由」添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
+2. 在「路由」选择「添加 Clash/Mihomo 订阅」，填写名称及订阅 URL 并下载导入。也可手动添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
 3. 可选从系统文件选择器导入 JSON 规则。参考 `examples/routes-v1.json`。
 4. 在「直播」选择频道。长按频道查看线路、修改频道或单线路路由。
 5. 「恢复规则」删除手动覆盖；AUTO 使用命中规则的策略和成功历史。
@@ -20,12 +20,25 @@
 需要 JDK 17、Gradle 8.11.1、Android SDK platform 35 / build-tools 35.0.0。打开此目录作为 Android Studio 工程，或执行：
 
 ```sh
+python3 scripts/fetch_mihomo.py
 gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.0-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。
+APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.1-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。
+
+Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留节点 ID、失败更新保留旧数据，以及本地 SOCKS 监听到节点的实际转发。
 
 核心 JVM 模块无需 Android 设备，测试 M3U/中文/BOM、JSON 校验、规则优先级、手动覆盖、历史顺序、故障分类、AUTO 与成功门槛。应用 JVM 测试模拟 HTTP 跳转路由、HLS 子请求继承和 SOCKS5 认证/远程 DNS。
+
+## 订阅代理
+
+支持包含 `proxies` 列表的 Clash/Mihomo YAML，包括 SS、SSR、VMess、VLESS、Trojan、Hysteria/Hysteria2、TUIC、AnyTLS、HTTP、SOCKS5、Snell；具体节点参数由内置 Mihomo v1.19.32 校验。订阅中的规则、代理组、外部控制器、TUN 和监听配置不会导入。provider-only 配置、URI/base64 订阅和本地证书文件暂不支持。
+
+导入后，在频道或线路路由中选择节点，也可选择 AUTO。订阅卡片提供手动更新和删除，节点可单独启停。相同订阅 URL 和节点名称保持稳定 ID，因此更新后保留路由引用；删除或改名的节点需要重新选择。最多启用 200 个订阅节点，单次下载上限 2 MB。更新下载或校验失败时保留原配置。
+
+订阅 URL 和节点完整配置使用 Android Keystore 加密保存；导出规则不包含订阅凭证或节点配置。在另一台设备先导入同一订阅，再导入引用节点的规则。内核只为本应用提供经过认证的本地 SOCKS 转发，不创建系统 VPN。
+
+Mihomo 使用 GPL-3.0；许可和声明随应用提供。构建产物同时包含固定版本的对应源码及依赖，使用 `python3 scripts/fetch_mihomo.py --source` 可重新生成源码包。
 
 ## 规则语义
 
@@ -41,6 +54,6 @@ HLS master、variant、分片和 key 共用播放会话路由；URL/域名规则
 
 代理用户名和密码通过 Android Keystore AES-GCM 加密，只保存在应用私有目录；关闭备份和设备转移。规则 JSON 不接受 password/token 等未知敏感字段，导出不包含凭证。诊断不显示 URL 路径或查询参数，错误记录仅保存受控类别和 HTTP 状态码。HTTP 与 SOCKS5 使用独立客户端，SOCKS5 认证不使用全局 Authenticator。
 
-v0.1.0 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
+v0.1.1 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
 
 CI 编译与模拟网络测试不能替代家庭网络和电视实机验收，参见 `DEVICE_ACCEPTANCE.md`。
