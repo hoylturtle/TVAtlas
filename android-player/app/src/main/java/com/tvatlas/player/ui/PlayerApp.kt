@@ -291,7 +291,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         Text("频道列表：方向键选择，OK 播放，长按 OK 查看线路。\n播放器：上下换台，长按 OK 查看线路；返回退出全屏。")
         Text("配置与隐私", style = MaterialTheme.typography.titleLarge)
         Text("代理凭证使用 Android Keystore 加密保存在本机。导出的规则不包含用户名或密码。播放历史仅保存在本机。")
-        Text("TVAtlas Player · 开发版 0.1.1 · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
+        Text("TVAtlas Player · 开发版 0.1.2 · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
         Text("Mihomo © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随安装包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
     }
 }

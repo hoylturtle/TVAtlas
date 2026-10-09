@@ -28,7 +28,7 @@ class SubscriptionRepository(
     }
     private suspend fun update(id: String, name: String, url: String): Int = withContext(Dispatchers.IO) {
         if (httpUri(url) == null) throw SubscriptionException("请输入合法的 HTTP(S) 订阅地址")
-        val text = client.newCall(Request.Builder().url(url).header("User-Agent", "ClashMeta/1.19.32 TVAtlas/0.1.1")
+        val text = client.newCall(Request.Builder().url(url).header("User-Agent", "ClashMeta/1.19.32 TVAtlas/0.1.2")
             .header("Accept", "application/yaml, text/yaml, text/plain").build()).execute().use { response ->
             if (!response.isSuccessful) throw SubscriptionException("订阅下载失败（HTTP ${response.code}），已保留旧节点")
             val body = response.body ?: throw SubscriptionException("订阅内容为空")
