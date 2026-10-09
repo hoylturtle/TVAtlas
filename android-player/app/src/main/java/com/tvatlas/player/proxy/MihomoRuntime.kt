@@ -34,7 +34,7 @@ class MihomoRuntime(private val context: Context, private val vault: CredentialV
         val args = mutableListOf(executable.absolutePath, "-d", home.absolutePath, "-f", config.absolutePath)
         if (check) args.add("-t")
         val p = ProcessBuilder(args).redirectErrorStream(true).start()
-        Thread({ p.inputStream.use { input -> val buffer = ByteArray(8192); while (input.read(buffer) >= 0) { /* Never log core output: it can contain node credentials. */ } } }, "mihomo-output").apply { isDaemon = true; start() }
+        Thread({ runCatching { p.inputStream.use { input -> val buffer = ByteArray(8192); while (input.read(buffer) >= 0) { /* Never log core output: it can contain node credentials. */ } } } }, "mihomo-output").apply { isDaemon = true; start() }
         return p
     }
     fun validate(nodes: List<JsonObject>) {
