@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "0.1.4",
+  "versionCode": 6,
+  "versionName": "0.1.5",
   "minSdk": 23,
-  "notes": "调整为播放器为主的深色布局和左侧频道面板；频道分组默认折叠，搜索自动显示匹配；线路与代理选择仅显示名称，保留订阅粘贴和检查更新。"
+  "notes": "增加实验性官方翡翠台：动态访客会话、DASH 与 Widevine；请求走所选代理，凭据仅保存在内存。官方 Android 兼容性需设备实测。"
 }

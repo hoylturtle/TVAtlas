@@ -11,6 +11,9 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManagerProvider
+import com.tvatlas.player.source.MyTvSuperSource
+import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -48,9 +51,11 @@ class PlaybackCoordinator(
     private var watcher: Job? = null
     private var preparation: Job? = null
     private var generation = 0L
+    private val renewed = mutableSetOf<RouteAttempt>()
 
     fun play(channel: Channel, resolver: DefaultRouteResolver, streamId: String? = null) {
         stop(false)
+        renewed.clear()
         val token = generation
         _status.value = PlaybackStatus(channel.id, "正在连接 ${channel.name}")
         preparation = scope.launch {
@@ -62,7 +67,7 @@ class PlaybackCoordinator(
         }
     }
 
-    private fun attempt(channel: Channel, resolver: DefaultRouteResolver, route: RouteAttempt?, token: Long) {
+    private suspend fun attempt(channel: Channel, resolver: DefaultRouteResolver, route: RouteAttempt?, token: Long) {
         if (token != generation) return
         watcher?.cancel()
         _player.value?.release(); _player.value = null
@@ -71,9 +76,30 @@ class PlaybackCoordinator(
             return
         }
         val stream = channel.streams.first { it.id == route.streamId }
+        val official = MyTvSuperSource.recognizes(stream.url)
+        _status.value = _status.value.copy(attempt = route, successAt = null,
+            message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
+        val source = if (official) try {
+            MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) })
+        } catch (e: CancellationException) { throw e
+        } catch (e: Exception) {
+            if (token != generation) return
+            val reason = if (e is IOException) e.message ?: "官方源连接失败" else "官方响应格式不兼容"
+            _status.value = _status.value.copy(error = reason)
+            repository.recordFailure(channel.id, route, reason)
+            if (token == generation) attempt(channel, resolver, session?.fail(PlaybackFailure(FailureKind.NETWORK)), token)
+            return
+        } else null
+        if (token != generation) return
         val mediaRequests = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val mediaBytes = AtomicLong(0)
-        val factory = OkHttpDataSource.Factory(RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target))
+        // Official session, media and DRM must use the same concrete route, without domain-rule overrides.
+        val selectedClient = if (official) withContext(Dispatchers.IO) { pool.client(route.target) } else null
+        val mediaCalls: okhttp3.Call.Factory = if (selectedClient != null) selectedClient.newBuilder()
+            .followRedirects(true).followSslRedirects(false).build()
+            else RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target)
+        if (token != generation) return
+        val factory = OkHttpDataSource.Factory(mediaCalls)
             .setTransferListener(object : TransferListener {
                 override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
                 override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
@@ -82,21 +108,32 @@ class PlaybackCoordinator(
                     if (isNetwork && dataSpec.uri.toString() in mediaRequests) mediaBytes.addAndGet(bytesTransferred.toLong())
                 }
             })
-        val instance = ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(factory)).build()
+        val mediaSourceFactory = DefaultMediaSourceFactory(factory)
+        if (source != null) {
+            val drmProvider = DefaultDrmSessionManagerProvider()
+            // No redirect following for license POSTs, so X-User-Token cannot leak to another host.
+            drmProvider.setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(requireNotNull(selectedClient)))
+            mediaSourceFactory.setDrmSessionManagerProvider(drmProvider)
+        }
+        val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
         _player.value = instance
         _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null)
         var lastLoadType = C.DATA_TYPE_UNKNOWN
         var loadErrorAt = 0L
         var failing = false
-        fun fail(failure: PlaybackFailure) {
+        fun fail(failure: PlaybackFailure, drmCode: Int? = null) {
             if (token != generation || instance !== _player.value || failing) return
             failing = true
-            val reason = failure.kind.name + (failure.httpStatus?.let { " HTTP $it" } ?: "")
+            val reason = drmCode?.let { "官方 DRM 授权失败（$it），请确认设备支持 Widevine；网页会话可能不兼容 Android" }
+                ?: (failure.kind.name + (failure.httpStatus?.let { " HTTP $it" } ?: ""))
             _status.value = _status.value.copy(message = "连接暂不可用，正在尝试其他线路", error = reason)
-            scope.launch {
+            preparation = scope.launch {
                 if (token != generation) return@launch
                 repository.recordFailure(channel.id, route, reason)
-                if (token == generation) attempt(channel, resolver, session?.fail(failure), token)
+                if (token == generation) {
+                    val refresh = official && failure.httpStatus in listOf(401, 403) && renewed.add(route)
+                    attempt(channel, resolver, if (refresh) route else session?.fail(failure), token)
+                }
             }
         }
         instance.addAnalyticsListener(object : AnalyticsListener {
@@ -121,10 +158,18 @@ class PlaybackCoordinator(
                     lastLoadType == C.DATA_TYPE_MEDIA && SystemClock.elapsedRealtime() - loadErrorAt < 30000 -> FailureKind.SEGMENT
                     else -> FailureKind.NETWORK
                 }
-                fail(PlaybackFailure(kind, http))
+                fail(PlaybackFailure(kind, http), error.errorCode.takeIf { it in 6000..6999 })
             }
         })
-        instance.setMediaItem(MediaItem.fromUri(route.streamUrl))
+        val item = if (source == null) MediaItem.fromUri(route.streamUrl) else MediaItem.Builder()
+            .setUri(source.url).setMimeType(MimeTypes.APPLICATION_MPD)
+            .setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                .setLicenseUri(MyTvSuperSource.LICENSE)
+                .setLicenseRequestHeaders(mapOf("X-User-Token" to source.userToken,
+                    "X-Client-Platform" to "android", "X-Service-Id" to "super",
+                    "Origin" to "https://www.mytvsuper.com", "Referer" to MyTvSuperSource.PAGE))
+                .build()).build()
+        instance.setMediaItem(item)
         instance.prepare(); instance.playWhenReady = true
         watcher = scope.launch {
             val gate = SuccessGate()
