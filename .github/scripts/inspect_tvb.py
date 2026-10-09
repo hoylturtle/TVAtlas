@@ -34,7 +34,7 @@ def safe_context(text):
         content = match.group()[1:-1]
         if content.startswith(('/api/', '/v1/', '/v2/')) and len(content) < 150:
             return repr(content.split('?')[0])
-        if content in {'guest','self','web','cid','auth','post','get','GET','POST','free','web_auth','guest_mode','guestMode','error_code','user','login','device_id','platform','HK','type','username','password'}:
+        if content in {'guest','self','web','cid','auth','post','get','GET','POST','free','web_auth','guest_mode','guestMode','error_code','user','login','device_id','platform','HK','type','username','password','guest_login','guestLogin','loginGuest','isGuestMode'}:
             return repr(content)
         if text[match.end():].lstrip().startswith(':') and re.fullmatch('[A-Za-z_]{1,40}', content):
             return repr(content)
@@ -59,7 +59,9 @@ try:
             routes = sorted(set(re.findall(r'/api/auth/[A-Za-z0-9_/-]+', js)))
             if routes:
                 print('FRONTEND routes:', ', '.join(routes))
-            matches = list(re.finditer(r'/api/auth/login[\"\']|guest_mode|guestMode|guestLogin', js, re.I))
+            if 'webpack-' in path:
+                print('FRONTEND chunk-map:', safe_context(js[js.find('.u='):js.find('.u=')+30000]))
+            matches = list(re.finditer(r'/api/auth/(?:login|pairing)|[\"\']guest[\"\']|yt=|ot\(', js, re.I))
             if not matches:
                 continue
             print('FRONTEND script:', path)
