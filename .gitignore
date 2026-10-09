@@ -8,3 +8,4 @@ local.properties
 secrets/
 android-player/dist/
 __pycache__/
+**/jniLibs/*.so

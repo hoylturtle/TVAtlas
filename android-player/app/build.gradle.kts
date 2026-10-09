@@ -7,13 +7,18 @@ plugins {
 android {
     namespace = "com.tvatlas.player"
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = 1; versionName = "0.1.0" }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = 2; versionName = "0.1.1"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/libmihomo.so" } }
 }
  ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     implementation(project(":core"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))

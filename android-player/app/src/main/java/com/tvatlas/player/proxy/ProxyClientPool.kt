@@ -11,8 +11,13 @@ import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
 
-class ProxyClientPool(private val readCredentials: (String) -> com.tvatlas.player.storage.Credentials?) {
+class ProxyClientPool(
+    private val readCredentials: (String) -> com.tvatlas.player.storage.Credentials?,
+    private val coreEndpoint: (String) -> CoreEndpoint,
+) {
+    constructor(readCredentials: (String) -> com.tvatlas.player.storage.Credentials?) : this(readCredentials, { throw IOException("Subscription core unavailable") })
     constructor(vault: CredentialVault) : this(vault::get)
+    constructor(vault: CredentialVault, core: MihomoRuntime) : this(vault::get, core::endpoint)
     private var profiles = emptyList<ProxyProfile>()
     private val clients = mutableMapOf<String, OkHttpClient>()
     val direct: OkHttpClient = builder().proxy(Proxy.NO_PROXY).build()
@@ -25,32 +30,39 @@ class ProxyClientPool(private val readCredentials: (String) -> com.tvatlas.playe
         this.profiles = profiles
         clients.values.forEach { it.connectionPool.evictAll() }; clients.clear()
     }
-    @Synchronized fun client(target: RouteTarget): OkHttpClient {
+    fun client(target: RouteTarget): OkHttpClient {
         if (target.type == RouteType.DIRECT) return direct
         if (target.type != RouteType.PROXY) throw IOException("Route must be concrete")
-        val p = profiles.firstOrNull { it.id == target.profile && it.enabled } ?: throw IOException("Proxy unavailable")
-        return clients.getOrPut(p.id) {
-            val credentials = try { readCredentials(p.id) } catch (_: Exception) { throw IOException("Proxy credentials unavailable") }
-            builder().apply {
-                when (p.type) {
-                    ProxyType.HTTP -> {
-                        proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(p.host, p.port)))
-                        if (credentials != null) proxyAuthenticator { _, response ->
-                            if (response.request.header("Proxy-Authorization") != null) null else response.request.newBuilder()
-                                .header("Proxy-Authorization", Credentials.basic(credentials.username, credentials.password)).build()
-                        }
-                    }
-                    ProxyType.SOCKS5 -> {
-                        proxy(Proxy.NO_PROXY)
-                        socketFactory(Socks5SocketFactory(p, credentials))
-                        // Preserve the requested hostname for the SOCKS handshake; the proxy resolves it remotely.
-                        dns(object : Dns {
-                            override fun lookup(hostname: String): List<InetAddress> =
-                                listOf(InetAddress.getByAddress(hostname, byteArrayOf(0, 0, 0, 1)))
-                        })
+        val original = synchronized(this) { profiles.firstOrNull { it.id == target.profile && it.enabled } }
+            ?: throw IOException("Proxy unavailable")
+        val endpoint = if (original.type == ProxyType.MIHOMO) coreEndpoint(original.id) else null
+        val p = if (endpoint != null) original.copy(type = ProxyType.SOCKS5, host = "127.0.0.1", port = endpoint.port) else original
+        val cacheKey = if (endpoint != null) "${p.id}:${endpoint.port}:${endpoint.credentials.password.hashCode()}" else p.id
+        synchronized(this) { clients[cacheKey] }?.let { return it }
+        val credentials = endpoint?.credentials ?: try { readCredentials(p.id) } catch (_: Exception) { throw IOException("Proxy credentials unavailable") }
+        val client = builder().apply {
+            when (p.type) {
+                ProxyType.HTTP -> {
+                    proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(p.host, p.port)))
+                    if (credentials != null) proxyAuthenticator { _, response ->
+                        if (response.request.header("Proxy-Authorization") != null) null else response.request.newBuilder()
+                            .header("Proxy-Authorization", Credentials.basic(credentials.username, credentials.password)).build()
                     }
                 }
-            }.build()
+                ProxyType.SOCKS5 -> {
+                    proxy(Proxy.NO_PROXY)
+                    socketFactory(Socks5SocketFactory(p, credentials))
+                    dns(object : Dns {
+                        override fun lookup(hostname: String): List<InetAddress> =
+                            listOf(InetAddress.getByAddress(hostname, byteArrayOf(0, 0, 0, 1)))
+                    })
+                }
+                ProxyType.MIHOMO -> throw IOException("Core route not resolved")
+            }
+        }.build()
+        return synchronized(this) {
+            if (profiles.none { it == original && it.enabled }) throw IOException("Proxy configuration changed")
+            clients.getOrPut(cacheKey) { client }
         }
     }
     @Synchronized fun close() {

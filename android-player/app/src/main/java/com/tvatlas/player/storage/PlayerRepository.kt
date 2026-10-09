@@ -27,7 +27,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             if (streams.isEmpty()) null else Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, streams, route(ch.manualRoute))
         }
         Library(p.map { Playlist(it.id, it.name, it.url, it.enabled, it.refreshIntervalHours, it.lastUpdatedAt) }, channels,
-            proxies.map { ProxyProfile(it.id, it.name, ProxyType.valueOf(it.type), it.host, it.port, it.enabled) },
+            proxies.map { ProxyProfile(it.id, it.name, ProxyType.valueOf(it.type), it.host, it.port, it.enabled, it.subscriptionId) },
             rules?.let { RuleCodec.json.decodeFromString<RuleConfig>(it.json) } ?: RuleConfig())
     }
 
@@ -72,7 +72,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
 
     suspend fun saveProxy(profile: ProxyProfile) {
         RuleCodec.validateProxy(profile)
-        dao.saveProxies(listOf(ProxyRow(profile.id, profile.name, profile.type.name, profile.host, profile.port, profile.enabled)))
+        dao.saveProxies(listOf(ProxyRow(profile.id, profile.name, profile.type.name, profile.host, profile.port, profile.enabled, profile.subscriptionId)))
     }
     suspend fun importRules(text: String, profiles: List<ProxyProfile>): RuleConfig {
         val config = withContext(Dispatchers.Default) { RuleCodec.parse(text, profiles) }

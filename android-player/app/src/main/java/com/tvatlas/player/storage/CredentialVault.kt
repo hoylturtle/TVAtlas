@@ -46,4 +46,6 @@ class CredentialVault(context: Context) {
         val password = ByteArray(data.remaining()).also { data.get(it) }.toString(Charsets.UTF_8)
         return Credentials(username, password)
     }
+    fun putSecret(id: String, value: String?) = put(id, value?.let { Credentials("secret", it) })
+    fun secret(id: String): String? = get(id)?.password
 }

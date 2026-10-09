@@ -1,0 +1,30 @@
+{
+  "version": "v1.19.32",
+  "assets": [
+    {
+      "name": "mihomo-android-386-v1.19.32.gz",
+      "digest": "sha256:27b3f6450380360fb8463ab4f291e9bf8871dfe330ceb8ca0147fd98e066c47e",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-android-386-v1.19.32.gz",
+      "abi": "x86"
+    },
+    {
+      "name": "mihomo-android-amd64-v1.19.32.gz",
+      "digest": "sha256:91c159015e7d8aaff22153b9fd18749a0c7258d6f252ea344ecace975ce17413",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-android-amd64-v1.19.32.gz",
+      "abi": "x86_64"
+    },
+    {
+      "name": "mihomo-android-arm64-v8-v1.19.32.gz",
+      "digest": "sha256:42b1f2be8702484d3ae6238daab392622f54bd0d264966700f1f28f52596e326",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-android-arm64-v8-v1.19.32.gz",
+      "abi": "arm64-v8a"
+    },
+    {
+      "name": "mihomo-android-armv7-v1.19.32.gz",
+      "digest": "sha256:cbac13a26ab77ce80871a064783a02246a856a20ab7435fe301fa1665e99acf4",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-android-armv7-v1.19.32.gz",
+      "abi": "armeabi-v7a"
+    }
+  ],
+  "source_url": "https://github.com/MetaCubeX/mihomo/archive/refs/tags/v1.19.32.tar.gz"
+}

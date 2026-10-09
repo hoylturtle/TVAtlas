@@ -8,6 +8,8 @@ import com.tvatlas.core.model.*
 import com.tvatlas.core.routing.*
 import com.tvatlas.player.playback.PlaybackCoordinator
 import com.tvatlas.player.proxy.ProxyClientPool
+import com.tvatlas.player.proxy.MihomoRuntime
+import com.tvatlas.core.subscription.SubscriptionException
 import com.tvatlas.player.storage.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -17,10 +19,13 @@ import java.io.ByteArrayOutputStream
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val database = PlayerDatabase.open(application)
     private val vault = CredentialVault(application)
-    private val pool = ProxyClientPool(vault)
+    private val core = MihomoRuntime(application, vault)
+    private val pool = ProxyClientPool(vault, core)
     private val playlistClient = pool.direct.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
     private val repository = PlayerRepository(database, playlistClient)
+    private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core)
+    val subscriptions = subscriptionRepository.subscriptions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val settings = SettingsStore(application)
     val library = repository.library.stateIn(viewModelScope, SharingStarted.Eagerly, Library(emptyList(), emptyList(), emptyList(), RuleConfig()))
     val diagnostics = settings.diagnostics.stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -30,11 +35,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
     private val operations = kotlinx.coroutines.sync.Mutex()
+    private var playJob: Job? = null
 
     init {
         viewModelScope.launch {
             library.collect { state ->
-                pool.update(state.profiles)
+                withContext(Dispatchers.IO) { core.update(state.profiles); pool.update(state.profiles) }
             }
         }
     }
@@ -42,12 +48,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             operations.lock()
             _busy.value = true
-            try { work(); _message.value = success }
+            try { work(); if (success != null) _message.value = success }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
                 // Validation errors are controlled by our code. Parser/network messages may contain private data.
                 _message.value = if (error is IllegalArgumentException && error !is kotlinx.serialization.SerializationException)
-                    error.message?.take(200) ?: "输入无效" else "操作失败，请检查配置、JSON 格式或网络连接"
+                    error.message?.take(200) ?: "输入无效" else "操作失败，请检查输入配置或网络连接"
             } finally { _busy.value = false; operations.unlock() }
         }
     }
@@ -58,9 +64,28 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         repository.refresh(Playlist(stableId(url.trim()), name.trim(), url.trim()))
     }
     fun play(channel: Channel, streamId: String? = null) {
-        val current = library.value
-        pool.update(current.profiles)
-        playback.play(channel, DefaultRouteResolver(current.rules, current.profiles), streamId)
+        playJob?.cancel(); playback.stop(false)
+        playJob = viewModelScope.launch {
+            val current = library.value
+            withContext(Dispatchers.IO) { core.update(current.profiles); pool.update(current.profiles) }
+            playback.play(channel, DefaultRouteResolver(current.rules, current.profiles), streamId)
+        }
+    }
+    fun stopPlayback(showMessage: Boolean = true) { playJob?.cancel(); playback.stop(showMessage) }
+    fun addSubscription(name: String, url: String) = action {
+        val skipped = subscriptionRepository.add(name, url)
+        pool.update(library.value.profiles, true)
+        _message.value = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个不支持的节点" else ""
+    }
+    fun refreshSubscription(id: String) = action("订阅已更新，节点路由设置已保留") {
+        subscriptionRepository.refresh(id); pool.update(library.value.profiles, true)
+    }
+    fun deleteSubscription(id: String) = action("订阅及其节点已移除") {
+        subscriptionRepository.remove(id); pool.update(library.value.profiles, true)
+    }
+    fun enableNode(profile: ProxyProfile) = action {
+        require(profile.type == ProxyType.MIHOMO)
+        repository.saveProxy(profile.copy(enabled = !profile.enabled, subscriptionId = profile.subscriptionId))
     }
     fun setRoute(channelId: String, streamId: String?, target: RouteTarget?) = action("路由已保存，重新播放后生效") {
         if (streamId == null) repository.setChannelRoute(channelId, target) else repository.setStreamRoute(streamId, target)
@@ -96,7 +121,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun exportRules(uri: Uri) = action("规则已导出（不包含凭证）") {
         val state = library.value
-        val json = RuleCodec.export(state.rules.copy(proxies = state.profiles))
+        val json = RuleCodec.export(state.rules.copy(proxies = state.profiles.filter { it.type != ProxyType.MIHOMO }))
         withContext(Dispatchers.IO) {
             val stream = getApplication<Application>().contentResolver.openOutputStream(uri, "wt") ?: error("无法创建文件")
             stream.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
@@ -104,6 +129,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun showDiagnostics(value: Boolean) = action { settings.diagnostics(value) }
     override fun onCleared() {
-        playback.stop(false); pool.close(); playlistClient.dispatcher.cancelAll(); database.close()
+        stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close()
     }
 }

@@ -15,7 +15,7 @@ class MainActivity : ComponentActivity() {
         setContent { PlayerApp(model) }
     }
     override fun onStop() {
-        model.playback.stop(false)
+        model.stopPlayback(false)
         super.onStop()
     }
 }

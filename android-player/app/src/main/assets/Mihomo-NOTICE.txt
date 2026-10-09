@@ -1,0 +1,9 @@
+TVAtlas bundles unmodified Mihomo v1.19.32 executables.
+Copyright MetaCubeX and Clash contributors. License: GPL-3.0.
+License text: Mihomo-LICENSE.txt. No warranty is provided by the core authors.
+Corresponding source (including dependencies) is supplied alongside the APK
+as Mihomo-v1.19.32-corresponding-source.tar.gz.
+Upstream: https://github.com/MetaCubeX/mihomo/tree/v1.19.32
+Build and checksum selection: android-player/mihomo-lock.json and
+android-player/scripts/fetch_mihomo.py in TVAtlas's public source branch.
+The core is a separate process communicating via authenticated SOCKS5.

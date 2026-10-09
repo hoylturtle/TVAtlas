@@ -42,6 +42,7 @@ import com.tvatlas.player.PlayerViewModel
 import com.tvatlas.player.playback.PlaybackStatus
 import com.tvatlas.player.storage.Credentials
 import com.tvatlas.player.storage.Library
+import com.tvatlas.player.storage.SubscriptionRow
 import java.text.DateFormat
 import java.util.Date
 
@@ -55,6 +56,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         val busy by model.busy.collectAsStateWithLifecycle()
         val message by model.message.collectAsStateWithLifecycle()
         val diagnostics by model.diagnostics.collectAsStateWithLifecycle()
+        val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val config = LocalConfiguration.current
         val tv = (context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
@@ -66,6 +68,8 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         var detailId by rememberSaveable { mutableStateOf<String?>(null) }
         var addPlaylist by rememberSaveable { mutableStateOf(false) }
         var addProxy by rememberSaveable { mutableStateOf(false) }
+        var addSubscription by rememberSaveable { mutableStateOf(false) }
+        var removeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
         var editProxyId by rememberSaveable { mutableStateOf<String?>(null) }
         val detail = library.channels.firstOrNull { it.id == detailId }
         val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(model::importRules) }
@@ -121,12 +125,21 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                     }
                     1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh)
                     2 -> RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
-                        { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id })
+                        { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
+                        subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
+                        { removeSubscription = it }, model::enableNode)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics)
                 }
             }
         }
         if (addPlaylist) PlaylistDialog(busy, { addPlaylist = false }) { name, url -> model.addPlaylist(name, url); addPlaylist = false }
+        if (addSubscription) SubscriptionDialog(busy, { addSubscription = false }) { name, url ->
+            model.addSubscription(name, url); addSubscription = false
+        }
+        if (removeSubscription != null) AlertDialog(onDismissRequest = { removeSubscription = null },
+            title = { Text("删除订阅？") }, text = { Text("将移除该订阅及其节点。引用这些节点的手动路由需要重新选择。") },
+            confirmButton = { TextButton(onClick = { model.deleteSubscription(removeSubscription!!); removeSubscription = null }) { Text("删除") } },
+            dismissButton = { TextButton(onClick = { removeSubscription = null }) { Text("取消") } })
         if (addProxy || editProxyId != null) ProxyDialog(library.profiles.firstOrNull { it.id == editProxyId },
             { addProxy = false; editProxyId = null }) { p, credentials, replace ->
             model.saveProxy(p, credentials, replace); addProxy = false; editProxyId = null
@@ -203,7 +216,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
             Text(status.message, Modifier.weight(1f).padding(8.dp), style = MaterialTheme.typography.bodySmall, maxLines = 2)
             TextButton(onClick = onDetails, enabled = status.channelId != null) { Text("线路") }
             TextButton(onClick = onFullscreen) { Text("全屏 / 频道") }
-            TextButton(onClick = { model.playback.stop() }, enabled = player != null) { Text("停止") }
+            TextButton(onClick = { model.stopPlayback() }, enabled = player != null) { Text("停止") }
         }
         if (diagnostics && status.attempt != null) Text("${redactedUrl(status.attempt.streamUrl)}\n${routeLabel(status.attempt.target)} · ${status.attempt.matchedRule}" +
             (status.error?.let { "\n$it" } ?: ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
@@ -228,7 +241,9 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
     }
 }
 
-@Composable private fun RoutingPage(library: Library, onImport: () -> Unit, onExport: () -> Unit, onAdd: () -> Unit, onEdit: (ProxyProfile) -> Unit) {
+@Composable private fun RoutingPage(library: Library, onImport: () -> Unit, onExport: () -> Unit, onAdd: () -> Unit, onEdit: (ProxyProfile) -> Unit,
+    subscriptions: List<SubscriptionRow>, busy: Boolean, onSubscribe: () -> Unit, onRefresh: (String) -> Unit,
+    onDelete: (String) -> Unit, onEnable: (ProxyProfile) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("智能路由", style = MaterialTheme.typography.headlineMedium)
@@ -239,12 +254,25 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
             }
             Text("${library.rules.name} · ${library.rules.rules.size} 条规则", Modifier.padding(vertical = 12.dp))
             Text("默认：${routeLabel(library.rules.defaultRoute)}", style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = onAdd, modifier = Modifier.padding(top = 16.dp)) { Text("添加代理") }
+            Button(onClick = onSubscribe, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) { Text("添加 Clash / Mihomo 订阅") }
+            Text("粘贴订阅地址即可导入节点，在频道或线路菜单中选择使用。", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = onAdd) { Text("手动添加 HTTP / SOCKS5") }
+        }
+        items(subscriptions, key = { "subscription:${it.id}" }) { sub ->
+            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
+                Text(sub.name, style = MaterialTheme.typography.titleLarge)
+                Text("${sub.nodeCount} 个节点 · 更新于 ${date(sub.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { onRefresh(sub.id) }, enabled = !busy) { Text("更新订阅") }
+                    TextButton(onClick = { onDelete(sub.id) }, enabled = !busy) { Text("删除") }
+                }
+            } }
         }
         items(library.profiles, key = { it.id }) { p ->
             Card(Modifier.fillMaxWidth()) { ListItem(headlineContent = { Text("${p.name} · ${p.id}") },
-                supportingContent = { Text("${p.type} · ${p.host}:${p.port} · ${if (p.enabled) "启用" else "停用"}") },
-                trailingContent = { TextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
+                supportingContent = { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${p.host}:${p.port} · ${if (p.enabled) "启用" else "停用"}") },
+                trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
+                    else TextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
         }
         items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
             ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text(matchLabel(rule.match), style = MaterialTheme.typography.bodySmall) },
@@ -262,7 +290,8 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         Text("频道列表：方向键选择，OK 播放，长按 OK 查看线路。\n播放器：上下换台，长按 OK 查看线路；返回退出全屏。")
         Text("配置与隐私", style = MaterialTheme.typography.titleLarge)
         Text("代理凭证使用 Android Keystore 加密保存在本机。导出的规则不包含用户名或密码。播放历史仅保存在本机。")
-        Text("TVAtlas Player · 开发版 0.1.0", color = MaterialTheme.colorScheme.secondary)
+        Text("TVAtlas Player · 开发版 0.1.1 · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
+        Text("Mihomo © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随安装包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -294,7 +323,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(id, { id = it }, label = { Text("ID，例如 US / HK") }, singleLine = true, enabled = existing == null)
             OutlinedTextField(name, { name = it }, label = { Text("名称") }, singleLine = true)
-            Row { ProxyType.entries.forEach { value -> FilterChip(selected = type == value, onClick = { type = value }, label = { Text(value.name) }, modifier = Modifier.padding(end = 8.dp)) } }
+            Row { ProxyType.entries.filter { it != ProxyType.MIHOMO }.forEach { value -> FilterChip(selected = type == value, onClick = { type = value }, label = { Text(value.name) }, modifier = Modifier.padding(end = 8.dp)) } }
             OutlinedTextField(host, { host = it }, label = { Text("主机或 IP") }, singleLine = true)
             OutlinedTextField(port, { port = it }, label = { Text("端口") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
             Row(verticalAlignment = Alignment.CenterVertically) { Switch(enabled, { enabled = it }); Text("启用代理") }
@@ -363,3 +392,17 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
     m.domainSuffix?.let { "域名后缀：$it" }, m.channelRegex?.let { "频道正则：$it" },
     m.url?.let { "URL：${redactedUrl(it)}" }, m.urlContains?.let { "URL 关键词（已隐藏）" }, m.playlistId?.let { "播放列表：$it" },
 ).joinToString(" · ")
+
+@Composable private fun SubscriptionDialog(busy: Boolean, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("添加 Clash / Mihomo 订阅") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(name, { name = it }, label = { Text("订阅名称") }, singleLine = true)
+            OutlinedTextField(url, { url = it }, label = { Text("HTTP(S) 订阅地址") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            Text("支持 Clash YAML 的 SS、VMess、VLESS、Trojan 等节点。地址及节点密钥仅加密保存在本机。", style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = { TextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("下载并导入") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+}
