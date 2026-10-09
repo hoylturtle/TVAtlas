@@ -27,6 +27,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -120,7 +122,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                                 })
                         }
                         val select: (Channel) -> Unit = {
-                            if (status.channelId != it.id) model.play(it)
+                            if (status.channelId != it.id || model.playback.player.value == null) model.play(it)
                             if (wide) channelPanelOpen = false
                         }
                         when {
@@ -178,6 +180,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val firstFocus = remember { FocusRequester() }
+    val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Text("${library.channels.size} 个频道", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.labelLarge)
@@ -214,7 +217,12 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             }
         }
     }
-    LaunchedEffect(tv, library.channels.isNotEmpty()) { if (tv && library.channels.isNotEmpty()) runCatching { firstFocus.requestFocus() } }
+    LaunchedEffect(tv, library.channels.isNotEmpty()) {
+        if (tv && library.channels.isNotEmpty()) {
+            inputMode.requestInputMode(InputMode.Keyboard)
+            runCatching { firstFocus.requestFocus() }
+        }
+    }
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
