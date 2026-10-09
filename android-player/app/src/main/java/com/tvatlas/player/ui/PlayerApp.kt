@@ -50,8 +50,8 @@ import com.tvatlas.player.storage.SubscriptionRow
 import java.text.DateFormat
 import java.util.Date
 
-private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Color(0xFF8FCFC3),
-    background = Color(0xFF111419), surface = Color(0xFF191D24), surfaceVariant = Color(0xFF282D36), onPrimary = Color(0xFF482900))
+private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Color(0xFFB8C3D8),
+    background = Color(0xFF0D0F13), surface = Color(0xFF171A21), surfaceVariant = Color(0xFF292F3A), onPrimary = Color(0xFF162A4B))
 
 @Composable fun PlayerApp(model: PlayerViewModel) {
     MaterialTheme(colorScheme = colors) {
@@ -69,6 +69,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         val landscape = !tv && config.screenWidthDp < 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var fullscreen by rememberSaveable { mutableStateOf(false) }
+        var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
         var landscapeChannels by rememberSaveable { mutableStateOf(false) }
         var detailId by rememberSaveable { mutableStateOf<String?>(null) }
         var addPlaylist by rememberSaveable { mutableStateOf(false) }
@@ -81,13 +82,15 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { it?.let(model::exportRules) }
         val snackbar = remember { SnackbarHostState() }
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
-        val immersive = tab == 0 && (fullscreen || (landscape && !landscapeChannels))
-        BackHandler(immersive) { fullscreen = false; landscapeChannels = true }
+        val immersive = tab == 0 && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
+        val theater = tab == 0 && wide
+        BackHandler(immersive) { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
+        BackHandler(theater && channelPanelOpen && status.channelId != null) { channelPanelOpen = false }
         BackHandler(!immersive && tab != 0) { tab = 0 }
         Scaffold(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!immersive) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!immersive && !theater) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("TVAtlas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("选频道，即可观看", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
@@ -95,7 +98,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                     if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             }, bottomBar = {
-                if (!immersive) NavigationBar {
+                if (!immersive && !theater) NavigationBar {
                     listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
@@ -106,8 +109,9 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
-                            VideoPane(model, status, modifier, diagnostics,
-                                { if (immersive) { fullscreen = false; landscapeChannels = true } else fullscreen = true },
+                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen,
+                                { if (wide) channelPanelOpen = !channelPanelOpen else if (immersive) { fullscreen = false; landscapeChannels = true } else fullscreen = true },
+                                { channelPanelOpen = true; fullscreen = false; landscapeChannels = true },
                                 { detailId = status.channelId }, { offset ->
                                     if (library.channels.isNotEmpty()) {
                                         val index = library.channels.indexOfFirst { it.id == status.channelId }.coerceAtLeast(0)
@@ -115,12 +119,26 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                                     }
                                 })
                         }
-                        val select: (Channel) -> Unit = { model.play(it) }
+                        val select: (Channel) -> Unit = {
+                            if (status.channelId != it.id) model.play(it)
+                            if (wide) channelPanelOpen = false
+                        }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
-                            wide -> Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                ChannelList(library, status, tv, Modifier.width(300.dp).fillMaxHeight(), select, { detailId = it.id }, { tab = 1 })
-                                video(Modifier.weight(1f).fillMaxHeight())
+                            wide -> Box(Modifier.fillMaxSize()) {
+                                video(Modifier.fillMaxSize())
+                                Surface(Modifier.width((config.screenWidthDp * 0.52f).dp.coerceIn(300.dp, 520.dp)).fillMaxHeight(),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f), shadowElevation = 12.dp) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text("TVAtlas", Modifier.padding(12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                            TextButton(onClick = { tab = 1 }) { Text("播放列表") }
+                                            TextButton(onClick = { tab = 2 }) { Text("路由") }
+                                            TextButton(onClick = { tab = 3 }) { Text("设置") }
+                                        }
+                                        ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })
+                                    }
+                                }
                             }
                             else -> Column(Modifier.fillMaxSize()) {
                                 if (status.channelId != null) video(Modifier.fillMaxWidth().height(240.dp))
@@ -149,16 +167,16 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
             { addProxy = false; editProxyId = null }) { p, credentials, replace ->
             model.saveProxy(p, credentials, replace); addProxy = false; editProxyId = null
         }
-        if (detail != null) ChannelDialog(detail, library.profiles, status, { detailId = null },
+        if (detail != null) ChannelDialog(detail, library.profiles, library.playlists, status, { detailId = null },
             { streamId, target -> model.setRoute(detail.id, streamId, target) },
             { streamId -> model.play(detail, streamId); detailId = null })
     }
 }
 
-@Composable private fun ChannelList(library: Library, status: PlaybackStatus, tv: Boolean, modifier: Modifier,
+@Composable internal fun ChannelList(library: Library, status: PlaybackStatus, tv: Boolean, modifier: Modifier,
     onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
-    var collapsed by remember { mutableStateOf(emptySet<String>()) }
+    var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val firstFocus = remember { FocusRequester() }
     Column(modifier.padding(horizontal = 8.dp)) {
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
@@ -174,19 +192,18 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
                     item(key = "group:$group") {
-                        TextButton(onClick = { collapsed = if (group in collapsed) collapsed - group else collapsed + group }, modifier = Modifier.fillMaxWidth()) {
-                            Text("${if (group in collapsed) "+" else "−"}  $group", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
+                        TextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
+                            modifier = Modifier.fillMaxWidth().then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
+                            Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
                             Text("${channels.size}")
                         }
                     }
-                    if (group !in collapsed) items(channels, key = { it.id }) { channel ->
+                    if (group in expanded || query.isNotBlank()) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
-                            supportingContent = { Text("${channel.streams.size} 条线路") },
                             trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.primary) },
                             colors = ListItemDefaults.colors(containerColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent),
-                            modifier = Modifier.then(if (filtered.firstOrNull()?.id == channel.id && tv) Modifier.focusRequester(firstFocus) else Modifier)
-                                .onFocusChanged { focused = it.isFocused }
+                            modifier = Modifier.onFocusChanged { focused = it.isFocused }
                                 .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
@@ -201,29 +218,33 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, modifier: Modifier, diagnostics: Boolean,
-    onFullscreen: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
+@Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean,
+    onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()
     Column(modifier.background(Color.Black)) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { useController = true; keepScreenOn = true } }, onReset = null, update = { it.player = player },
+            else AndroidView(factory = { PlayerView(it).apply { useController = !tv; keepScreenOn = true; isFocusable = true; isFocusableInTouchMode = true; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
                         Key.DirectionDown -> { onChannel(1); true }
-                        Key.DirectionCenter, Key.Enter -> if (event.nativeKeyEvent.isLongPress) { onDetails(); true } else false
+                        Key.DirectionLeft -> if (tv) { onShowChannels(); true } else false
+                        Key.DirectionCenter, Key.Enter -> if (event.nativeKeyEvent.isLongPress) { onDetails(); true } else if (tv) { onShowChannels(); true } else false
                         else -> false
                     }
                 })
         }
         Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(status.message, Modifier.weight(1f).padding(8.dp), style = MaterialTheme.typography.bodySmall, maxLines = 2)
-            TextButton(onClick = onDetails, enabled = status.channelId != null) { Text("线路") }
+            TextButton(onClick = onDetails, enabled = status.channelId != null) { Text(status.attempt?.let { attempt ->
+                library.channels.firstOrNull { it.id == status.channelId }?.let { channel -> streamName(channel, attempt.streamId, library.playlists) }
+            } ?: "线路") }
+            status.attempt?.let { attempt -> Text(routeLabel(attempt.target, library.profiles), style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick = onFullscreen) { Text("全屏 / 频道") }
             TextButton(onClick = { model.stopPlayback() }, enabled = player != null) { Text("停止") }
         }
-        if (diagnostics && status.attempt != null) Text("${redactedUrl(status.attempt.streamUrl)}\n${routeLabel(status.attempt.target)} · ${status.attempt.matchedRule}" +
+        if (diagnostics && status.attempt != null) Text("${redactedUrl(status.attempt.streamUrl)}\n${routeLabel(status.attempt.target, library.profiles)} · ${status.attempt.matchedRule}" +
             (status.error?.let { "\n$it" } ?: ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -258,7 +279,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                 OutlinedButton(onClick = onExport) { Text("导出规则") }
             }
             Text("${library.rules.name} · ${library.rules.rules.size} 条规则", Modifier.padding(vertical = 12.dp))
-            Text("默认：${routeLabel(library.rules.defaultRoute)}", style = MaterialTheme.typography.bodySmall)
+            Text("默认：${routeLabel(library.rules.defaultRoute, library.profiles)}", style = MaterialTheme.typography.bodySmall)
             Button(onClick = onSubscribe, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) { Text("添加 Clash / Mihomo 订阅") }
             Text("粘贴订阅地址即可导入节点，在频道或线路菜单中选择使用。", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = onAdd) { Text("手动添加 HTTP / SOCKS5") }
@@ -274,14 +295,14 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
             } }
         }
         items(library.profiles, key = { it.id }) { p ->
-            Card(Modifier.fillMaxWidth()) { ListItem(headlineContent = { Text("${p.name} · ${p.id}") },
+            Card(Modifier.fillMaxWidth()) { ListItem(headlineContent = { Text(p.name) },
                 supportingContent = { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${p.host}:${p.port} · ${if (p.enabled) "启用" else "停用"}") },
                 trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
                     else TextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
         }
         items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
             ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text(matchLabel(rule.match), style = MaterialTheme.typography.bodySmall) },
-                trailingContent = { Text(routeLabel(rule.route)) })
+                trailingContent = { Text(routeLabel(rule.route, library.profiles)) })
         }
     }
 }
@@ -368,45 +389,60 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
     }) { Text("保存") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
 }
 
-@Composable private fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, status: PlaybackStatus, onDismiss: () -> Unit,
+@Composable internal fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, playlists: List<Playlist>, status: PlaybackStatus, onDismiss: () -> Unit,
     onRoute: (String?, RouteTarget?) -> Unit, onPlay: (String?) -> Unit) {
+    var selectedStreamId by remember(channel.id) {
+        mutableStateOf(status.attempt?.takeIf { status.channelId == channel.id }?.streamId)
+    }
+    val selectedStream = channel.streams.firstOrNull { it.id == selectedStreamId }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(channel.name) }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("频道路由：${channel.manualRoute?.let(::routeLabel) ?: "跟随规则"}")
-            RoutePicker(profiles, channel.manualRoute) { onRoute(null, it) }
-            if (status.channelId == channel.id) {
-                Text("最近成功：${date(status.successAt)}", style = MaterialTheme.typography.bodySmall)
-                status.attempt?.let { Text("${routeLabel(it.target)} · ${it.matchedRule}", style = MaterialTheme.typography.bodySmall) }
+            Text("线路", style = MaterialTheme.typography.labelLarge)
+            var lineMenu by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { lineMenu = true }, enabled = channel.streams.isNotEmpty()) {
+                    Text(selectedStream?.let { streamName(channel, it.id, playlists) } ?: "自动选线")
+                }
+                DropdownMenu(expanded = lineMenu, onDismissRequest = { lineMenu = false }) {
+                    DropdownMenuItem(text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
+                    channel.streams.forEach { stream ->
+                        DropdownMenuItem(text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
+                    }
+                }
             }
-            channel.streams.forEachIndexed { index, stream ->
-                HorizontalDivider()
-                Text("线路 ${index + 1}", style = MaterialTheme.typography.titleMedium)
-                Text(redactedUrl(stream.url), style = MaterialTheme.typography.bodySmall)
-                Text("成功：${date(stream.lastSuccessAt)} · 失败 ${stream.failureCount} 次", style = MaterialTheme.typography.bodySmall)
+            Text("频道代理", style = MaterialTheme.typography.labelLarge)
+            RoutePicker(profiles, channel.manualRoute) { onRoute(null, it) }
+            selectedStream?.let { stream ->
+                Text("当前线路代理", style = MaterialTheme.typography.labelLarge)
                 RoutePicker(profiles, stream.manualRoute) { onRoute(stream.id, it) }
-                OutlinedButton(onClick = { onPlay(stream.id) }) { Text("播放此线路") }
             }
         }
-    }, confirmButton = { TextButton(onClick = { onPlay(null) }) { Text("自动选线播放") } },
+    }, confirmButton = { TextButton(onClick = { onPlay(selectedStream?.id) }, enabled = channel.streams.isNotEmpty()) { Text("播放") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
 }
 
-@Composable private fun RoutePicker(profiles: List<ProxyProfile>, selected: RouteTarget?, onRoute: (RouteTarget?) -> Unit) {
+@Composable internal fun RoutePicker(profiles: List<ProxyProfile>, selected: RouteTarget?, onRoute: (RouteTarget?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { open = true }) { Text(selected?.let(::routeLabel) ?: "跟随规则") }
+        OutlinedButton(onClick = { open = true }) { Text(selected?.let { routeLabel(it, profiles) } ?: "跟随规则") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            val targets: List<Pair<String, RouteTarget?>> = listOf("恢复规则" to null, "AUTO" to RouteTarget.AUTO, "DIRECT" to RouteTarget.DIRECT) +
+            val targets: List<Pair<String, RouteTarget?>> = listOf("跟随规则" to null, "自动" to RouteTarget.AUTO, "直连" to RouteTarget.DIRECT) +
                 profiles.filter { it.enabled }.map { it.name to RouteTarget.proxy(it.id) }
             targets.forEach { (label, target) -> DropdownMenuItem(text = { Text(label) }, onClick = { onRoute(target); open = false }) }
         }
     }
 }
 
-private fun routeLabel(route: RouteTarget): String = when (route.type) {
-    RouteType.DIRECT -> "DIRECT"
-    RouteType.AUTO -> "AUTO"
-    RouteType.PROXY -> "PROXY · ${route.profile}"
+internal fun routeLabel(route: RouteTarget, profiles: List<ProxyProfile>): String = when (route.type) {
+    RouteType.DIRECT -> "直连"
+    RouteType.AUTO -> "自动"
+    RouteType.PROXY -> profiles.firstOrNull { it.id == route.profile }?.name ?: "节点已移除"
+}
+internal fun streamName(channel: Channel, id: String, playlists: List<Playlist>): String {
+    val stream = channel.streams.firstOrNull { it.id == id } ?: return "线路"
+    val name = playlists.firstOrNull { it.id == stream.sourcePlaylistId }?.name ?: "线路"
+    val siblings = channel.streams.filter { it.sourcePlaylistId == stream.sourcePlaylistId }
+    return if (siblings.size > 1) "$name ${siblings.indexOf(stream) + 1}" else name
 }
 private fun date(timestamp: Long?): String = timestamp?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it)) } ?: "暂无"
 private fun redactedUrl(url: String): String = runCatching {

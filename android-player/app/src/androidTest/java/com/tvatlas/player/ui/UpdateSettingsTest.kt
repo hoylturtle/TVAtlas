@@ -17,9 +17,9 @@ class UpdateSettingsTest {
     @Test fun newerVersionOffersDownloadAndCopiesLinkForTv() {
         val link = "https://github.com/hoylturtle/TVAtlas/actions/runs/123/artifacts/456"
         var download = false
-        val update = UpdateState(checked = true, release = PublishedUpdate(BuildConfig.VERSION_CODE + 1, "0.1.4", 23, "修复播放", link))
+        val update = UpdateState(checked = true, release = PublishedUpdate(BuildConfig.VERSION_CODE + 1, "0.1.5", 23, "修复播放", link))
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, {}, { download = true }) } }
-        compose.onNodeWithText("发现新版本：0.1.4").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("发现新版本：0.1.5").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("打开下载页面").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(download) }
         compose.onNodeWithText("复制下载链接").performScrollTo().performClick()

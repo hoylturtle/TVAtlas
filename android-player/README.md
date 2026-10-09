@@ -1,4 +1,4 @@
-# TVAtlas Player v0.1.3
+# TVAtlas Player v0.1.4
 
 面向 Android 手机、平板与 Android TV 的 IPTV 播放器。Android 6.0（API 23）及以上。
 
@@ -13,7 +13,9 @@
 
 同名频道合并，URL 去重。更新列表保留频道手动路由、仍存在的线路设置和成功历史；无效或空列表不会覆盖原有数据。
 
-手机竖屏显示频道列表和播放区，横屏进入全屏。平板/电视采用双栏。电视方向键选择频道，OK 播放，长按 OK 打开线路菜单；播放器区域上下键换台。所有表单与菜单提供可聚焦按钮。
+手机竖屏显示频道列表和播放区，横屏进入全屏。平板/电视采用播放器为主的深色布局，左侧频道面板可收起，选台后自动收起；返回、播放器上的 OK / 左键可打开频道面板。电视方向键选择频道，OK 播放，长按 OK 打开线路菜单；播放器区域上下键换台。所有表单与菜单提供可聚焦按钮。
+
+频道分组默认折叠，点击组名展开；搜索直接展示匹配频道，清空搜索恢复原展开状态。线路选择器使用播放列表名称，同一列表中的多条线路按序号区分；代理选择器只显示节点名称，不显示内部 ID 或地址。线路菜单改为紧凑下拉选择，保留自动选线、频道代理与单线路代理。视觉方向参考 [OpenIPTV 的界面说明](https://github.com/shayanline/OpenIPTV/blob/master/docs/design.md)，没有复制其业务实现。
 
 ## 构建与验证
 
@@ -24,7 +26,7 @@ python3 scripts/fetch_mihomo.py
 gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.3-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
+APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.4-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
 
 Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留节点 ID、失败更新保留旧数据，以及本地 SOCKS 监听到节点的实际转发。
 
@@ -60,6 +62,6 @@ HLS master、variant、分片和 key 共用播放会话路由；URL/域名规则
 
 代理用户名和密码通过 Android Keystore AES-GCM 加密，只保存在应用私有目录；关闭备份和设备转移。规则 JSON 不接受 password/token 等未知敏感字段，导出不包含凭证。诊断不显示 URL 路径或查询参数，错误记录仅保存受控类别和 HTTP 状态码。HTTP 与 SOCKS5 使用独立客户端，SOCKS5 认证不使用全局 Authenticator。
 
-v0.1.3 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
+v0.1.4 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
 
 CI 编译与模拟网络测试不能替代家庭网络和电视实机验收，参见 `DEVICE_ACCEPTANCE.md`。
