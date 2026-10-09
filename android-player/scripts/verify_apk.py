@@ -1,4 +1,5 @@
-"""Verify and name the installable v0.1.2 debug APK after Gradle checks pass."""
+"""Verify and name the installable v0.1.3 debug APK after Gradle checks pass."""
+import json
 import hashlib
 import os
 from pathlib import Path
@@ -13,9 +14,13 @@ sdk = Path(os.environ.get("ANDROID_HOME") or os.environ["ANDROID_SDK_ROOT"])
 tools = sdk / "build-tools/35.0.0"
 badging = subprocess.check_output([str(tools / "aapt"), "dump", "badging", str(apk)], text=True)
 assert "name='com.tvatlas.player'" in badging
-assert "versionName='0.1.2'" in badging
+assert "versionName='0.1.3'" in badging
 assert "sdkVersion:'23'" in badging
 assert "targetSdkVersion:'35'" in badging
+info = json.loads((root / "release-info.json").read_text())
+assert f"versionName='{info["versionName"]}'" in badging
+assert f"versionCode='{info["versionCode"]}'" in badging
+assert f"sdkVersion:'{info["minSdk"]}'" in badging
 signing = subprocess.check_output([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk)], text=True)
 with zipfile.ZipFile(apk) as archive:
     assert "AndroidManifest.xml" in archive.namelist()
@@ -24,7 +29,7 @@ with zipfile.ZipFile(apk) as archive:
         assert f"lib/{abi}/libmihomo.so" in archive.namelist(), f"Missing core for {abi}"
 dist = root / "dist"
 dist.mkdir(exist_ok=True)
-named = dist / "TVAtlas-Player-v0.1.2-debug.apk"
+named = dist / "TVAtlas-Player-v0.1.3-debug.apk"
 shutil.copyfile(apk, named)
 digest = hashlib.sha256(named.read_bytes()).hexdigest()
 counts = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
@@ -35,10 +40,10 @@ for module, task in [("core", "test"), ("app", "testDebugUnitTest")]:
         suite = ET.parse(result).getroot()
         for key in counts:
             counts[key] += int(suite.get(key, "0"))
-assert counts["tests"] >= 24 and counts["failures"] == counts["errors"] == counts["skipped"] == 0, counts
+assert counts["tests"] >= 28 and counts["failures"] == counts["errors"] == counts["skipped"] == 0, counts
 (dist / "SHA256SUMS.txt").write_text(f"{digest}  {named.name}\n")
 (dist / "build-info.txt").write_text(
-    f"TVAtlas Player v0.1.2 (debug signed)\nCommit: {os.environ.get('GITHUB_SHA', 'local')}\n"
+    f"TVAtlas Player v0.1.3 (debug signed)\nCommit: {os.environ.get('GITHUB_SHA', 'local')}\n"
     f"SHA-256: {digest}\nTests: {counts}\n\n{badging}\n{signing}"
 )
 print(badging.splitlines()[0])

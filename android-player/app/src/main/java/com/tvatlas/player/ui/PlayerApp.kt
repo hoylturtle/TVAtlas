@@ -39,6 +39,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.ui.PlayerView
 import com.tvatlas.core.model.*
 import com.tvatlas.core.routing.RuleCodec
+import com.tvatlas.player.BuildConfig
+import com.tvatlas.player.update.UpdateState
+import androidx.compose.ui.text.AnnotatedString
 import com.tvatlas.player.PlayerViewModel
 import com.tvatlas.player.playback.PlaybackStatus
 import com.tvatlas.player.storage.Credentials
@@ -56,6 +59,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
         val status by model.playback.status.collectAsStateWithLifecycle()
         val busy by model.busy.collectAsStateWithLifecycle()
         val message by model.message.collectAsStateWithLifecycle()
+        val update by model.update.collectAsStateWithLifecycle()
         val diagnostics by model.diagnostics.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
@@ -129,7 +133,7 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode)
-                    3 -> SettingsPage(diagnostics, model::showDiagnostics)
+                    3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload)
                 }
             }
         }
@@ -282,16 +286,37 @@ private val colors = darkColorScheme(primary = Color(0xFFFFB867), secondary = Co
     }
 }
 
-@Composable private fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit) {
+@Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
+    update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var linkCopied by remember(update.release?.downloadUrl) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("设置", style = MaterialTheme.typography.headlineMedium)
         ListItem(headlineContent = { Text("播放诊断") }, supportingContent = { Text("显示脱敏地址、路由、命中规则和错误类型") },
             trailingContent = { Switch(checked = diagnostics, onCheckedChange = onDiagnostics) })
+        Text("应用更新", style = MaterialTheme.typography.titleLarge)
+        Text("当前版本：${BuildConfig.VERSION_NAME}")
+        Button(onClick = onCheckUpdate, enabled = !update.checking) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
+        update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        update.release?.let { release ->
+            if (release.versionCode > BuildConfig.VERSION_CODE) {
+                Text("发现新版本：${release.versionName}", style = MaterialTheme.typography.titleMedium)
+                if (release.notes.isNotBlank()) Text(release.notes)
+                if (release.minSdk > android.os.Build.VERSION.SDK_INT) Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级")
+                else {
+                    Button(onClick = onDownload) { Text("打开下载页面") }
+                    Text("在 GitHub 登录后下载 ZIP，解压安装其中的 APK。调试签名可能变化；升级前记下播放列表地址、导出路由规则，卸载会清除旧数据。", style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { clipboard.setText(AnnotatedString(release.downloadUrl)); linkCopied = true }) {
+                    Text(if (linkCopied) "下载链接已复制" else "复制下载链接")
+                }
+            } else Text("已是最新版本")
+        }
         Text("遥控器操作", style = MaterialTheme.typography.titleLarge)
         Text("频道列表：方向键选择，OK 播放，长按 OK 查看线路。\n播放器：上下换台，长按 OK 查看线路；返回退出全屏。")
         Text("配置与隐私", style = MaterialTheme.typography.titleLarge)
         Text("代理凭证使用 Android Keystore 加密保存在本机。导出的规则不包含用户名或密码。播放历史仅保存在本机。")
-        Text("TVAtlas Player · 开发版 0.1.2 · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
+        Text("TVAtlas Player · 开发版 ${BuildConfig.VERSION_NAME} · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
         Text("Mihomo © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随安装包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
     }
 }

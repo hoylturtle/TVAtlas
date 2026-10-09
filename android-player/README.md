@@ -1,4 +1,4 @@
-# TVAtlas Player v0.1.2
+# TVAtlas Player v0.1.3
 
 面向 Android 手机、平板与 Android TV 的 IPTV 播放器。Android 6.0（API 23）及以上。
 
@@ -24,7 +24,7 @@ python3 scripts/fetch_mihomo.py
 gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.2-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
+APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.3-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
 
 Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留节点 ID、失败更新保留旧数据，以及本地 SOCKS 监听到节点的实际转发。
 
@@ -40,6 +40,12 @@ Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留�
 
 Mihomo 使用 GPL-3.0；许可和声明随应用提供。构建产物同时包含固定版本的对应源码及依赖，使用 `python3 scripts/fetch_mihomo.py --source` 可重新生成源码包。
 
+## 检查更新
+
+「设置 → 检查更新」显示当前版本、新版说明和下载入口。版本按整数 versionCode 比较，只采纳本仓库 Android Player 工作流的成功 push 构建，并要求存在未过期、版本匹配的 APK 产物。版本信息读取该成功构建提交的 `release-info.json`，不会读取尚未验证的分支 HEAD。更新失败可重试，不影响播放；不在后台自动下载或安装。
+
+「打开下载页面」使用系统浏览器打开 GitHub 安装包页面，需 GitHub 登录下载 ZIP 后解压 APK。没有浏览器的电视可以「复制下载链接」，在其他设备下载后传入安装。每次发新版需要同步 `release-info.json`、Gradle versionCode/versionName 和工作流产物名称；CI 校验这些信息一致。临时调试签名不保证覆盖安装，正式无损升级需稳定发行签名。
+
 ## 规则语义
 
 `schemaVersion: 1`。支持 channel / channelRegex / group / url / urlContains / domain / domainSuffix / playlistId。一个 match 中多个字段按 AND 匹配。优先级依次为线路手动、频道手动、精确 URL、精确域名、域名后缀/URL 关键词、精确频道、频道正则、分组、播放列表、默认路由。同一级显式 priority 越小越优先；相同 priority 按 JSON 顺序，未指定 priority 排在指定值后。
@@ -54,6 +60,6 @@ HLS master、variant、分片和 key 共用播放会话路由；URL/域名规则
 
 代理用户名和密码通过 Android Keystore AES-GCM 加密，只保存在应用私有目录；关闭备份和设备转移。规则 JSON 不接受 password/token 等未知敏感字段，导出不包含凭证。诊断不显示 URL 路径或查询参数，错误记录仅保存受控类别和 HTTP 状态码。HTTP 与 SOCKS5 使用独立客户端，SOCKS5 认证不使用全局 Authenticator。
 
-v0.1.2 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
+v0.1.3 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
 
 CI 编译与模拟网络测试不能替代家庭网络和电视实机验收，参见 `DEVICE_ACCEPTANCE.md`。

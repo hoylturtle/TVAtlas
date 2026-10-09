@@ -2,6 +2,8 @@ package com.tvatlas.player
 
 import android.app.Application
 import android.net.Uri
+import android.content.Intent
+import com.tvatlas.player.update.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.tvatlas.core.model.*
@@ -36,6 +38,33 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val busy = _busy.asStateFlow()
     private val operations = kotlinx.coroutines.sync.Mutex()
     private var playJob: Job? = null
+    private val updateClient = okhttp3.OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS).callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
+    private val updateRepository = UpdateRepository(updateClient)
+    private val _update = MutableStateFlow(UpdateState())
+    val update = _update.asStateFlow()
+    private var updateJob: Job? = null
+
+    fun checkUpdate() {
+        if (_update.value.checking) return
+        _update.value = UpdateState(checking = true)
+        updateJob = viewModelScope.launch {
+            try {
+                val release = withContext(Dispatchers.IO) { updateRepository.latest() }
+                _update.value = UpdateState(checked = true, release = release)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                _update.value = UpdateState(error = if (error is UpdateException) error.message else "检查更新失败，请检查网络后重试")
+            }
+        }
+    }
+    fun openUpdateDownload() {
+        val release = _update.value.release ?: return
+        if (release.versionCode <= BuildConfig.VERSION_CODE || release.minSdk > android.os.Build.VERSION.SDK_INT) return
+        try {
+            getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) { _message.value = "没有可用的浏览器，请复制下载链接，在其他设备下载安装包" }
+    }
 
     init {
         viewModelScope.launch {
@@ -129,6 +158,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun showDiagnostics(value: Boolean) = action { settings.diagnostics(value) }
     override fun onCleared() {
+        updateJob?.cancel(); updateClient.dispatcher.cancelAll()
         stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close()
     }
 }
