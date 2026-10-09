@@ -111,8 +111,8 @@ class PlaybackCoordinator(
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
         if (source != null) {
             val drmProvider = DefaultDrmSessionManagerProvider()
-            // No redirect following for license POSTs, so X-User-Token cannot leak to another host.
-            drmProvider.setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(requireNotNull(selectedClient)))
+            // Media3 can retry redirected license POSTs itself; constrain all token-bearing requests.
+            drmProvider.setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient))))
             mediaSourceFactory.setDrmSessionManagerProvider(drmProvider)
         }
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()

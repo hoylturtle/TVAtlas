@@ -46,6 +46,12 @@ class MyTvSuperSourceTest {
         assertEquals("com.tvb.mytvsuper.web", requests[1].header("App-Domain"))
         assertTrue(result.url.contains("/auto/index.mpd"))
     }
+    @Test fun redirectedLicenseCannotSendUserTokenToAnotherHost() {
+        val client = MyTvSuperSource.licenseClient(OkHttpClient())
+        val request = Request.Builder().url("https://evil.test/license")
+            .header("X-User-Token", "fixture-token").build()
+        assertThrows(IOException::class.java) { client.newCall(request).execute().close() }
+    }
     @Test fun httpErrorDoesNotExposeServerPayloadOrToken() = runBlocking {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(403).message("Forbidden")

@@ -49,6 +49,13 @@ object MyTvSuperSource {
             !url.encodedPath.endsWith("/index.mpd")) throw IOException("官方播放地址校验失败")
         return url.toString()
     }
+    fun licenseClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+        .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
+            val request = chain.request()
+            if (request.header("X-User-Token") != null && request.url.toString() != LICENSE)
+                throw IOException("拒绝向其他地址发送官方授权凭据")
+            chain.proceed(request)
+        }.build()
     suspend fun resolve(base: OkHttpClient): Playback {
         val cookies = mutableListOf<Cookie>()
         val client = base.newBuilder().followRedirects(false).followSslRedirects(false)
