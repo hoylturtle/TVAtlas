@@ -70,27 +70,27 @@ object MyTvSuperSource {
         try {
             val session = request(client, Request.Builder()
                 .url("https://www.mytvsuper.com/api/auth/getSession/self/?sub=live")
-                .header("Accept", "application/json").header("Referer", PAGE).build())
+                .header("Accept", "application/json").header("Referer", PAGE).build(), "访客会话")
             val token = parseSession(session)
             val checkout = request(client, Request.Builder()
                 .url("https://user-api.mytvsuper.com/v1/channel/checkout?platform=web&country_code=HK&network_code=J")
                 .header("Accept", "application/json").header("Referer", PAGE)
                 .header("Origin", "https://www.mytvsuper.com")
-                .header("App-Domain", "com.tvb.mytvsuper.web").header("Authorization", "Bearer $token").build())
+                .header("App-Domain", "com.tvb.mytvsuper.web").header("Authorization", "Bearer $token").build(), "播放配置")
             return Playback(parseCheckout(checkout), token)
         } finally { synchronized(cookies) { cookies.clear() } }
     }
-    private suspend fun request(client: OkHttpClient, request: Request): String = suspendCancellableCoroutine { continuation ->
+    private suspend fun request(client: OkHttpClient, request: Request, stage: String): String = suspendCancellableCoroutine { continuation ->
         val call = client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (continuation.isActive) continuation.resumeWithException(IOException("官方源连接失败，请检查网络和节点"))
+                if (continuation.isActive) continuation.resumeWithException(IOException("$stage 连接失败，请检查网络和节点"))
             }
             override fun onResponse(call: Call, response: Response) {
                 val result = runCatching {
                     response.use {
-                        if (!it.isSuccessful) throw IOException("官方源请求失败（HTTP ${it.code}）")
+                        if (!it.isSuccessful) throw IOException("$stage 请求失败（HTTP ${it.code}）")
                         val body = it.body ?: throw IOException("官方返回空响应")
                         val bytes = body.byteStream().use { stream ->
                             val out = java.io.ByteArrayOutputStream()

@@ -53,7 +53,7 @@ jobs:
             android-player/app/build/reports/
       - uses: actions/upload-artifact@v4
         with:
-          name: TVAtlas-Player-v0.1.5-debug
+          name: TVAtlas-Player-v0.1.6-debug
           path: android-player/dist/
           if-no-files-found: error
   native-smoke:

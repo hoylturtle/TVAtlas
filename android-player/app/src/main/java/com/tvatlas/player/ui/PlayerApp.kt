@@ -256,8 +256,12 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             TextButton(onClick = onFullscreen) { Text("全屏 / 频道") }
             TextButton(onClick = { model.stopPlayback() }, enabled = player != null) { Text("停止") }
         }
-        if (diagnostics && status.attempt != null) Text("${redactedUrl(status.attempt.streamUrl)}\n${routeLabel(status.attempt.target, library.profiles)} · ${status.attempt.matchedRule}" +
-            (status.error?.let { "\n$it" } ?: ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
+        if (player == null && status.error != null) Text("失败详情：${status.error}",
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp),
+            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        val diagnosticAttempt = status.attempt ?: status.lastAttempt
+        if (diagnostics && diagnosticAttempt != null) Text("${redactedUrl(diagnosticAttempt.streamUrl)}\n${routeLabel(diagnosticAttempt.target, library.profiles)} · ${diagnosticAttempt.matchedRule}" +
+            (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
     }
 }
 

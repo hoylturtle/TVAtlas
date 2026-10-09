@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 data class PlaybackStatus(
     val channelId: String? = null, val message: String = "添加播放列表后，选择频道开始观看",
-    val attempt: RouteAttempt? = null, val error: String? = null, val successAt: Long? = null,
+    val attempt: RouteAttempt? = null, val lastAttempt: RouteAttempt? = null, val error: String? = null, val successAt: Long? = null,
 )
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -77,7 +77,7 @@ class PlaybackCoordinator(
         }
         val stream = channel.streams.first { it.id == route.streamId }
         val official = MyTvSuperSource.recognizes(stream.url)
-        _status.value = _status.value.copy(attempt = route, successAt = null,
+        _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
             MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) })
@@ -197,6 +197,6 @@ class PlaybackCoordinator(
         generation++
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
-        if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null)
+        if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, lastAttempt = null, error = null)
     }
 }

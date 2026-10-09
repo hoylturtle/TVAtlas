@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "0.1.5",
+  "versionCode": 7,
+  "versionName": "0.1.6",
   "minSdk": 23,
-  "notes": "增加实验性官方翡翠台：动态访客会话、DASH 与 Widevine；请求走所选代理，凭据仅保存在内存。官方 Android 兼容性需设备实测。"
+  "notes": "修复线路全部失败后真实错误被隐藏的问题；失败详情始终显示，保留最后线路诊断；官方请求区分访客会话与播放配置阶段。官方 Android 实播和实际许可证接口仍待验证。"
 }
