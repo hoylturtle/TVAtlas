@@ -32,14 +32,16 @@ def fetch(path):
 def safe_context(text):
     def literal(match):
         content = match.group()[1:-1]
-        if '/api/auth/' in content and len(content) < 150:
+        if content.startswith(('/api/', '/v1/', '/v2/')) and len(content) < 150:
             return repr(content.split('?')[0])
+        if content in {'guest','self','web','cid','auth','post','get','GET','POST','free','web_auth','guest_mode'}:
+            return repr(content)
         if text[match.end():].lstrip().startswith(':') and re.fullmatch('[A-Za-z_]{1,40}', content):
             return repr(content)
         return '"<literal>"'
     text = re.sub(r'"(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27|`[^`]*`', literal, text)
     text = re.sub('[A-Za-z0-9_+/=-]{60,}', '<opaque>', text)
-    return text[:1400]
+    return text
 
 try:
     parser = Scripts()
@@ -48,6 +50,12 @@ try:
     for path in list(dict.fromkeys(parser.paths))[:45]:
         try:
             js = fetch(path)
+            if '/api/auth/getSession/self/' in js:
+                safe = safe_context(js)
+                pos = safe.find('/api/auth/getSession/self/')
+                focused = safe[max(0,pos-1000):pos+16000]
+                for offset in range(0,len(focused),1800):
+                    print('FRONTEND guest-flow part:', focused[offset:offset+1800])
             routes = sorted(set(re.findall(r'/api/auth/[A-Za-z0-9_/-]+', js)))
             if routes:
                 print('FRONTEND routes:', ', '.join(routes))
@@ -56,7 +64,7 @@ try:
                 continue
             print('FRONTEND script:', path)
             for match in matches[:8]:
-                print('FRONTEND context:', safe_context(js[max(0, match.start()-400):match.end()+650]))
+                print('FRONTEND context:', safe_context(js[max(0, match.start()-400):match.end()+650])[:1400])
         except Exception as error:
             print('FRONTEND script inspection failed:', type(error).__name__)
 except Exception as error:
