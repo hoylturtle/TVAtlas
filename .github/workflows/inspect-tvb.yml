@@ -1,0 +1,16 @@
+name: Inspect Official Frontend
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/tvatlas-player-v0.1.8-guest']
+    paths: ['.github/workflows/inspect-tvb.yml', 'android-player/scripts/inspect_mytvsuper_frontend.py']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public guest route definitions without credentials
+        run: python3 android-player/scripts/inspect_mytvsuper_frontend.py
