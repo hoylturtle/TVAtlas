@@ -106,7 +106,7 @@ object MyTvSuperSource {
                         chain.proceed(chain.request())
                     }.build()
                 request(bootstrap, Request.Builder().url(PAGE).header("Accept", "text/html")
-                    .header("Referer", "https://www.mytvsuper.com/").build(), "访客初始化", log)
+                    .header("Referer", "https://www.mytvsuper.com/").build(), "访客初始化", log, readBody = false)
                 val initialized = fetchSession()
                 try { parseSession(initialized) } catch (_: MissingGuestCredentials) {
                     throw IOException("官方页面初始化后仍未返回访客凭据，可能还需要网页访客创建步骤；请导出日志")
@@ -123,7 +123,7 @@ object MyTvSuperSource {
             return Playback(url, token)
         } finally { synchronized(cookies) { cookies.clear() } }
     }
-    private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?): String = suspendCancellableCoroutine { continuation ->
+    private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?, readBody: Boolean = true): String = suspendCancellableCoroutine { continuation ->
         val started = System.nanoTime()
         log?.event("INFO", "HTTP", "$stage start host=${request.url.host} method=${request.method}")
         val call = client.newCall(request)
@@ -138,6 +138,7 @@ object MyTvSuperSource {
                 val result = runCatching {
                     response.use {
                         if (!it.isSuccessful) throw IOException("$stage 请求失败（HTTP ${it.code}）")
+                        if (!readBody) return@use ""
                         val body = it.body ?: throw IOException("官方返回空响应")
                         val bytes = body.byteStream().use { stream ->
                             val out = java.io.ByteArrayOutputStream()

@@ -26,6 +26,16 @@ class SubscriptionPasteTest {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("subscription", "  $url\n"))
         }
+        // Android can deny clipboard reads transiently while window focus changes.
+        compose.waitUntil(timeoutMillis = 10000) {
+            var ready = false
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val clipboard = InstrumentationRegistry.getInstrumentation().targetContext
+                    .getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                ready = clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.trim() == url
+            }
+            ready
+        }
         compose.onNodeWithText("粘贴订阅地址").performClick()
         compose.onNode(hasSetTextAction() and hasText(url)).assertExists()
         compose.onNodeWithText("下载并导入").assertIsEnabled().performClick()

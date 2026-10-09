@@ -48,11 +48,14 @@ try:
     for path in list(dict.fromkeys(parser.paths))[:45]:
         try:
             js = fetch(path)
-            matches = list(re.finditer(r'/api/auth/|createGuest|createSession|guest_mode', js))
+            routes = sorted(set(re.findall(r'/api/auth/[A-Za-z0-9_/-]+', js)))
+            if routes:
+                print('FRONTEND routes:', ', '.join(routes))
+            matches = list(re.finditer(r'getSession|createGuest|loginGuest|guestLogin|/api/auth[^\"\']{0,60}guest', js, re.I))
             if not matches:
                 continue
             print('FRONTEND script:', path)
-            for match in matches[:12]:
+            for match in matches[:8]:
                 print('FRONTEND context:', safe_context(js[max(0, match.start()-400):match.end()+650]))
         except Exception as error:
             print('FRONTEND script inspection failed:', type(error).__name__)

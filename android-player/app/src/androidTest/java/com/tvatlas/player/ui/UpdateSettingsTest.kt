@@ -24,6 +24,16 @@ class UpdateSettingsTest {
         compose.runOnIdle { assertTrue(download) }
         compose.onNodeWithText("复制下载链接").performScrollTo().performClick()
         compose.onNodeWithText("下载链接已复制").assertExists()
+        // Android can deny clipboard reads transiently while window focus changes.
+        compose.waitUntil(timeoutMillis = 10000) {
+            var ready = false
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val clipboard = InstrumentationRegistry.getInstrumentation().targetContext
+                    .getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                ready = clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.trim() == link
+            }
+            ready
+        }
         compose.runOnIdle {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
