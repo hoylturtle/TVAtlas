@@ -47,7 +47,14 @@ try:
     parser = Scripts()
     parser.feed(fetch('/tc/live/81/'))
     print('FRONTEND public script count:', len(parser.paths))
-    for path in list(dict.fromkeys(parser.paths))[:45]:
+    paths = list(dict.fromkeys(parser.paths))
+    for path in list(paths):
+        if 'webpack-' in path:
+            runtime = fetch(path)
+            for chunk, digest in re.findall(r'(\d{1,5}):"([a-f0-9]{16})"', runtime):
+                if chunk in {'5973','3865','2639','7214'}:
+                    paths.append('/_next/static/chunks/' + chunk + '-' + digest + '.js')
+    for path in list(dict.fromkeys(paths))[:50]:
         try:
             js = fetch(path)
             if '/api/auth/getSession/self/' in js:
@@ -56,12 +63,12 @@ try:
                 focused = safe[max(0,pos-1000):pos+16000]
                 for offset in range(0,len(focused),1800):
                     print('FRONTEND guest-flow part:', focused[offset:offset+1800])
-            routes = sorted(set(re.findall(r'/api/auth/[A-Za-z0-9_/-]+', js)))
+            routes = sorted(set(re.findall(r'/api/[A-Za-z0-9_/-]+', js)))
             if routes:
                 print('FRONTEND routes:', ', '.join(routes))
             if 'webpack-' in path:
                 print('FRONTEND chunk-map:', safe_context(js[js.find('.u='):js.find('.u=')+30000]))
-            matches = list(re.finditer(r'/api/auth/(?:login|pairing)|[\"\']guest[\"\']|yt=|ot\(', js, re.I))
+            matches = list(re.finditer(r'[\"\'][^\"\']{0,70}guest[^\"\']{0,70}[\"\']|/api/[^\"\']{0,70}pairDevice', js, re.I))
             if not matches:
                 continue
             print('FRONTEND script:', path)
