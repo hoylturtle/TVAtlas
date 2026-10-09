@@ -57,23 +57,17 @@ try:
     for path in list(dict.fromkeys(paths))[:50]:
         try:
             js = fetch(path)
-            if '/api/auth/getSession/self/' in js:
-                safe = safe_context(js)
-                pos = safe.find('/api/auth/getSession/self/')
-                focused = safe[max(0,pos-1000):pos+16000]
-                for offset in range(0,len(focused),1800):
-                    print('FRONTEND guest-flow part:', focused[offset:offset+1800])
             routes = sorted(set(re.findall(r'/api/[A-Za-z0-9_/-]+', js)))
             if routes:
                 print('FRONTEND routes:', ', '.join(routes))
             if 'webpack-' in path:
                 print('FRONTEND chunk-map:', safe_context(js[js.find('.u='):js.find('.u=')+30000]))
-            matches = list(re.finditer(r'[\"\'][^\"\']{0,70}guest[^\"\']{0,70}[\"\']|/api/[^\"\']{0,70}pairDevice', js, re.I))
+            matches = list(re.finditer(r'getTrackingId:function|getGuestToken:function|var y=function\(e\)\{var t=e.device_pairing_action', js, re.I))
             if not matches:
                 continue
             print('FRONTEND script:', path)
             for match in matches[:25]:
-                print('FRONTEND context:', safe_context(js[max(0, match.start()-900):match.end()+1200])[:2400])
+                print('FRONTEND context:', safe_context(js[max(0, match.start()-900):match.end()+5500])[:7000])
         except Exception as error:
             print('FRONTEND script inspection failed:', type(error).__name__)
 except Exception as error:
