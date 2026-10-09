@@ -142,8 +142,9 @@ class MyTvSuperSourceTest {
         catch (e: IOException) { assertTrue(e.message!!.contains("未接受访客设备配对")); assertFalse(e.message!!.contains("fixture-private-error")) }
         assertEquals(listOf("/api/auth/getSession/self/", "/api/auth/pairDevice/"), paths)
     }
-    @Test fun nullRootTokenDoesNotHideNestedGuestToken() {
-        assertEquals("fixture-token", MyTvSuperSource.parseSession(session.replaceFirst("{", "{\"token\":null,")))
+    @Test fun emptyRootTokenDoesNotHideNestedGuestToken() {
+        for (value in listOf("null", "\"\""))
+            assertEquals("fixture-token", MyTvSuperSource.parseSession(session.replaceFirst("{", "{\"token\":$value,")))
     }
 
 }

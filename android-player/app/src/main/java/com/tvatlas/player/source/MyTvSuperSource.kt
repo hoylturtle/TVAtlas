@@ -36,7 +36,7 @@ object MyTvSuperSource {
         val root = Json.parseToJsonElement(text).jsonObject
         if (root["supported_country"]?.jsonPrimitive?.booleanOrNull != true)
             throw IOException("官方服务未接受当前地区，请检查所选节点")
-        val token = root["token"]?.jsonPrimitive?.contentOrNull
+        val token = root["token"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: (root["user"] as? JsonObject)?.get("token")?.jsonPrimitive?.contentOrNull
         if (token.isNullOrBlank() || token.length > 16384 || token.any { it == '\r' || it == '\n' })
             throw MissingGuestCredentials()
