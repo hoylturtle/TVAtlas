@@ -19,6 +19,8 @@ import java.io.ByteArrayOutputStream
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
+    val debugLog = com.tvatlas.player.debug.DebugLog(java.io.File(application.noBackupFilesDir, "debug/player.log"),
+        "TVAtlas ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) Android ${android.os.Build.VERSION.SDK_INT} ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
     private val database = PlayerDatabase.open(application)
     private val vault = CredentialVault(application)
     private val core = MihomoRuntime(application, vault)
@@ -31,7 +33,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val settings = SettingsStore(application)
     val library = repository.library.stateIn(viewModelScope, SharingStarted.Eagerly, Library(emptyList(), emptyList(), emptyList(), RuleConfig()))
     val diagnostics = settings.diagnostics.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope)
+    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog)
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
@@ -46,6 +48,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var updateJob: Job? = null
 
     fun checkUpdate() {
+        debugLog.event("INFO", "UPDATE", "check requested")
         if (_update.value.checking) return
         _update.value = UpdateState(checking = true)
         updateJob = viewModelScope.launch {
@@ -54,6 +57,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _update.value = UpdateState(checked = true, release = release)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
+                debugLog.error("UPDATE", error)
                 _update.value = UpdateState(error = if (error is UpdateException) error.message else "检查更新失败，请检查网络后重试")
             }
         }
@@ -77,9 +81,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             operations.lock()
             _busy.value = true
-            try { work(); if (success != null) _message.value = success }
+            try { work(); debugLog.event("INFO", "SETTINGS", success ?: "operation completed"); if (success != null) _message.value = success }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
+                debugLog.error("SETTINGS", error)
                 // Validation errors are controlled by our code. Parser/network messages may contain private data.
                 _message.value = if (error is IllegalArgumentException && error !is kotlinx.serialization.SerializationException)
                     error.message?.take(200) ?: "输入无效" else "操作失败，请检查输入配置或网络连接"
@@ -87,12 +92,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun dismissMessage() { _message.value = null }
-    fun refresh(playlist: Playlist) = action("播放列表已更新") { repository.refresh(playlist) }
+    fun refresh(playlist: Playlist) = action("播放列表已更新") { debugLog.event("INFO", "PLAYLIST", "refresh ${playlist.name}"); repository.refresh(playlist) }
     fun addPlaylist(name: String, url: String) = action("播放列表已添加") {
         require(name.isNotBlank()) { "请输入播放列表名称" }
         repository.refresh(Playlist(stableId(url.trim()), name.trim(), url.trim()))
     }
     fun play(channel: Channel, streamId: String? = null) {
+        debugLog.event("INFO", "PLAY", "requested channel=${channel.name} line=${streamId?.let { "selected" } ?: "automatic"}")
+        val routes = library.value.profiles.filter { it.enabled }
+        debugLog.event("INFO", "PROXY", "available=" + routes.joinToString { "${it.id}:${it.name}:${it.type}" })
         playJob?.cancel(); playback.stop(false)
         playJob = viewModelScope.launch {
             val current = library.value
@@ -102,11 +110,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun stopPlayback(showMessage: Boolean = true) { playJob?.cancel(); playback.stop(showMessage) }
     fun addSubscription(name: String, url: String) = action {
+        debugLog.event("INFO", "SUBSCRIPTION", "import requested name=$name")
         val skipped = subscriptionRepository.add(name, url)
         pool.update(library.value.profiles, true)
         _message.value = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个不支持的节点" else ""
     }
     fun refreshSubscription(id: String) = action("订阅已更新，节点路由设置已保留") {
+        debugLog.event("INFO", "SUBSCRIPTION", "refresh requested")
         subscriptionRepository.refresh(id); pool.update(library.value.profiles, true)
     }
     fun deleteSubscription(id: String) = action("订阅及其节点已移除") {
@@ -148,6 +158,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
         repository.importRules(text, library.value.profiles)
     }
+    fun clearLogs() { debugLog.clear() }
+    fun exportLogs(uri: Uri) = action("日志已导出") {
+        val text = debugLog.snapshot()
+        withContext(Dispatchers.IO) {
+            val output = getApplication<Application>().contentResolver.openOutputStream(uri, "wt") ?: error("无法创建日志文件")
+            output.bufferedWriter(Charsets.UTF_8).use { it.write(text) }
+        }
+    }
     fun exportRules(uri: Uri) = action("规则已导出（不包含凭证）") {
         val state = library.value
         val json = RuleCodec.export(state.rules.copy(proxies = state.profiles.filter { it.type != ProxyType.MIHOMO }))
@@ -159,6 +177,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun showDiagnostics(value: Boolean) = action { settings.diagnostics(value) }
     override fun onCleared() {
         updateJob?.cancel(); updateClient.dispatcher.cancelAll()
-        stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close()
+        stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close()
     }
 }

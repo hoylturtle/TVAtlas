@@ -71,6 +71,8 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         val wide = tv || config.screenWidthDp >= 840
         val landscape = !tv && config.screenWidthDp < 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        var logsOpen by rememberSaveable { mutableStateOf(false) }
+        val logLines by model.debugLog.lines.collectAsStateWithLifecycle()
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
         var landscapeChannels by rememberSaveable { mutableStateOf(false) }
@@ -83,6 +85,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         val detail = library.channels.firstOrNull { it.id == detailId }
         val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(model::importRules) }
         val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { it?.let(model::exportRules) }
+        val logExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { it?.let(model::exportLogs) }
         val snackbar = remember { SnackbarHostState() }
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
         val immersive = tab == 0 && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
@@ -154,10 +157,11 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode)
-                    3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload)
+                    3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload, { logsOpen = true })
                 }
             }
         }
+        if (logsOpen) DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
         if (addPlaylist) PlaylistDialog(busy, { addPlaylist = false }) { name, url -> model.addPlaylist(name, url); addPlaylist = false }
         if (addSubscription) SubscriptionDialog(busy, { addSubscription = false }) { name, url ->
             model.addSubscription(name, url); addSubscription = false
@@ -326,13 +330,14 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
 }
 
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
-    update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit) {
+    update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     var linkCopied by remember(update.release?.downloadUrl) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("设置", style = MaterialTheme.typography.headlineMedium)
         ListItem(headlineContent = { Text("播放诊断") }, supportingContent = { Text("显示脱敏地址、路由、命中规则和错误类型") },
             trailingContent = { Switch(checked = diagnostics, onCheckedChange = onDiagnostics) })
+        Button(onClick = onLogs) { Text("调试日志") }
         Text("应用更新", style = MaterialTheme.typography.titleLarge)
         Text("当前版本：${BuildConfig.VERSION_NAME}")
         Button(onClick = onCheckUpdate, enabled = !update.checking) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
@@ -493,4 +498,34 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
         }
     }, confirmButton = { TextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("下载并导入") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+}
+
+
+@Composable internal fun DebugLogDialog(lines: List<String>, snapshot: () -> String, onDismiss: () -> Unit,
+    onClear: () -> Unit, onExport: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("调试日志（${lines.size} 条）") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("最近 500 条，重启后保留；不记录完整地址、认证标头或响应正文。失败后导出即可排查。", style = MaterialTheme.typography.bodySmall)
+            Row {
+                TextButton(onClick = { clipboard.setText(AnnotatedString(snapshot())); copied = true }) { Text(if (copied) "已复制" else "复制日志") }
+                TextButton(onClick = onExport) { Text("导出 TXT") }
+                TextButton(onClick = { confirmClear = true }) { Text("清空") }
+            }
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (lines.isEmpty()) item { Text("暂无日志，请重试播放后查看") }
+                items(lines.asReversed()) { line ->
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(line, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
+    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清空日志？") },
+        text = { Text("将删除已保存的诊断记录。") },
+        confirmButton = { TextButton(onClick = { onClear(); copied = false; confirmClear = false }) { Text("确认清空") } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }

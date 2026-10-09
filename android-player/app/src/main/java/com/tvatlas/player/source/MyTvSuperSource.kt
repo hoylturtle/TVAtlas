@@ -49,14 +49,24 @@ object MyTvSuperSource {
             !url.encodedPath.endsWith("/index.mpd")) throw IOException("官方播放地址校验失败")
         return url.toString()
     }
-    fun licenseClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+    fun licenseClient(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): OkHttpClient = base.newBuilder()
         .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
             val request = chain.request()
             if (request.header("X-User-Token") != null && request.url.toString() != LICENSE)
                 throw IOException("拒绝向其他地址发送官方授权凭据")
-            chain.proceed(request)
+            val started = System.nanoTime()
+            val stage = if (request.header("X-User-Token") != null) "DRM_LICENSE" else "DRM_PROVISION"
+            log?.event("INFO", stage, "start host=${request.url.host} method=${request.method}")
+            try {
+                val response = chain.proceed(request)
+                log?.event("INFO", stage, "status=${response.code} elapsedMs=${(System.nanoTime() - started) / 1000000}")
+                response
+            } catch (error: IOException) {
+                log?.error(stage, error)
+                throw error
+            }
         }.build()
-    suspend fun resolve(base: OkHttpClient): Playback {
+    suspend fun resolve(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): Playback {
         val cookies = mutableListOf<Cookie>()
         val client = base.newBuilder().followRedirects(false).followSslRedirects(false)
             .callTimeout(20, TimeUnit.SECONDS).cookieJar(object : CookieJar {
@@ -70,24 +80,31 @@ object MyTvSuperSource {
         try {
             val session = request(client, Request.Builder()
                 .url("https://www.mytvsuper.com/api/auth/getSession/self/?sub=live")
-                .header("Accept", "application/json").header("Referer", PAGE).build(), "访客会话")
+                .header("Accept", "application/json").header("Referer", PAGE).build(), "访客会话", log)
             val token = parseSession(session)
+            log?.event("INFO", "SESSION", "accepted region; received session credentials")
             val checkout = request(client, Request.Builder()
                 .url("https://user-api.mytvsuper.com/v1/channel/checkout?platform=web&country_code=HK&network_code=J")
                 .header("Accept", "application/json").header("Referer", PAGE)
                 .header("Origin", "https://www.mytvsuper.com")
-                .header("App-Domain", "com.tvb.mytvsuper.web").header("Authorization", "Bearer $token").build(), "播放配置")
-            return Playback(parseCheckout(checkout), token)
+                .header("App-Domain", "com.tvb.mytvsuper.web").header("Authorization", "Bearer $token").build(), "播放配置", log)
+            val url = parseCheckout(checkout)
+            log?.event("INFO", "CHECKOUT", "free Jade DASH cenc_m automatic profile accepted")
+            return Playback(url, token)
         } finally { synchronized(cookies) { cookies.clear() } }
     }
-    private suspend fun request(client: OkHttpClient, request: Request, stage: String): String = suspendCancellableCoroutine { continuation ->
+    private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?): String = suspendCancellableCoroutine { continuation ->
+        val started = System.nanoTime()
+        log?.event("INFO", "HTTP", "$stage start host=${request.url.host} method=${request.method}")
         val call = client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                log?.event("ERROR", "HTTP", "$stage failed exception=${e.javaClass.simpleName} elapsedMs=${(System.nanoTime() - started) / 1000000}")
                 if (continuation.isActive) continuation.resumeWithException(IOException("$stage 连接失败，请检查网络和节点"))
             }
             override fun onResponse(call: Call, response: Response) {
+                log?.event("INFO", "HTTP", "$stage status=${response.code} elapsedMs=${(System.nanoTime() - started) / 1000000}")
                 val result = runCatching {
                     response.use {
                         if (!it.isSuccessful) throw IOException("$stage 请求失败（HTTP ${it.code}）")

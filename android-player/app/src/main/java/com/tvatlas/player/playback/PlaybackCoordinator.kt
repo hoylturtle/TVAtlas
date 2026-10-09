@@ -42,6 +42,7 @@ data class PlaybackStatus(
 class PlaybackCoordinator(
     private val context: Context, private val repository: PlayerRepository,
     private val pool: ProxyClientPool, private val scope: CoroutineScope,
+    private val log: com.tvatlas.player.debug.DebugLog? = null,
 ) {
     private val _player = MutableStateFlow<ExoPlayer?>(null)
     val player = _player.asStateFlow()
@@ -72,19 +73,23 @@ class PlaybackCoordinator(
         watcher?.cancel()
         _player.value?.release(); _player.value = null
         if (route == null) {
+            log?.event("ERROR", "PLAY", "all routes exhausted channel=${channel.name} detail=${_status.value.error}")
             _status.value = _status.value.copy(message = "${channel.name} 的可用线路均未成功，请检查播放源或路由设置", attempt = null)
             return
         }
         val stream = channel.streams.first { it.id == route.streamId }
         val official = MyTvSuperSource.recognizes(stream.url)
+        log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} rule=${route.matchedRule} official=$official")
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
-            MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) })
+            MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log)
         } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
+            log?.error("SOURCE", e)
             if (token != generation) return
             val reason = if (e is IOException) e.message ?: "官方源连接失败" else "官方响应格式不兼容"
+            log?.event("ERROR", "SOURCE", reason)
             _status.value = _status.value.copy(error = reason)
             repository.recordFailure(channel.id, route, reason)
             if (token == generation) attempt(channel, resolver, session?.fail(PlaybackFailure(FailureKind.NETWORK)), token)
@@ -112,12 +117,13 @@ class PlaybackCoordinator(
         if (source != null) {
             val drmProvider = DefaultDrmSessionManagerProvider()
             // Media3 can retry redirected license POSTs itself; constrain all token-bearing requests.
-            drmProvider.setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient))))
+            drmProvider.setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
             mediaSourceFactory.setDrmSessionManagerProvider(drmProvider)
         }
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
         _player.value = instance
         _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null)
+        log?.event("INFO", "PLAYER", "ExoPlayer created; DASH/DRM=${source != null}")
         var lastLoadType = C.DATA_TYPE_UNKNOWN
         var loadErrorAt = 0L
         var failing = false
@@ -126,12 +132,14 @@ class PlaybackCoordinator(
             failing = true
             val reason = drmCode?.let { "官方 DRM 授权失败（$it），请确认设备支持 Widevine；网页会话可能不兼容 Android" }
                 ?: (failure.kind.name + (failure.httpStatus?.let { " HTTP $it" } ?: ""))
+            log?.event("ERROR", "FAILOVER", reason)
             _status.value = _status.value.copy(message = "连接暂不可用，正在尝试其他线路", error = reason)
             preparation = scope.launch {
                 if (token != generation) return@launch
                 repository.recordFailure(channel.id, route, reason)
                 if (token == generation) {
                     val refresh = official && failure.httpStatus in listOf(401, 403) && renewed.add(route)
+                    log?.event("INFO", "FAILOVER", "refreshSession=$refresh")
                     attempt(channel, resolver, if (refresh) route else session?.fail(failure), token)
                 }
             }
@@ -139,16 +147,25 @@ class PlaybackCoordinator(
         instance.addAnalyticsListener(object : AnalyticsListener {
             override fun onLoadStarted(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData) {
                 if (mediaLoadData.dataType == C.DATA_TYPE_MEDIA) mediaRequests.add(loadEventInfo.dataSpec.uri.toString())
+                if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) log?.event("INFO", "MANIFEST", "start host=${loadEventInfo.uri.host}")
             }
             override fun onLoadCompleted(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData) {
                 mediaRequests.remove(loadEventInfo.dataSpec.uri.toString())
+                if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) log?.event("INFO", "MANIFEST", "loaded bytes=${loadEventInfo.bytesLoaded} elapsedMs=${loadEventInfo.loadDurationMs}")
             }
             override fun onLoadError(eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo, mediaLoadData: MediaLoadData, error: IOException, wasCanceled: Boolean) {
-                if (!wasCanceled) { lastLoadType = mediaLoadData.dataType; loadErrorAt = SystemClock.elapsedRealtime() }
+                if (!wasCanceled) {
+                    val http = generateSequence<Throwable>(error) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+                    log?.event("WARN", "MEDIA", "loadType=${mediaLoadData.dataType} host=${loadEventInfo.uri.host} http=$http exception=${error.javaClass.simpleName}")
+                    lastLoadType = mediaLoadData.dataType; loadErrorAt = SystemClock.elapsedRealtime() }
             }
         })
         instance.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) { log?.event("INFO", "PLAYER", "state=$playbackState (1=idle 2=buffering 3=ready 4=ended)") }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { log?.event("INFO", "PLAYER", "isPlaying=$isPlaying") }
             override fun onPlayerError(error: PlaybackException) {
+                log?.event("ERROR", "PLAYER", "code=${error.errorCode} name=${error.errorCodeName}")
+                log?.error("PLAYER", error)
                 val http = generateSequence<Throwable>(error) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
                 val kind = when {
                     error.errorCode in 4000..4999 -> FailureKind.DECODER
@@ -182,18 +199,21 @@ class PlaybackCoordinator(
                 previousPosition = instance.currentPosition
                 if (progressing || !instance.playWhenReady) waitingSince = now
                 if (gate.update(now, progressing, mediaBytes.get())) {
+                    log?.event("INFO", "PLAY", "confirmed media bytes and progress channel=${channel.name}")
                     repository.recordSuccess(channel.id, route)
                     if (token == generation && instance === _player.value) {
                         _status.value = _status.value.copy(message = "正在播放 ${channel.name}", error = null, successAt = System.currentTimeMillis())
                     }
                 }
                 if (instance.playWhenReady && now - waitingSince >= 20000) {
+                    log?.event("WARN", "PLAYER", "no progress for 20 seconds")
                     fail(PlaybackFailure(if (lastLoadType == C.DATA_TYPE_MEDIA) FailureKind.SEGMENT else FailureKind.NETWORK))
                 }
             }
         }
     }
     fun stop(showMessage: Boolean = true) {
+        log?.event("INFO", "PLAY", "stop showMessage=$showMessage")
         generation++
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
