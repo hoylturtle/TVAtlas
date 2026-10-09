@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 package com.tvatlas.player.ui
 
 import androidx.compose.material3.MaterialTheme
