@@ -60,4 +60,45 @@ class MyTvSuperSourceTest {
         try { MyTvSuperSource.resolve(client); fail("Expected failure") }
         catch (e: IOException) { assertTrue(e.message!!.contains("403")); assertFalse(e.message!!.contains("secret-token")) }
     }
+    @Test fun missingCredentialsAreDistinctFromRejectedRegion() {
+        val missing = """{"supported_country":true,"country_code":"HK"}"""
+        assertThrows(MyTvSuperSource.MissingGuestCredentials::class.java) { MyTvSuperSource.parseSession(missing) }
+        val summary = MyTvSuperSource.sessionSummary(session)
+        assertTrue(summary.contains("tokenAtRoot=true"))
+        assertFalse(summary.contains("fixture-token"))
+    }
+    @Test fun guestInitializationRetriesSessionOnceBeforeCheckout() = runBlocking {
+        val paths = mutableListOf<String>()
+        var sessions = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            val request = chain.request()
+            paths.add(request.url.encodedPath)
+            val body = when {
+                request.url.encodedPath.contains("getSession") -> {
+                    sessions++
+                    if (sessions == 1) """{"supported_country":true,"country_code":"HK"}""" else session
+                }
+                request.url.host == "www.mytvsuper.com" -> "<html>official guest page</html>"
+                else -> checkout()
+            }
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(body.toResponseBody()).build()
+        }.build()
+        assertEquals("fixture-token", MyTvSuperSource.resolve(client).userToken)
+        assertEquals(2, sessions)
+        assertEquals(listOf("/api/auth/getSession/self/", "/tc/live/81/", "/api/auth/getSession/self/", "/v1/channel/checkout"), paths)
+    }
+    @Test fun missingCredentialsAfterBootstrapFailWithoutLoopingOrCheckout() = runBlocking {
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            val request = chain.request()
+            Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body((if (request.url.encodedPath.contains("getSession")) """{"supported_country":true}""" else "<html></html>").toResponseBody()).build()
+        }.build()
+        try { MyTvSuperSource.resolve(client); fail("Expected missing credentials") }
+        catch (e: IOException) { assertTrue(e.message!!.contains("初始化后仍未返回")) }
+        assertEquals(3, requests)
+    }
+
 }

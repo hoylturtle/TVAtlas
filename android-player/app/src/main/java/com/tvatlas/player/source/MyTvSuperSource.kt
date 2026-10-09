@@ -21,6 +21,15 @@ object MyTvSuperSource {
             url.encodedPath.trimEnd('/') in setOf("/tc/live/81", "/tc/live/81/%E7%BF%A1%E7%BF%A0%E5%8F%B0")
     }
     data class Playback(val url: String, val userToken: String)
+    class MissingGuestCredentials : IOException("官方访客会话未返回有效凭据，需要完成访客初始化")
+    fun sessionSummary(text: String): String {
+        val root = Json.parseToJsonElement(text).jsonObject
+        val country = root["country_code"]?.jsonPrimitive?.contentOrNull?.takeIf { it.matches(Regex("[A-Z]{2}")) } ?: "unknown"
+        val rootToken = root["token"] as? JsonPrimitive
+        val userToken = (root["user"] as? JsonObject)?.get("token") as? JsonPrimitive
+        return "supported_country=${(root["supported_country"] as? JsonPrimitive)?.booleanOrNull} country=$country " +
+            "tokenAtRoot=${!rootToken?.contentOrNull.isNullOrBlank()} tokenInUser=${!userToken?.contentOrNull.isNullOrBlank()}"
+    }
     fun parseSession(text: String): String {
         val root = Json.parseToJsonElement(text).jsonObject
         if (root["supported_country"]?.jsonPrimitive?.booleanOrNull != true)
@@ -28,7 +37,7 @@ object MyTvSuperSource {
         val token = root["token"]?.jsonPrimitive?.contentOrNull
             ?: (root["user"] as? JsonObject)?.get("token")?.jsonPrimitive?.contentOrNull
         if (token.isNullOrBlank() || token.length > 16384 || token.any { it == '\r' || it == '\n' })
-            throw IOException("官方访客会话未返回有效凭据")
+            throw MissingGuestCredentials()
         return token
     }
     fun parseCheckout(text: String): String {
@@ -78,10 +87,31 @@ object MyTvSuperSource {
                 }
             }).build()
         try {
-            val session = request(client, Request.Builder()
-                .url("https://www.mytvsuper.com/api/auth/getSession/self/?sub=live")
-                .header("Accept", "application/json").header("Referer", PAGE).build(), "访客会话", log)
-            val token = parseSession(session)
+            suspend fun fetchSession(): String {
+                val response = request(client, Request.Builder()
+                    .url("https://www.mytvsuper.com/api/auth/getSession/self/?sub=live")
+                    .header("Accept", "application/json").header("Referer", PAGE).build(), "访客会话", log)
+                log?.event("INFO", "SESSION", sessionSummary(response) +
+                    " authCookiePresent=" + synchronized(cookies) { cookies.any { it.name == "auth" && it.expiresAt > System.currentTimeMillis() } })
+                return response
+            }
+            val token = try { parseSession(fetchSession()) } catch (_: MissingGuestCredentials) {
+                log?.event("INFO", "SESSION_BOOTSTRAP", "missing credentials; initialize official guest page once")
+                // Normal official page navigation only. Keep cookies on this route and reject external redirects.
+                val bootstrap = client.newBuilder().followRedirects(true).followSslRedirects(false)
+                    .addNetworkInterceptor { chain ->
+                        val url = chain.request().url
+                        if (url.scheme != "https" || url.host != "www.mytvsuper.com" || url.port != 443)
+                            throw IOException("官方访客初始化跳转地址不受支持")
+                        chain.proceed(chain.request())
+                    }.build()
+                request(bootstrap, Request.Builder().url(PAGE).header("Accept", "text/html")
+                    .header("Referer", "https://www.mytvsuper.com/").build(), "访客初始化", log)
+                val initialized = fetchSession()
+                try { parseSession(initialized) } catch (_: MissingGuestCredentials) {
+                    throw IOException("官方页面初始化后仍未返回访客凭据，可能还需要网页访客创建步骤；请导出日志")
+                }
+            }
             log?.event("INFO", "SESSION", "accepted region; received session credentials")
             val checkout = request(client, Request.Builder()
                 .url("https://user-api.mytvsuper.com/v1/channel/checkout?platform=web&country_code=HK&network_code=J")

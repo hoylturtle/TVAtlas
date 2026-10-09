@@ -31,6 +31,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Inspect public official guest initialization routes
+        run: python3 scripts/inspect_mytvsuper_frontend.py
       - name: Bundle checksum-verified Mihomo Android cores
         run: python3 scripts/fetch_mihomo.py
       - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
@@ -53,7 +55,7 @@ jobs:
             android-player/app/build/reports/
       - uses: actions/upload-artifact@v4
         with:
-          name: TVAtlas-Player-v0.1.7-debug
+          name: TVAtlas-Player-v0.1.8-debug
           path: android-player/dist/
           if-no-files-found: error
   native-smoke:

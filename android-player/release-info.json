@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "0.1.7",
+  "versionCode": 9,
+  "versionName": "0.1.8",
   "minSdk": 23,
-  "notes": "增加调试日志：记录播放阶段、路由、官方请求状态和耗时、DRM 与播放器错误；支持查看、复制、导出 TXT、清空，脱敏并限制最近 500 条／512 KB。"
+  "notes": "缺少访客 token 时通过同一路由访问官方页面建立 Cookie，最多重试会话一次；日志增加地区及凭据存在标志，不记录值。实际访客创建和 Android 播放兼容性仍需验证。"
 }
