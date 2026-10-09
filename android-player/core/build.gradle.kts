@@ -5,5 +5,6 @@ plugins {
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+    implementation("org.yaml:snakeyaml:2.4")
     testImplementation("junit:junit:4.13.2")
 }

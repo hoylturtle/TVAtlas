@@ -56,6 +56,7 @@ object RuleCodec {
         require(config.proxies.map { it.id }.distinct().size == config.proxies.size) { "代理 ID 重复" }
         require(config.rules.map { it.id }.distinct().size == config.rules.size) { "规则 ID 重复" }
         config.proxies.forEach(::validateProxy)
+        require(config.proxies.none { it.type == ProxyType.MIHOMO }) { "订阅节点须通过订阅导入；规则仅引用节点 ID" }
         val ids = (existingProxies + config.proxies).map { it.id }.toSet()
         fun checkRoute(route: RouteTarget) {
             when (route.type) {

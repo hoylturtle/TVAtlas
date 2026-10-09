@@ -16,10 +16,10 @@ import java.security.MessageDigest
         fun proxy(id: String) = RouteTarget(RouteType.PROXY, id)
     }
 }
-@Serializable enum class ProxyType { HTTP, SOCKS5 }
+@Serializable enum class ProxyType { HTTP, SOCKS5, MIHOMO }
 @Serializable data class ProxyProfile(
     val id: String, val name: String, val type: ProxyType, val host: String,
-    val port: Int, val enabled: Boolean = true,
+    val port: Int, val enabled: Boolean = true, val subscriptionId: String? = null,
 )
 data class Playlist(
     val id: String, val name: String, val url: String, val enabled: Boolean = true,
