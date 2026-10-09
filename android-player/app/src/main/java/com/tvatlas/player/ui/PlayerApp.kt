@@ -220,6 +220,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     LaunchedEffect(tv, library.channels.isNotEmpty()) {
         if (tv && library.channels.isNotEmpty()) {
             inputMode.requestInputMode(InputMode.Keyboard)
+            withFrameNanos { } // LazyColumn group buttons must be laid out before focus is requested.
             runCatching { firstFocus.requestFocus() }
         }
     }
