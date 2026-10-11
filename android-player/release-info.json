@@ -2,7 +2,7 @@
   "versionCode": 17,
   "versionName": "0.1.16",
   "minSdk": 23,
-  "notes": "电视专用导航与并排播放预览；遥控器焦点使用明显底色和白色边框；新增明珠台及 TVB Plus 官方免费动态线路；修复检查更新在界面线程请求导致 GitHub 连接失败，保留代理下载和手机扫码输入。",
+  "notes": "电视专用导航与并排播放预览；遥控器焦点使用明显底色和白色边框；新增明珠台、TVB Plus 及 ViuTV 官方免费动态线路；修复检查更新在界面线程请求导致 GitHub 连接失败，保留代理下载和手机扫码输入。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
   "releaseTag": "v0.1.16-beta.1"
 }

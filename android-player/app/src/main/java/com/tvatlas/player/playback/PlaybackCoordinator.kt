@@ -80,12 +80,14 @@ class PlaybackCoordinator(
             return
         }
         val stream = channel.streams.first { it.id == route.streamId }
-        val official = MyTvSuperSource.recognizes(stream.url)
+        val viu = com.tvatlas.player.source.ViuTvSource.recognizes(stream.url)
+        val official = MyTvSuperSource.recognizes(stream.url) || viu
         log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} proxy=${pool.label(route.target)} rule=${route.matchedRule} official=$official")
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
-            MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
+            if (viu) com.tvatlas.player.source.ViuTvSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log)
+            else MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
         } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
             log?.error("SOURCE", e)
@@ -116,11 +118,12 @@ class PlaybackCoordinator(
                 }
             })
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
-        if (source != null) {
+        if (source != null && source.drmRequired) {
             // Media3 can retry redirected license POSTs itself; constrain all token-bearing requests.
             val callback = HttpMediaDrmCallback(source.licenseUrl, true,
-                OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
-            MyTvSuperSource.licenseHeaders(source.userToken).forEach { (key, value) -> callback.setKeyRequestProperty(key, value) }
+                OkHttpDataSource.Factory(if (viu) com.tvatlas.player.source.ViuTvSource.licenseClient(requireNotNull(selectedClient), source.userToken, log)
+                    else MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
+            if (!viu) MyTvSuperSource.licenseHeaders(source.userToken).forEach { (key, value) -> callback.setKeyRequestProperty(key, value) }
             // This source uses a web guest entitlement. The official web player requests
             // SW_SECURE_CRYPTO; select the corresponding Widevine software implementation.
             val manager = DefaultDrmSessionManager.Builder()
@@ -203,11 +206,12 @@ class PlaybackCoordinator(
             }
         })
         val item = if (source == null) MediaItem.fromUri(route.streamUrl) else MediaItem.Builder()
-            .setUri(source.url).setMimeType(MimeTypes.APPLICATION_MPD)
-            .setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
-                .setLicenseUri(source.licenseUrl)
-                .setLicenseRequestHeaders(MyTvSuperSource.licenseHeaders(source.userToken))
-                .build()).build()
+            .setUri(source.url).setMimeType(source.mimeType).apply {
+                if (source.drmRequired) setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
+                    .setLicenseUri(source.licenseUrl)
+                    .setLicenseRequestHeaders(if (viu) emptyMap() else MyTvSuperSource.licenseHeaders(source.userToken))
+                    .build())
+            }.build()
         instance.setMediaItem(item)
         instance.prepare(); instance.playWhenReady = true
         watcher = scope.launch {

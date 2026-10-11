@@ -42,7 +42,8 @@ object MyTvSuperSource {
         "Origin" to "https://www.mytvsuper.com", "Referer" to PAGE,
     )
     fun recognizes(value: String): Boolean = channel(value) != null
-    data class Playback(val url: String, val userToken: String, val licenseUrl: String = LICENSE)
+    data class Playback(val url: String, val userToken: String, val licenseUrl: String = LICENSE, val drmRequired: Boolean = true,
+        val mimeType: String = "application/dash+xml")
     class MissingGuestCredentials : IOException("官方访客会话未返回有效凭据，需要完成访客初始化")
     fun sessionSummary(text: String): String {
         val root = Json.parseToJsonElement(text).jsonObject

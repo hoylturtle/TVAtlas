@@ -201,7 +201,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                             modifier = Modifier.fillMaxWidth().then(if (tv) Modifier.tvFocusOutline() else Modifier)
                                 .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
                                 .then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
-                            Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
+                            Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
                             Text("${channels.size}")
                         }
                     }
@@ -211,7 +211,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                             trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.primary) },
                             colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent, headlineColor = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
                             modifier = Modifier.onFocusChanged { focused = it.isFocused }
-                                .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
                                         event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress) { onDetails(channel); true } else false
@@ -339,7 +339,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         items(library.profiles, key = { it.id }) { p ->
             Card(Modifier.fillMaxWidth()) { ListItem(headlineContent = { Text(p.name) },
                 supportingContent = { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${p.host}:${p.port} · ${if (p.enabled) "启用" else "停用"}") },
-                trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
+                trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
                     else TvTextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
         }
         items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
@@ -359,7 +359,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("设置", style = MaterialTheme.typography.headlineMedium)
         ListItem(headlineContent = { Text("播放诊断") }, supportingContent = { Text("显示脱敏地址、路由、命中规则和错误类型") },
-            trailingContent = { Switch(checked = diagnostics, onCheckedChange = onDiagnostics) })
+            trailingContent = { Switch(modifier = Modifier.tvFocusOutline(), checked = diagnostics, onCheckedChange = onDiagnostics) })
         TvButton(onClick = onLogs) { Text("调试日志") }
         Text("应用更新", style = MaterialTheme.typography.titleLarge)
         Text("当前版本：${BuildConfig.VERSION_NAME}")
@@ -403,9 +403,9 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     Box {
         TvOutlinedButton(onClick = { expanded = true }, enabled = enabled) { Text(routeLabel(selected, profiles)) }
         DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
+            DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
             profiles.filter { it.enabled }.forEach { profile ->
-                DropdownMenuItem(text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
+                DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
             }
         }
     }
@@ -484,9 +484,9 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                     Text(selectedStream?.let { streamName(channel, it.id, playlists) } ?: "自动选线")
                 }
                 DropdownMenu(expanded = lineMenu, onDismissRequest = { lineMenu = false }) {
-                    DropdownMenuItem(text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
+                    DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
                     channel.streams.forEach { stream ->
-                        DropdownMenuItem(text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
+                        DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
                     }
                 }
             }
@@ -508,7 +508,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             val targets: List<Pair<String, RouteTarget?>> = listOf("跟随规则" to null, "自动" to RouteTarget.AUTO, "直连" to RouteTarget.DIRECT) +
                 profiles.filter { it.enabled }.map { it.name to RouteTarget.proxy(it.id) }
-            targets.forEach { (label, target) -> DropdownMenuItem(text = { Text(label) }, onClick = { onRoute(target); open = false }) }
+            targets.forEach { (label, target) -> DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(label) }, onClick = { onRoute(target); open = false }) }
         }
     }
 }
