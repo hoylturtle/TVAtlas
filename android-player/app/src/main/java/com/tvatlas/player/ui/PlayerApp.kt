@@ -100,7 +100,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         Scaffold(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!immersive && !theater) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!tv && !immersive && !theater) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("TVAtlas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("选频道，即可观看", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
@@ -108,14 +108,16 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                     if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             }, bottomBar = {
-                if (!immersive && !theater) NavigationBar {
+                if (!tv && !immersive && !theater) NavigationBar {
                     listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
                     }
                 }
             }) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (tv && !immersive) TvNavigation(tab, { tab = it; channelPanelOpen = true }, Modifier.fillMaxHeight())
+                Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
@@ -135,19 +137,20 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
-                            wide -> Box(Modifier.fillMaxSize()) {
-                                video(Modifier.fillMaxSize())
-                                Surface(Modifier.width((config.screenWidthDp * 0.52f).dp.coerceIn(300.dp, 520.dp)).fillMaxHeight(),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f), shadowElevation = 12.dp) {
+                            wide -> Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Surface(Modifier.width(if (tv) 300.dp else 340.dp).fillMaxHeight(),
+                                    color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
                                     Column(Modifier.padding(12.dp)) {
-                                        Text("TVAtlas", Modifier.padding(12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                            TextButton(onClick = { tab = 1 }) { Text("播放列表") }
-                                            TextButton(onClick = { tab = 2 }) { Text("路由") }
-                                            TextButton(onClick = { tab = 3 }) { Text("设置") }
-                                        }
+                                        Text("频道", Modifier.padding(8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                                         ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })
                                     }
+                                }
+                                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(library.channels.firstOrNull { it.id == status.channelId }?.name ?: "选择频道开始观看",
+                                        style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    video(Modifier.weight(1f).fillMaxWidth())
+                                    if (tv) Text("↑↓ 选择频道   确认 播放   长按确认 线路 / 代理   返回 全屏",
+                                        color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                             else -> Column(Modifier.fillMaxSize()) {
@@ -163,6 +166,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         { removeSubscription = it }, model::enableNode)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate)
+                }
                 }
             }
         }
@@ -192,6 +196,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
+        if (tv) Text("确认展开分组 · 长按频道设置线路", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Text("${library.channels.size} 个频道", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.labelLarge)
         if (library.channels.isEmpty()) {
@@ -206,7 +211,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
                     item(key = "group:$group") {
                         TextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().then(if (tv) Modifier.tvFocusOutline() else Modifier)
                                 .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
                                 .then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
                             Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
@@ -244,7 +249,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     val player by model.playback.player.collectAsStateWithLifecycle()
     PlayerPaneLayout(fillPicture, modifier, picture = {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = true; isFocusableInTouchMode = true; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player },
+            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = true; isFocusableInTouchMode = true; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player; if (pictureFocused && !it.hasFocus()) it.post { it.requestFocus() } },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
@@ -255,6 +260,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                     }
                 })
         }, controls = {
+        if (tv && pictureFocused) Text("↑↓ 换台   确认 / ← 频道菜单   长按确认 线路设置", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         VideoControls(status.message, status.attempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
         } ?: "线路", status.attempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),

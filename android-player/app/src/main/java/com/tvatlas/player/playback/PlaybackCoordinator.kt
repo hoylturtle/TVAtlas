@@ -85,7 +85,7 @@ class PlaybackCoordinator(
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
-            MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log)
+            MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
         } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
             log?.error("SOURCE", e)
@@ -118,7 +118,7 @@ class PlaybackCoordinator(
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
         if (source != null) {
             // Media3 can retry redirected license POSTs itself; constrain all token-bearing requests.
-            val callback = HttpMediaDrmCallback(MyTvSuperSource.LICENSE, true,
+            val callback = HttpMediaDrmCallback(source.licenseUrl, true,
                 OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
             MyTvSuperSource.licenseHeaders(source.userToken).forEach { (key, value) -> callback.setKeyRequestProperty(key, value) }
             // This source uses a web guest entitlement. The official web player requests
@@ -205,7 +205,7 @@ class PlaybackCoordinator(
         val item = if (source == null) MediaItem.fromUri(route.streamUrl) else MediaItem.Builder()
             .setUri(source.url).setMimeType(MimeTypes.APPLICATION_MPD)
             .setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
-                .setLicenseUri(MyTvSuperSource.LICENSE)
+                .setLicenseUri(source.licenseUrl)
                 .setLicenseRequestHeaders(MyTvSuperSource.licenseHeaders(source.userToken))
                 .build()).build()
         instance.setMediaItem(item)

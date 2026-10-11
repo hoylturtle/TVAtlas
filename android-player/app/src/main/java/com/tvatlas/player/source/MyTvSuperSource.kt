@@ -11,23 +11,38 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Only the official Jade page is treated as a dynamic source. Never persist session credentials. */
+/** Official free TVB channels. Never persist session credentials or signed stream URLs. */
 object MyTvSuperSource {
     const val PAGE = "https://www.mytvsuper.com/tc/live/81/"
     const val PLAYLIST = "#EXTM3U\n#EXTINF:-1 tvg-id=\"Jade.hk\" group-title=\"香港\",翡翠台\n$PAGE\n"
+    const val PEARL_PAGE = "https://www.mytvsuper.com/tc/live/84/"
+    const val PLUS_PAGE = "https://www.mytvsuper.com/tc/live/82/"
+    data class OfficialChannel(val page: String, val network: String, val name: String, val tvgId: String)
+    val channels = listOf(OfficialChannel(PAGE, "J", "翡翠台", "Jade.hk"),
+        OfficialChannel(PEARL_PAGE, "P", "明珠台", "Pearl.hk"),
+        OfficialChannel(PLUS_PAGE, "B", "TVB Plus", "TVBPlus.hk"))
+    fun channel(value: String): OfficialChannel? {
+        val url = value.toHttpUrlOrNull() ?: return null
+        if (url.scheme != "https" || url.host != "www.mytvsuper.com" || url.username.isNotEmpty() ||
+            url.password.isNotEmpty() || url.query != null || url.fragment != null) return null
+        return channels.firstOrNull { entry ->
+            val path = entry.page.toHttpUrlOrNull()!!.encodedPath.trimEnd('/')
+            url.encodedPath.trimEnd('/') == path || (entry.network == "J" &&
+                url.encodedPath.trimEnd('/') == "$path/%E7%BF%A1%E7%BF%A0%E5%8F%B0")
+        }
+    }
+    fun playlist(value: String): String {
+        val entry = requireNotNull(channel(value))
+        return "#EXTM3U\n#EXTINF:-1 tvg-id=\"${entry.tvgId}\" group-title=\"香港\",${entry.name}\n${entry.page}\n"
+    }
     const val LICENSE = "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_J_h264"
     fun licenseHeaders(userToken: String) = mapOf(
         "X-User-Token" to userToken, "X-Client-Platform" to "web_android",
         "X-Service-Id" to "super", "Content-Type" to "application/octet-stream",
         "Origin" to "https://www.mytvsuper.com", "Referer" to PAGE,
     )
-    fun recognizes(value: String): Boolean {
-        val url = value.toHttpUrlOrNull() ?: return false
-        return url.scheme == "https" && url.host == "www.mytvsuper.com" && url.username.isEmpty() &&
-            url.password.isEmpty() && url.query == null && url.fragment == null &&
-            url.encodedPath.trimEnd('/') in setOf("/tc/live/81", "/tc/live/81/%E7%BF%A1%E7%BF%A0%E5%8F%B0")
-    }
-    data class Playback(val url: String, val userToken: String)
+    fun recognizes(value: String): Boolean = channel(value) != null
+    data class Playback(val url: String, val userToken: String, val licenseUrl: String = LICENSE)
     class MissingGuestCredentials : IOException("官方访客会话未返回有效凭据，需要完成访客初始化")
     fun sessionSummary(text: String): String {
         val root = Json.parseToJsonElement(text).jsonObject
@@ -47,13 +62,13 @@ object MyTvSuperSource {
             throw MissingGuestCredentials()
         return token
     }
-    fun parseCheckout(text: String): String {
+    fun parseCheckout(text: String, network: String = "J"): String {
         val root = Json.parseToJsonElement(text).jsonObject
-        if (root["content_id"]?.jsonPrimitive?.contentOrNull != "ott_J_h264" ||
+        if (root["content_id"]?.jsonPrimitive?.contentOrNull != "ott_${network}_h264" ||
             root["protocol"]?.jsonPrimitive?.contentOrNull != "dash" ||
             root["drm"]?.jsonPrimitive?.contentOrNull != "cenc_m" ||
             root["video_stage"]?.jsonPrimitive?.contentOrNull != "free")
-            throw IOException("官方播放配置不受支持（仅接入免费翡翠台 DASH）")
+            throw IOException("官方播放配置不受支持（仅接入免费 TVB DASH）")
         val profiles = root["profiles"]?.jsonArray?.map { it.jsonObject }.orEmpty()
         val profile = profiles.firstOrNull { it["quality"]?.jsonPrimitive?.contentOrNull == "auto" }
             ?: profiles.firstOrNull { it["quality"]?.jsonPrimitive?.contentOrNull == "high" }
@@ -68,7 +83,7 @@ object MyTvSuperSource {
     fun licenseClient(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): OkHttpClient = base.newBuilder()
         .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
             val request = chain.request()
-            if (request.header("X-User-Token") != null && request.url.toString() != LICENSE)
+            if (request.header("X-User-Token") != null && request.url.toString() !in channels.map { "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_${it.network}_h264" })
                 throw IOException("拒绝向其他地址发送官方授权凭据")
             val started = System.nanoTime()
             val stage = if (request.header("X-User-Token") != null) "DRM_LICENSE" else "DRM_PROVISION"
@@ -82,7 +97,8 @@ object MyTvSuperSource {
                 throw error
             }
         }.build()
-    suspend fun resolve(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): Playback {
+    suspend fun resolve(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null, page: String = PAGE): Playback {
+        val entry = channel(page) ?: throw IOException("不支持的官方频道")
         val cookies = mutableListOf<Cookie>()
         val client = base.newBuilder().followRedirects(false).followSslRedirects(false)
             .callTimeout(20, TimeUnit.SECONDS).cookieJar(object : CookieJar {
@@ -130,13 +146,13 @@ object MyTvSuperSource {
             }
             log?.event("INFO", "SESSION", "accepted region; received session credentials")
             val checkout = request(client, Request.Builder()
-                .url("https://user-api.mytvsuper.com/v1/channel/checkout?platform=web&country_code=HK&network_code=J")
+                .url("https://user-api.mytvsuper.com/v1/channel/checkout?platform=web&country_code=HK&network_code=${entry.network}")
                 .header("Accept", "application/json").header("Referer", PAGE)
                 .header("Origin", "https://www.mytvsuper.com")
                 .header("App-Domain", "com.tvb.mytvsuper.web").header("Authorization", "Bearer $token").build(), "播放配置", log)
-            val url = parseCheckout(checkout)
-            log?.event("INFO", "CHECKOUT", "free Jade DASH cenc_m automatic profile accepted")
-            return Playback(url, token)
+            val url = parseCheckout(checkout, entry.network)
+            log?.event("INFO", "CHECKOUT", "free ${entry.network} DASH cenc_m automatic profile accepted")
+            return Playback(url, token, "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_${entry.network}_h264")
         } finally { synchronized(cookies) { cookies.clear() } }
     }
     private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?): String = suspendCancellableCoroutine { continuation ->
