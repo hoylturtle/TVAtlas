@@ -33,6 +33,7 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -117,7 +118,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
-                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen,
+                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, wide || immersive,
                                 { if (wide) channelPanelOpen = !channelPanelOpen else if (immersive) { fullscreen = false; landscapeChannels = true } else fullscreen = true },
                                 { channelPanelOpen = true; fullscreen = false; landscapeChannels = true },
                                 { detailId = status.channelId }, { offset ->
@@ -149,7 +150,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                                 }
                             }
                             else -> Column(Modifier.fillMaxSize()) {
-                                if (status.channelId != null) video(Modifier.fillMaxWidth().height(240.dp))
+                                if (status.channelId != null) video(Modifier.fillMaxWidth())
                                 ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })
                             }
                         }
@@ -237,13 +238,12 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean,
+@Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean,
     onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()
-    Column(modifier.background(Color.Black)) {
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+    PlayerPaneLayout(fillPicture, modifier, picture = {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { useController = !tv; keepScreenOn = true; isFocusable = true; isFocusableInTouchMode = true; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player },
+            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = true; isFocusableInTouchMode = true; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
@@ -253,22 +253,45 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         else -> false
                     }
                 })
-        }
-        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(status.message, Modifier.weight(1f).padding(8.dp), style = MaterialTheme.typography.bodySmall, maxLines = 2)
-            TextButton(onClick = onDetails, enabled = status.channelId != null) { Text(status.attempt?.let { attempt ->
-                library.channels.firstOrNull { it.id == status.channelId }?.let { channel -> streamName(channel, attempt.streamId, library.playlists) }
-            } ?: "线路") }
-            status.attempt?.let { attempt -> Text(routeLabel(attempt.target, library.profiles), style = MaterialTheme.typography.bodySmall) }
-            TextButton(onClick = onFullscreen) { Text("全屏 / 频道") }
-            TextButton(onClick = { model.stopPlayback() }, enabled = player != null) { Text("停止") }
-        }
+        }, controls = {
+        VideoControls(status.message, status.attempt?.let { attempt ->
+            library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
+        } ?: "线路", status.attempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
+            status.channelId != null, player != null, onDetails, onFullscreen, model::stopPlayback)
+
         if (player == null && status.error != null) Text("失败详情：${status.error}",
             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp),
             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         val diagnosticAttempt = status.attempt ?: status.lastAttempt
         if (diagnostics && diagnosticAttempt != null) Text("${redactedUrl(diagnosticAttempt.streamUrl)}\n${routeLabel(diagnosticAttempt.target, library.profiles)} · ${diagnosticAttempt.matchedRule}" +
             (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
+        })
+}
+
+
+@Composable internal fun PlayerPaneLayout(fillPicture: Boolean, modifier: Modifier = Modifier,
+    picture: @Composable () -> Unit, controls: @Composable () -> Unit) {
+    Column(modifier.background(Color.Black)) {
+        val viewport = if (fillPicture) Modifier.weight(1f).fillMaxWidth()
+            else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+        Box(viewport, contentAlignment = Alignment.Center) { picture() }
+        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) { controls() }
+    }
+}
+
+@Composable internal fun VideoControls(status: String, line: String, proxy: String,
+    canDetails: Boolean, canStop: Boolean, onDetails: () -> Unit, onFullscreen: () -> Unit, onStop: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (proxy.isNotBlank()) Text(proxy, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {
+            Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        TextButton(onClick = onFullscreen, modifier = Modifier.weight(1f)) { Text("全屏 / 频道", maxLines = 1) }
+        TextButton(onClick = onStop, enabled = canStop, modifier = Modifier.weight(1f)) { Text("停止", maxLines = 1) }
     }
 }
 
