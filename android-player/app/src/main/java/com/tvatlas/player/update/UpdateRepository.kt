@@ -8,15 +8,18 @@ import java.io.IOException
 
 class UpdateException(message: String) : IOException(message)
 const val REPOSITORY_URL = "https://github.com/hoylturtle/TVAtlas"
-data class PublishedUpdate(val versionCode: Int, val versionName: String, val minSdk: Int, val notes: String, val downloadUrl: String)
-data class UpdateState(val checking: Boolean = false, val checked: Boolean = false, val release: PublishedUpdate? = null, val error: String? = null)
+const val RELEASE_CERTIFICATE_SHA256 = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
+data class PublishedUpdate(val versionCode: Int, val versionName: String, val minSdk: Int, val notes: String,
+    val downloadUrl: String, val apkSha256: String = "", val apkSize: Long = 0)
+data class UpdateState(val checking: Boolean = false, val checked: Boolean = false, val release: PublishedUpdate? = null,
+    val error: String? = null, val downloading: Boolean = false, val downloadProgress: Int = 0, val apkReady: Boolean = false)
 
 /** Public Release assets only; previews are included for this testing build. */
 class UpdateRepository(
     private val client: OkHttpClient,
     private val api: String = "https://api.github.com/repos/hoylturtle/TVAtlas",
     private val web: String = REPOSITORY_URL,
-    private val signingCertificateSha256: String = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
+    private val signingCertificateSha256: String = RELEASE_CERTIFICATE_SHA256,
 ) {
     fun latest(): PublishedUpdate {
         // /latest excludes prereleases. This app deliberately follows the public testing channel.
@@ -52,7 +55,9 @@ class UpdateRepository(
             val apk = uploaded.firstOrNull {
                 it.text("name") == apkName && it.text("browser_download_url") == prefix + apkName
             } ?: continue
-            val candidate = PublishedUpdate(code, version, sdk, info.text("notes").take(1000), apk.text("browser_download_url"))
+            val size = info["apkSize"]?.jsonPrimitive?.longOrNull ?: continue
+            if (size !in 1..MAX_UPDATE_APK_BYTES || apk["size"]?.jsonPrimitive?.longOrNull != size) continue
+            val candidate = PublishedUpdate(code, version, sdk, info.text("notes").take(1000), apk.text("browser_download_url"), info.text("apkSha256"), size)
             if (newest == null || candidate.versionCode > newest.versionCode) newest = candidate
         }
         return newest ?: throw UpdateException("暂未找到公开的测试版安装包，请打开仓库查看 Releases")

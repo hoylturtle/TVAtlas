@@ -160,7 +160,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
-                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute)
+                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate)
                 }
             }
         }
@@ -335,7 +335,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.DIRECT, onUpdateRoute: (RouteTarget) -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.DIRECT, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     var linkCopied by remember(update.release?.downloadUrl) { mutableStateOf(false) }
     var repositoryCopied by remember { mutableStateOf(false) }
@@ -346,10 +346,10 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         Button(onClick = onLogs) { Text("调试日志") }
         Text("应用更新", style = MaterialTheme.typography.titleLarge)
         Text("当前版本：${BuildConfig.VERSION_NAME}")
-        Button(onClick = onCheckUpdate, enabled = !update.checking) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
+        Button(onClick = onCheckUpdate, enabled = !update.checking && !update.downloading) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
         update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Text("更新网络", style = MaterialTheme.typography.titleMedium)
-        UpdateNetworkPicker(profiles, updateRoute, !update.checking, onUpdateRoute)
+        UpdateNetworkPicker(profiles, updateRoute, !update.checking && !update.downloading, onUpdateRoute)
         Text("检查更新可使用已导入的代理节点。打开仓库由浏览器处理，请确保浏览器也能访问 GitHub。", style = MaterialTheme.typography.bodySmall)
         OutlinedButton(onClick = onRepository) { Text("打开 GitHub 仓库") }
         TextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }) {
@@ -361,8 +361,10 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 if (release.notes.isNotBlank()) Text(release.notes)
                 if (release.minSdk > android.os.Build.VERSION.SDK_INT) Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级")
                 else {
-                    Button(onClick = onDownload) { Text("下载新版 APK") }
-                    Text("直接下载公开测试版 APK，无需 GitHub 登录。下载完成后打开 APK，确认安装即可覆盖更新并保留配置。", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onDownload, enabled = !update.downloading) { Text(if (update.downloading) "下载中 ${update.downloadProgress}%" else "下载新版 APK") }
+                    if (update.downloading) LinearProgressIndicator(progress = { update.downloadProgress / 100f })
+                    if (update.apkReady) Button(onClick = onInstall) { Text("安装更新") }
+                    Text("APP 通过选定的更新网络下载 APK，核对校验值和签名后，点击安装更新并按系统提示确认。无需 GitHub 登录，覆盖安装保留配置。", style = MaterialTheme.typography.bodySmall)
                 }
                 TextButton(onClick = { clipboard.setText(AnnotatedString(release.downloadUrl)); linkCopied = true }) {
                     Text(if (linkCopied) "下载链接已复制" else "复制下载链接")

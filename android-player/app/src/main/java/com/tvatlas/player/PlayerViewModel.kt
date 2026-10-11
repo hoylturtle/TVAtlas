@@ -44,23 +44,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _update = MutableStateFlow(UpdateState())
     val update = _update.asStateFlow()
     private var updateJob: Job? = null
+    private var downloadJob: Job? = null
+    private var downloadedApk: java.io.File? = null
 
     fun checkUpdate() {
         debugLog.event("INFO", "UPDATE", "check requested")
-        if (_update.value.checking) return
+        if (_update.value.checking || _update.value.downloading) return
+        downloadedApk = null
         _update.value = UpdateState(checking = true)
         updateJob = viewModelScope.launch {
             try {
-                val target = settings.updateRoute.first()
-                val release = withContext(Dispatchers.IO) {
-                    val profiles = library.value.profiles
-                    core.update(profiles); pool.update(profiles)
-                    debugLog.event("INFO", "UPDATE_ROUTE", "route=${target.type} proxy=${pool.label(target)}")
-                    val client = pool.client(target).newBuilder().followRedirects(true).followSslRedirects(false)
-                        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS).callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
-                    UpdateRepository(client).latest()
-                }
+                val release = UpdateRepository(updateClient(false)).latest()
                 _update.value = UpdateState(checked = true, release = release)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
@@ -75,12 +69,56 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: Exception) { _message.value = "没有可用的浏览器，请复制仓库链接到其他设备打开" }
     }
+    private suspend fun updateClient(download: Boolean): okhttp3.OkHttpClient = withContext(Dispatchers.IO) {
+        val target = settings.updateRoute.first()
+        val profiles = library.value.profiles
+        core.update(profiles); pool.update(profiles)
+        debugLog.event("INFO", "UPDATE_ROUTE", "route=${target.type} proxy=${pool.label(target)} download=$download")
+        pool.client(target).newBuilder().followRedirects(true).followSslRedirects(false)
+            .connectTimeout(if (download) 10 else 5, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(if (download) 30 else 8, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(if (download) 300 else 8, java.util.concurrent.TimeUnit.SECONDS).build()
+    }
     fun openUpdateDownload() {
         val release = _update.value.release ?: return
-        if (release.versionCode <= BuildConfig.VERSION_CODE || release.minSdk > android.os.Build.VERSION.SDK_INT) return
+        if (_update.value.downloading || release.versionCode <= BuildConfig.VERSION_CODE || release.minSdk > android.os.Build.VERSION.SDK_INT) return
+        downloadedApk = null
+        _update.value = _update.value.copy(downloading = true, downloadProgress = 0, apkReady = false, error = null)
+        downloadJob = viewModelScope.launch {
+            val file = java.io.File(getApplication<Application>().cacheDir, "updates/TVAtlas-Player-v${release.versionName}-release.apk")
+            try {
+                ApkDownloader(updateClient(true)).download(release, file) { progress ->
+                    _update.update { it.copy(downloadProgress = progress) }
+                }
+                withContext(Dispatchers.IO) { verifyDownloadedApk(getApplication<Application>(), file, release) }
+                downloadedApk = file
+                _update.update { it.copy(downloading = false, downloadProgress = 100, apkReady = true) }
+                debugLog.event("INFO", "UPDATE_DOWNLOAD", "verified version=${release.versionName}")
+                _message.value = "下载完成，请点击安装更新"
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                file.delete()
+                debugLog.error("UPDATE_DOWNLOAD", error)
+                _update.update { it.copy(downloading = false, apkReady = false,
+                    error = if (error is UpdateException) error.message else "下载失败，请切换更新网络后重试") }
+            }
+        }
+    }
+    fun installUpdate() {
+        val file = downloadedApk ?: return
+        if (!_update.value.apkReady || !file.isFile) { _message.value = "安装包已清理，请重新下载"; return }
+        val app = getApplication<Application>()
         try {
-            getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (_: Exception) { _message.value = "没有可用的浏览器，请复制下载链接，在其他设备下载安装包" }
+            if (android.os.Build.VERSION.SDK_INT >= 26 && !app.packageManager.canRequestPackageInstalls()) {
+                _message.value = "请允许 TVAtlas 安装应用，返回后点击安装更新"
+                app.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(app, "${app.packageName}.updates", file)
+            app.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        } catch (_: Exception) { _message.value = "无法打开系统安装界面，可复制下载链接安装" }
     }
 
     init {
@@ -191,6 +229,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun showDiagnostics(value: Boolean) = action { settings.diagnostics(value) }
     override fun onCleared() {
         updateJob?.cancel()
+        downloadJob?.cancel()
         stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close()
     }
 }

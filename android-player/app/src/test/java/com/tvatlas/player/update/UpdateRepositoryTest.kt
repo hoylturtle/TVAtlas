@@ -11,7 +11,7 @@ class UpdateRepositoryTest {
     private val certificate = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
     private fun manifest(version: String = "0.1.13", code: Int = 14, cert: String = certificate) = """
         {"versionCode":$code,"versionName":"$version","minSdk":23,"notes":"测试版",
-         "releaseTag":"v$version-beta.1","commit":"$sha","signingCertificateSha256":"$cert","apkSha256":"${"b".repeat(64)}"}
+         "releaseTag":"v$version-beta.1","commit":"$sha","signingCertificateSha256":"$cert","apkSize":1000,"apkSha256":"${"b".repeat(64)}"}
     """.trimIndent()
     private fun release(server: MockWebServer, version: String = "0.1.13", draft: Boolean = false,
         apkName: String = "TVAtlas-Player-v$version-release.apk", foreignUrl: Boolean = false): String {
@@ -55,7 +55,7 @@ class UpdateRepositoryTest {
     }
     @Test fun certificateAndTagAndCommitMustMatchPublishedRelease() {
         val invalid = listOf(manifest(cert = "c".repeat(64)), manifest().replace("v0.1.13-beta.1", "v0.1.12-beta.1"),
-            manifest().replace(sha, "d".repeat(40)), manifest().replace("b".repeat(64), "invalid"))
+            manifest().replace(sha, "d".repeat(40)), manifest().replace("b".repeat(64), "invalid"), manifest().replace("1000", "1001"))
         for (info in invalid) MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("[${release(server)}]"))
             server.enqueue(MockResponse().setBody(info))
