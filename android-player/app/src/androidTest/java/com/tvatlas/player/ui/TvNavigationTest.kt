@@ -34,7 +34,7 @@ class TvNavigationTest {
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         var played = false
         compose.setContent {
-            MaterialTheme { CompositionLocalProvider(LocalTvMode provides true, LocalDensity provides Density(1f)) {
+            MaterialTheme(colorScheme = colors) { CompositionLocalProvider(LocalTvMode provides true, LocalDensity provides Density(1f)) {
                 Row(Modifier.requiredSize(960.dp, 540.dp).testTag("tv-layout")) {
                     TvNavigation(0, {}, Modifier.fillMaxHeight())
                     Box(Modifier.weight(1f)) { TvBrowseLayout(true, "翡翠台",
@@ -54,7 +54,7 @@ class TvNavigationTest {
     }
     @Test fun remoteCanMoveAndConfirmWithoutTouch() {
         var selected = 0
-        compose.setContent { MaterialTheme { TvNavigation(selected, { selected = it }) } }
+        compose.setContent { MaterialTheme(colorScheme = colors) { TvNavigation(selected, { selected = it }) } }
         compose.onNodeWithText("直播").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithText("直播").performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithText("播放列表").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
