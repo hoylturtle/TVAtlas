@@ -46,7 +46,7 @@ class UpdateSettingsTest {
         val update = UpdateState(checked = true, release = PublishedUpdate(BuildConfig.VERSION_CODE + 1, "0.1.5", 23, "修复播放", link))
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, {}, { download = true }) } }
         compose.onNodeWithText("发现新版本：0.1.5").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("打开下载页面").performScrollTo().performClick()
+        compose.onNodeWithText("下载新版 APK").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(download) }
         compose.onNodeWithText("复制下载链接").performScrollTo().performClick()
         compose.onNodeWithText("下载链接已复制").assertExists()
@@ -71,7 +71,7 @@ class UpdateSettingsTest {
         val update = UpdateState(checked = true, release = PublishedUpdate(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 23, "", ""))
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, { checked = true }, {}) } }
         compose.onNodeWithText("已是最新版本").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("打开下载页面").assertDoesNotExist()
+        compose.onNodeWithText("下载新版 APK").assertDoesNotExist()
         compose.onNodeWithText("检查更新").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(checked) }
     }

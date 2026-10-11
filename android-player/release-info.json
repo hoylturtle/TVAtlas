@@ -1,7 +1,8 @@
 {
-  "versionCode": 13,
-  "versionName": "0.1.12",
+  "versionCode": 14,
+  "versionName": "0.1.13",
   "minSdk": 23,
-  "notes": "设置新增打开 GitHub 仓库、复制仓库链接；检查更新支持选择已导入的代理节点并保存选择，改善 GitHub 直连失败提示。",
-  "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
+  "notes": "公开测试版：通过 GitHub Releases 检测更新并直接下载签名 APK，无需登录或解压；保留代理更新网络、默认频道订阅和 DRM 实验性兼容修正。",
+  "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
+  "releaseTag": "v0.1.13-beta.1"
 }

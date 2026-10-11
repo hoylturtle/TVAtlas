@@ -8,30 +8,75 @@ import org.junit.Test
 
 class UpdateRepositoryTest {
     private val sha = "a".repeat(40)
-    private fun run(id: Int, conclusion: String = "success") = """{"id":$id,"status":"completed","conclusion":"$conclusion","event":"push","head_branch":"main","head_sha":"$sha"}"""
-    private val info = """{"versionCode":5,"versionName":"0.1.4","minSdk":23,"notes":"修复播放","signingCertificateSha256":"7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878","downloadUrl":"https://untrusted.invalid/app.apk"}"""
-    private fun artifact(expired: Boolean = false) = """{"artifacts":[{"id":99,"name":"TVAtlas-Player-v0.1.4-release","expired":$expired}]}"""
-    private fun repository(server: MockWebServer) = UpdateRepository(OkHttpClient(), server.url("/api").toString(), server.url("/raw").toString(), "https://github.com/hoylturtle/TVAtlas")
+    private val certificate = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
+    private fun manifest(version: String = "0.1.13", code: Int = 14, cert: String = certificate) = """
+        {"versionCode":$code,"versionName":"$version","minSdk":23,"notes":"测试版",
+         "releaseTag":"v$version-beta.1","commit":"$sha","signingCertificateSha256":"$cert","apkSha256":"${"b".repeat(64)}"}
+    """.trimIndent()
+    private fun release(server: MockWebServer, version: String = "0.1.13", draft: Boolean = false,
+        apkName: String = "TVAtlas-Player-v$version-release.apk", foreignUrl: Boolean = false): String {
+        val prefix = server.url("/web/releases/download/v$version-beta.1/").toString()
+        val apkUrl = if (foreignUrl) "https://untrusted.invalid/app.apk" else prefix + apkName
+        return """{"tag_name":"v$version-beta.1","draft":$draft,"prerelease":true,"target_commitish":"$sha",
+            "assets":[{"name":"release-info.json","state":"uploaded","size":500,"browser_download_url":"${prefix}release-info.json"},
+            {"name":"$apkName","state":"uploaded","size":1000,"browser_download_url":"$apkUrl"}]}"""
+    }
+    private fun repository(server: MockWebServer) = UpdateRepository(OkHttpClient(),
+        server.url("/api").toString(), server.url("/web").toString())
 
-    @Test fun skipsFailedBuildAndPinsMetadataAndDownloadToVerifiedCommitAndArtifact() {
+    @Test fun publishedPrereleaseReturnsDirectPublicApkWithoutActionsOrRawRequests() {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(1, "failure")},${run(2)}]}"""))
-            server.enqueue(MockResponse().setBody(info)); server.enqueue(MockResponse().setBody(artifact()))
-            val release = repository(server).latest()
-            assertEquals(5, release.versionCode)
-            assertEquals("https://github.com/hoylturtle/TVAtlas/actions/runs/2/artifacts/99", release.downloadUrl)
-            server.takeRequest()
-            assertEquals("/raw/$sha/android-player/release-info.json", server.takeRequest().path)
-            assertEquals("/api/actions/runs/2/artifacts?per_page=100", server.takeRequest().path)
+            server.enqueue(MockResponse().setBody("[${release(server)}]"))
+            server.enqueue(MockResponse().setBody(manifest()))
+            val result = repository(server).latest()
+            assertEquals(14, result.versionCode)
+            assertEquals(server.url("/web/releases/download/v0.1.13-beta.1/TVAtlas-Player-v0.1.13-release.apk").toString(), result.downloadUrl)
+            assertEquals("/api/releases?per_page=10", server.takeRequest().path)
+            assertEquals("/web/releases/download/v0.1.13-beta.1/release-info.json", server.takeRequest().path)
+            assertEquals(2, server.requestCount)
         }
     }
-    @Test fun expiredArtifactIsNotOfferedAndPreviousDownloadableBuildIsUsed() {
+    @Test fun draftsAreSkippedAndHighestVersionCodeWinsRegardlessOfReleaseOrder() {
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(2)},${run(1)}]}"""))
-            server.enqueue(MockResponse().setBody(info)); server.enqueue(MockResponse().setBody(artifact(true)))
-            server.enqueue(MockResponse().setBody(info)); server.enqueue(MockResponse().setBody(artifact()))
-            assertTrue(repository(server).latest().downloadUrl.contains("/runs/1/"))
+            server.enqueue(MockResponse().setBody("[${release(server, draft = true)},${release(server, "0.1.12")},${release(server)}]"))
+            server.enqueue(MockResponse().setBody(manifest("0.1.12", 13)))
+            server.enqueue(MockResponse().setBody(manifest()))
+            assertEquals(14, repository(server).latest().versionCode)
+            assertEquals(3, server.requestCount)
         }
+    }
+    @Test fun missingManifestDoesNotOfferAnUnverifiedApk() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("[${release(server)}]"))
+            server.enqueue(MockResponse().setResponseCode(404))
+            try { repository(server).latest(); fail("Expected unavailable release") }
+            catch (error: UpdateException) { assertTrue(error.message!!.contains("公开")) }
+        }
+    }
+    @Test fun certificateAndTagAndCommitMustMatchPublishedRelease() {
+        val invalid = listOf(manifest(cert = "c".repeat(64)), manifest().replace("v0.1.13-beta.1", "v0.1.12-beta.1"),
+            manifest().replace(sha, "d".repeat(40)), manifest().replace("b".repeat(64), "invalid"))
+        for (info in invalid) MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("[${release(server)}]"))
+            server.enqueue(MockResponse().setBody(info))
+            try { repository(server).latest(); fail("Expected incompatible release") }
+            catch (_: UpdateException) { assertEquals(2, server.requestCount) }
+        }
+    }
+    @Test fun foreignDownloadLinksAndTemporaryArtifactsCannotBeOffered() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("[${release(server, foreignUrl = true)}]"))
+            server.enqueue(MockResponse().setBody(manifest()))
+            try { repository(server).latest(); fail("Expected rejected external asset") }
+            catch (_: UpdateException) { }
+        }
+        for (name in listOf("TVAtlas-Player-v0.1.13-debug.apk", "TVAtlas-v0.1.13-unsigned.apk", "build.zip"))
+            MockWebServer().use { server ->
+                server.enqueue(MockResponse().setBody("[${release(server, apkName = name)}]"))
+                server.enqueue(MockResponse().setBody(manifest()))
+                try { repository(server).latest(); fail("Expected rejected temporary artifact") }
+                catch (_: UpdateException) { }
+            }
     }
     @Test fun serviceLimitProvidesRetryMessage() {
         MockWebServer().use { server ->
@@ -40,32 +85,4 @@ class UpdateRepositoryTest {
             catch (error: UpdateException) { assertTrue(error.message!!.contains("稍后重试")) }
         }
     }
-    @Test fun oldBuildWithoutVersionMetadataCannotBeOffered() {
-        MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(1)}]}"""))
-            server.enqueue(MockResponse().setResponseCode(404))
-            try { repository(server).latest(); fail("Expected unavailable version") }
-            catch (error: UpdateException) { assertTrue(error.message!!.contains("可下载")) }
-        }
-    }
-    @Test fun mismatchedCertificateIsNeverOffered() {
-        MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(1)}]}"""))
-            server.enqueue(MockResponse().setBody(info.replace("7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878", "b".repeat(64))))
-            try { repository(server).latest(); fail("Expected incompatible signature") }
-            catch (_: UpdateException) { assertEquals(2, server.requestCount) }
-        }
-    }
-    @Test fun unsignedAndTemporaryDebugArtifactsAreNeverOffered() {
-        for (name in listOf("TVAtlas-Player-v0.1.4-debug", "TVAtlas-signing-input-v0.1.4")) {
-            MockWebServer().use { server ->
-                server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(1)}]}"""))
-                server.enqueue(MockResponse().setBody(info))
-                server.enqueue(MockResponse().setBody(artifact().replace("TVAtlas-Player-v0.1.4-release", name)))
-                try { repository(server).latest(); fail("Expected unavailable release") }
-                catch (_: UpdateException) { assertEquals(3, server.requestCount) }
-            }
-        }
-    }
-
 }
