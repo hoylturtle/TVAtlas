@@ -54,7 +54,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _update.value = UpdateState(checking = true)
         updateJob = viewModelScope.launch {
             try {
-                val release = UpdateRepository(updateClient(false)).latest()
+                val client = updateClient(false)
+                val release = UpdateRepository(client).latestAsync()
                 _update.value = UpdateState(checked = true, release = release)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {

@@ -29,7 +29,7 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
         Text("TVAtlas", Modifier.padding(vertical = 20.dp), fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium)
         listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
-            TextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).tvFocusOutline(),
+            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).tvFocusOutline(),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)) {
                 Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)

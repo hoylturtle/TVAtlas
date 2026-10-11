@@ -21,6 +21,7 @@ class UpdateRepository(
     private val web: String = REPOSITORY_URL,
     private val signingCertificateSha256: String = RELEASE_CERTIFICATE_SHA256,
 ) {
+    suspend fun latestAsync(): PublishedUpdate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { latest() }
     fun latest(): PublishedUpdate {
         // /latest excludes prereleases. This app deliberately follows the public testing channel.
         val releases = read("$api/releases?per_page=10") as? JsonArray

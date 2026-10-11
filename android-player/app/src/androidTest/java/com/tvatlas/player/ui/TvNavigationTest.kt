@@ -8,6 +8,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -33,7 +34,7 @@ class TvNavigationTest {
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         var played = false
         compose.setContent {
-            MaterialTheme { CompositionLocalProvider(LocalDensity provides Density(1f)) {
+            MaterialTheme { CompositionLocalProvider(LocalTvMode provides true, LocalDensity provides Density(1f)) {
                 Row(Modifier.requiredSize(960.dp, 540.dp).testTag("tv-layout")) {
                     TvNavigation(0, {}, Modifier.fillMaxHeight())
                     Box(Modifier.weight(1f)) { TvBrowseLayout(true, "翡翠台",
