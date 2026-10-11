@@ -108,7 +108,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                     if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             }, bottomBar = {
-                if (!tv && !immersive && !theater) NavigationBar {
+                if (!tv && !immersive) NavigationBar {
                     listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
