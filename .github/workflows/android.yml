@@ -40,6 +40,7 @@ jobs:
         run: python3 scripts/fetch_mihomo.py
       - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --stacktrace
       - name: Verify package version and APK signature
+        id: package
         run: |
           if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
             python3 scripts/verify_apk.py
@@ -63,7 +64,7 @@ jobs:
             android-player/app/build/reports/
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.signing.outputs.signed == 'true' && 'TVAtlas-Player-v0.1.9-release' || 'TVAtlas-signing-input-v0.1.9' }}
+          name: ${{ steps.package.outputs.artifact_name }}
           path: android-player/dist/
           if-no-files-found: error
       - name: Remove private release key

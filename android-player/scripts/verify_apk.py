@@ -61,3 +61,8 @@ print(badging.splitlines()[0])
 print(signing)
 print(f"Test results: {counts}")
 print(f"Verified APK: {named.name}; bytes={named.stat().st_size}; sha256={digest}")
+
+if os.environ.get("GITHUB_OUTPUT"):
+    artifact_name = f"TVAtlas-signing-input-v{info['versionName']}" if args.unsigned_input else f"TVAtlas-Player-v{info['versionName']}-release"
+    with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+        output.write(f"artifact_name={artifact_name}\n")

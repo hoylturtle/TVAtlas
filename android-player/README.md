@@ -48,7 +48,7 @@ Mihomo 使用 GPL-3.0；许可和声明随应用提供。构建产物同时包�
 
 「设置 → 检查更新」显示当前版本、新版说明和下载入口。版本按整数 versionCode 比较，只采纳本仓库 Android Player 工作流的成功 push 构建，并要求存在未过期、版本匹配的 release APK 产物和匹配固定证书的元数据。版本信息读取该成功构建提交的 `release-info.json`，不会读取尚未验证的分支 HEAD。更新失败可重试，不影响播放；不在后台自动下载或安装。
 
-「打开下载页面」使用系统浏览器打开 GitHub 安装包页面，需 GitHub 登录下载 ZIP 后解压 APK。没有浏览器的电视可以「复制下载链接」，在其他设备下载后传入安装。每次发新版需要同步 `release-info.json`、Gradle versionCode/versionName 和工作流产物名称；CI 校验这些信息一致。v0.1.9 起采用固定签名，无需每次卸载；debug 与待签名产物不会被当作可覆盖更新。
+「打开下载页面」使用系统浏览器打开 GitHub 安装包页面，需 GitHub 登录下载 ZIP 后解压 APK。没有浏览器的电视可以「复制下载链接」，在其他设备下载后传入安装。每次发新版需要同步 `release-info.json` 和 Gradle versionCode/versionName；CI 校验版本和签名一致，并自动生成对应版本的产物名称与覆盖测试版本号。v0.1.9 起采用固定签名，无需每次卸载；debug 与待签名产物不会被当作可覆盖更新。
 
 ## 规则语义
 

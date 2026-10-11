@@ -1,4 +1,5 @@
 """Run on an emulator: install newer same-signer build without uninstalling, verify persistent data."""
+import json
 import os
 from pathlib import Path
 import re
@@ -12,12 +13,14 @@ def certificate():
     result = subprocess.check_output([str(apksigner), 'verify', '--print-certs', str(apk)], text=True)
     return re.search(r'Signer #1 certificate SHA-256 digest: ([a-f0-9]{64})', result).group(1)
 before = certificate()
-# connectedDebugAndroidTest seeded a private marker on the installed v10 app.
-subprocess.run(['gradle', ':app:assembleDebug', '-PtvatlasVersionCode=11', '--stacktrace'], cwd=root, check=True)
+base_code = json.loads((root / "release-info.json").read_text())["versionCode"]
+next_code = base_code + 1
+# connectedDebugAndroidTest seeded a private marker on the current installed app.
+subprocess.run(['gradle', ':app:assembleDebug', f'-PtvatlasVersionCode={next_code}', '--stacktrace'], cwd=root, check=True)
 assert certificate() == before, 'Signer changed across builds'
 install = subprocess.check_output(['adb', 'install', '-r', str(apk)], text=True)
 assert 'Success' in install, 'Overwrite install failed'
-print('UPGRADE: same-certificate adb install -r succeeded for versionCode 10 -> 11')
+print(f'UPGRADE: same-certificate adb install -r succeeded for versionCode {base_code} -> {next_code}')
 result = subprocess.check_output(['adb','shell','am','instrument','-w','-r','-e','class',
     'com.tvatlas.player.UpgradeInstallTest','-e','upgradePhase','verify',
     'com.tvatlas.player.test/androidx.test.runner.AndroidJUnitRunner'], text=True)
