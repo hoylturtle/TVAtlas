@@ -190,7 +190,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun showDiagnostics(value: Boolean) = action { settings.diagnostics(value) }
     override fun onCleared() {
-        updateJob?.cancel(); updateClient.dispatcher.cancelAll()
+        updateJob?.cancel()
         stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close()
     }
 }
