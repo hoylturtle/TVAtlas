@@ -1,8 +1,8 @@
 {
-  "versionCode": 17,
-  "versionName": "0.1.16",
+  "versionCode": 18,
+  "versionName": "0.1.17",
   "minSdk": 23,
-  "notes": "电视专用导航与并排播放预览；遥控器焦点使用明显底色和白色边框；新增明珠台、TVB Plus 及 ViuTV 官方免费动态线路；修复检查更新在界面线程请求导致 GitHub 连接失败，保留代理下载和手机扫码输入。",
+  "notes": "香港频道分组置顶；香港频道默认使用已启用的香港代理节点，多个香港节点自动故障切换；保留手动线路与自定义路由优先级。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.16-beta.1"
+  "releaseTag": "v0.1.17-beta.1"
 }
