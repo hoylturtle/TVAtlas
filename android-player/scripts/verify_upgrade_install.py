@@ -15,15 +15,27 @@ def certificate():
 before = certificate()
 base_code = json.loads((root / "release-info.json").read_text())["versionCode"]
 next_code = base_code + 1
-# connectedDebugAndroidTest seeded a private marker on the current installed app.
+test_apk = root / 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'
+def install(path, test=False):
+    command = ['adb', 'install', '-r'] + (['-t'] if test else []) + [str(path)]
+    output = subprocess.check_output(command, text=True)
+    assert 'Success' in output, 'APK install failed'
+def instrumentation(phase):
+    run = subprocess.run(['adb','shell','am','instrument','-w','-r','-e','class',
+        'com.tvatlas.player.UpgradeInstallTest','-e','upgradePhase',phase,
+        'com.tvatlas.player.test/androidx.test.runner.AndroidJUnitRunner'], capture_output=True, text=True)
+    print(run.stdout)
+    if run.stderr: print(run.stderr)
+    assert run.returncode == 0 and 'OK (1 test)' in run.stdout and 'FAILURES' not in run.stdout, 'Upgrade instrumentation failed'
+# AGP cleans up installed test packages after connected tests. Seed explicitly using
+# the baseline APK and instrumentation APK so this check is independent of that cleanup.
+install(apk)
+install(test_apk, test=True)
+instrumentation('seed')
 subprocess.run(['gradle', ':app:assembleDebug', f'-PtvatlasVersionCode={next_code}', '--stacktrace'], cwd=root, check=True)
 assert certificate() == before, 'Signer changed across builds'
-install = subprocess.check_output(['adb', 'install', '-r', str(apk)], text=True)
-assert 'Success' in install, 'Overwrite install failed'
+install(apk)
 print(f'UPGRADE: same-certificate adb install -r succeeded for versionCode {base_code} -> {next_code}')
-result = subprocess.check_output(['adb','shell','am','instrument','-w','-r','-e','class',
-    'com.tvatlas.player.UpgradeInstallTest','-e','upgradePhase','verify',
-    'com.tvatlas.player.test/androidx.test.runner.AndroidJUnitRunner'], text=True)
-print(result)
-assert 'OK (1 test)' in result and 'FAILURES' not in result, 'Data retention check failed'
+install(test_apk, test=True)
+instrumentation('verify')
 print('UPGRADE: private file, selected-node preference and previous version persisted')
