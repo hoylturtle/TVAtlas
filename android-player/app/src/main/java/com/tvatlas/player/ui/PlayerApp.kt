@@ -47,6 +47,7 @@ import com.tvatlas.player.BuildConfig
 import com.tvatlas.player.update.UpdateState
 import com.tvatlas.player.update.REPOSITORY_URL
 import androidx.compose.ui.text.AnnotatedString
+import com.tvatlas.player.transfer.TransferKind
 import com.tvatlas.player.PlayerViewModel
 import com.tvatlas.player.playback.PlaybackStatus
 import com.tvatlas.player.storage.Credentials
@@ -417,14 +418,25 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     }
 }
 
-@Composable private fun PlaylistDialog(busy: Boolean, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
+@Composable internal fun PlaylistDialog(busy: Boolean, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var url by rememberSaveable { mutableStateOf("") }
+    var scan by remember { mutableStateOf(false) }
+    var received by remember { mutableStateOf(false) }
+    if (scan) {
+        PhoneTransferDialog(TransferKind.PLAYLIST, { scan = false }) {
+            if (it.name.isNotBlank()) name = it.name else if (name.isBlank()) name = TransferKind.PLAYLIST.defaultName
+            url = it.url; received = true; scan = false
+        }
+        return
+    }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("添加播放列表") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("名称") }, singleLine = true)
             OutlinedTextField(url, { url = it }, label = { Text("HTTP(S) M3U 地址") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), isError = url.isNotEmpty() && httpUri(url.trim()) == null)
+            OutlinedButton(onClick = { scan = true }, enabled = !busy) { Text("手机扫码输入") }
+            if (received) Text("手机地址已接收，请确认后加载并保存。", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = { TextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("加载并保存") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
@@ -535,6 +547,14 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
     var url by remember { mutableStateOf("") }
     var clipboardMessage by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
+    var scan by remember { mutableStateOf(false) }
+    if (scan) {
+        PhoneTransferDialog(TransferKind.PROXY, { scan = false }) {
+            if (it.name.isNotBlank()) name = it.name else if (name.isBlank()) name = TransferKind.PROXY.defaultName
+            url = it.url; clipboardMessage = "手机地址已接收，请确认后下载并导入。"; scan = false
+        }
+        return
+    }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("添加 Clash / Mihomo 订阅") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("订阅名称") }, singleLine = true)
@@ -545,6 +565,7 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
                 if (text.isEmpty()) clipboardMessage = "剪贴板中没有文本，请先复制订阅地址"
                 else { url = text; clipboardMessage = null }
             }, enabled = !busy) { Text("粘贴订阅地址") }
+            OutlinedButton(onClick = { scan = true }, enabled = !busy) { Text("手机扫码输入") }
             clipboardMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             Text("支持 Clash YAML 的 SS、VMess、VLESS、Trojan 等节点。地址及节点密钥仅加密保存在本机。", style = MaterialTheme.typography.bodySmall)
         }

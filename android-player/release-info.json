@@ -1,8 +1,8 @@
 {
-  "versionCode": 15,
-  "versionName": "0.1.14",
+  "versionCode": 16,
+  "versionName": "0.1.15",
   "minSdk": 23,
-  "notes": "修复竖屏播放画面被长节点名称挤压的问题：视频保持 16:9，线路和代理名称限制为单行，全屏及停止按钮保持可见。保留通过所选代理检查、下载和安装更新。",
+  "notes": "新增电视端手机扫码输入：频道订阅和 Clash/Mihomo 代理订阅均可通过同一局域网临时页面粘贴并发送地址；二维码 5 分钟有效、一次接收，电视确认后导入。保留签名覆盖升级与代理更新网络。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.14-beta.1"
+  "releaseTag": "v0.1.15-beta.1"
 }
