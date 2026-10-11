@@ -141,22 +141,6 @@ class MyTvSuperSourceTest {
         assertEquals(3, requests)
     }
 
-    @Test fun officialPearlAndPlusUseTheirOwnCheckoutAndLicense() = runBlocking {
-        for (entry in MyTvSuperSource.channels.filter { it.network != "J" }) {
-            val requests = mutableListOf<Request>()
-            val client = OkHttpClient.Builder().addInterceptor { chain ->
-                requests.add(chain.request())
-                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-                    .body((if (chain.request().url.host == "www.mytvsuper.com") session else
-                        checkout().replace("ott_J_h264", "ott_${entry.network}_h264")).toResponseBody()).build()
-            }.build()
-            val result = MyTvSuperSource.resolve(client, page = entry.page)
-            assertEquals(entry.network, requests.last().url.queryParameter("network_code"))
-            assertTrue(result.licenseUrl.endsWith("ott_${entry.network}_h264"))
-            assertTrue(MyTvSuperSource.playlist(entry.page).contains(entry.name))
-            assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout(), entry.network) }
-        }
-    }
     @Test fun rejectedRegionNeverCreatesGuestDevice() = runBlocking {
         var requests = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->

@@ -137,22 +137,9 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
-                            wide -> Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Surface(Modifier.width(if (tv) 300.dp else 340.dp).fillMaxHeight(),
-                                    color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text("频道", Modifier.padding(8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                        ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })
-                                    }
-                                }
-                                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text(library.channels.firstOrNull { it.id == status.channelId }?.name ?: "选择频道开始观看",
-                                        style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    video(Modifier.weight(1f).fillMaxWidth())
-                                    if (tv) Text("↑↓ 选择频道   确认 播放   长按确认 线路 / 代理   返回 全屏",
-                                        color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
+                            wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
+                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }) },
+                                picture = { video(Modifier.fillMaxSize()) })
                             else -> Column(Modifier.fillMaxSize()) {
                                 if (status.channelId != null) video(Modifier.fillMaxWidth())
                                 ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })

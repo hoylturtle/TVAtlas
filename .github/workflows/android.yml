@@ -103,6 +103,7 @@ jobs:
           working-directory: android-player
           script: |
             gradle :app:connectedDebugAndroidTest --stacktrace
+            adb exec-out run-as com.tvatlas.player cat cache/tv-layout.png > app/build/reports/androidTests/tv-layout.png
             python3 scripts/verify_upgrade_install.py
       - uses: actions/upload-artifact@v4
         if: always()

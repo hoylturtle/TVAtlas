@@ -40,3 +40,23 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
             style = MaterialTheme.typography.labelMedium)
     }
 }
+
+@Composable internal fun TvBrowseLayout(tv: Boolean, channelName: String?,
+    channels: @Composable () -> Unit, picture: @Composable () -> Unit) {
+    Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(Modifier.width(if (tv) 300.dp else 340.dp).fillMaxHeight(),
+            color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
+            Column(Modifier.padding(12.dp)) {
+                Text("频道", Modifier.padding(8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Box(Modifier.weight(1f)) { channels() }
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(channelName ?: "选择频道开始观看", style = MaterialTheme.typography.headlineSmall,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Box(Modifier.weight(1f).fillMaxWidth()) { picture() }
+            if (tv) Text("↑↓ 选择频道   确认 播放   长按确认 线路 / 代理   返回 全屏",
+                color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
