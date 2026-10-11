@@ -33,6 +33,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val settings = SettingsStore(application)
     val library = repository.library.stateIn(viewModelScope, SharingStarted.Eagerly, Library(emptyList(), emptyList(), emptyList(), RuleConfig()))
     val diagnostics = settings.diagnostics.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val updateRoute = settings.updateRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.DIRECT)
     val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog)
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
@@ -40,9 +41,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val busy = _busy.asStateFlow()
     private val operations = kotlinx.coroutines.sync.Mutex()
     private var playJob: Job? = null
-    private val updateClient = okhttp3.OkHttpClient.Builder().connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS).callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
-    private val updateRepository = UpdateRepository(updateClient)
     private val _update = MutableStateFlow(UpdateState())
     val update = _update.asStateFlow()
     private var updateJob: Job? = null
@@ -53,14 +51,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _update.value = UpdateState(checking = true)
         updateJob = viewModelScope.launch {
             try {
-                val release = withContext(Dispatchers.IO) { updateRepository.latest() }
+                val target = settings.updateRoute.first()
+                val release = withContext(Dispatchers.IO) {
+                    val profiles = library.value.profiles
+                    core.update(profiles); pool.update(profiles)
+                    debugLog.event("INFO", "UPDATE_ROUTE", "route=${target.type} proxy=${pool.label(target)}")
+                    val client = pool.client(target).newBuilder().followRedirects(true).followSslRedirects(false)
+                        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS).callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).build()
+                    UpdateRepository(client).latest()
+                }
                 _update.value = UpdateState(checked = true, release = release)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
                 debugLog.error("UPDATE", error)
-                _update.value = UpdateState(error = if (error is UpdateException) error.message else "检查更新失败，请检查网络后重试")
+                _update.value = UpdateState(error = if (error is UpdateException) error.message else "连接 GitHub 失败，请切换下方更新网络后重试，或打开仓库查看安装包")
             }
         }
+    }
+    fun setUpdateRoute(route: RouteTarget) = action { settings.updateRoute(route) }
+    fun openRepository() {
+        try {
+            getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) { _message.value = "没有可用的浏览器，请复制仓库链接到其他设备打开" }
     }
     fun openUpdateDownload() {
         val release = _update.value.release ?: return

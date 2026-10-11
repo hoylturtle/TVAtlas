@@ -3,10 +3,12 @@ package com.tvatlas.player.ui
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.*
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tvatlas.player.BuildConfig
+import com.tvatlas.core.model.*
 import com.tvatlas.player.update.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -14,6 +16,30 @@ import org.junit.Test
 
 class UpdateSettingsTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun repositoryAndCopyRemainAvailableAfterUpdateNetworkFailure() {
+        var opened = false
+        val update = UpdateState(error = "连接 GitHub 失败")
+        compose.setContent { MaterialTheme { SettingsPage(false, {}, update, {}, {}, onRepository = { opened = true }) } }
+        compose.onNodeWithText("连接 GitHub 失败").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("打开 GitHub 仓库").performScrollTo().performClick()
+        compose.runOnIdle { assertTrue(opened) }
+        compose.onNodeWithText("复制仓库链接").performScrollTo().performClick()
+        compose.onNodeWithText("仓库链接已复制").assertExists()
+    }
+    @Test fun updateNetworkCanSelectEnabledImportedProxyByName() {
+        val profile = ProxyProfile("private-id", "香港更新节点", ProxyType.MIHOMO, "private.example", 443)
+        var saved: RouteTarget? = null
+        compose.setContent {
+            var selected by remember { mutableStateOf(RouteTarget.DIRECT) }
+            MaterialTheme { SettingsPage(false, {}, UpdateState(), {}, {}, profiles = listOf(profile),
+                updateRoute = selected, onUpdateRoute = { selected = it; saved = it }) }
+        }
+        compose.onNodeWithText("直连").performScrollTo().performClick()
+        compose.onNodeWithText("香港更新节点").performClick()
+        compose.onNodeWithText("香港更新节点").assertExists()
+        compose.onNodeWithText("private-id", substring = true).assertDoesNotExist()
+        compose.runOnIdle { assertEquals(RouteTarget.proxy(profile.id), saved) }
+    }
     @Test fun newerVersionOffersDownloadAndCopiesLinkForTv() {
         val link = "https://github.com/hoylturtle/TVAtlas/actions/runs/123/artifacts/456"
         var download = false

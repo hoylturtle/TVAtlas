@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 class UpdateException(message: String) : IOException(message)
+const val REPOSITORY_URL = "https://github.com/hoylturtle/TVAtlas"
 data class PublishedUpdate(val versionCode: Int, val versionName: String, val minSdk: Int, val notes: String, val downloadUrl: String)
 data class UpdateState(val checking: Boolean = false, val checked: Boolean = false, val release: PublishedUpdate? = null, val error: String? = null)
 

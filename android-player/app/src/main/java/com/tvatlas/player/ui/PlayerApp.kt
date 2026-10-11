@@ -44,6 +44,7 @@ import com.tvatlas.core.model.*
 import com.tvatlas.core.routing.RuleCodec
 import com.tvatlas.player.BuildConfig
 import com.tvatlas.player.update.UpdateState
+import com.tvatlas.player.update.REPOSITORY_URL
 import androidx.compose.ui.text.AnnotatedString
 import com.tvatlas.player.PlayerViewModel
 import com.tvatlas.player.playback.PlaybackStatus
@@ -64,6 +65,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         val message by model.message.collectAsStateWithLifecycle()
         val update by model.update.collectAsStateWithLifecycle()
         val diagnostics by model.diagnostics.collectAsStateWithLifecycle()
+        val updateRoute by model.updateRoute.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val config = LocalConfiguration.current
@@ -157,7 +159,8 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode)
-                    3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload, { logsOpen = true })
+                    3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
+                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute)
                 }
             }
         }
@@ -330,9 +333,12 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
 }
 
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
-    update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {}) {
+    update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
+    onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
+    updateRoute: RouteTarget = RouteTarget.DIRECT, onUpdateRoute: (RouteTarget) -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     var linkCopied by remember(update.release?.downloadUrl) { mutableStateOf(false) }
+    var repositoryCopied by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("设置", style = MaterialTheme.typography.headlineMedium)
         ListItem(headlineContent = { Text("播放诊断") }, supportingContent = { Text("显示脱敏地址、路由、命中规则和错误类型") },
@@ -342,6 +348,13 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         Text("当前版本：${BuildConfig.VERSION_NAME}")
         Button(onClick = onCheckUpdate, enabled = !update.checking) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
         update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Text("更新网络", style = MaterialTheme.typography.titleMedium)
+        UpdateNetworkPicker(profiles, updateRoute, !update.checking, onUpdateRoute)
+        Text("检查更新可使用已导入的代理节点。打开仓库由浏览器处理，请确保浏览器也能访问 GitHub。", style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = onRepository) { Text("打开 GitHub 仓库") }
+        TextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }) {
+            Text(if (repositoryCopied) "仓库链接已复制" else "复制仓库链接")
+        }
         update.release?.let { release ->
             if (release.versionCode > BuildConfig.VERSION_CODE) {
                 Text("发现新版本：${release.versionName}", style = MaterialTheme.typography.titleMedium)
@@ -362,6 +375,20 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         Text("代理凭证使用 Android Keystore 加密保存在本机。导出的规则不包含用户名或密码。播放历史仅保存在本机。")
         Text("TVAtlas Player · 开发版 ${BuildConfig.VERSION_NAME} · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
         Text("Mihomo © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随安装包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable internal fun UpdateNetworkPicker(profiles: List<ProxyProfile>, selected: RouteTarget,
+    enabled: Boolean, onSelect: (RouteTarget) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }, enabled = enabled) { Text(routeLabel(selected, profiles)) }
+        DropdownMenu(expanded, { expanded = false }) {
+            DropdownMenuItem(text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
+            profiles.filter { it.enabled }.forEach { profile ->
+                DropdownMenuItem(text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
+            }
+        }
     }
 }
 
