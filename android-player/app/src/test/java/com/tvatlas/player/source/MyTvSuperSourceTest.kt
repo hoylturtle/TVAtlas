@@ -28,8 +28,24 @@ class MyTvSuperSourceTest {
         assertTrue(MyTvSuperSource.recognizes(MyTvSuperSource.PAGE))
         assertTrue(MyTvSuperSource.recognizes(MyTvSuperSource.PAGE + "%E7%BF%A1%E7%BF%A0%E5%8F%B0/"))
         for (value in listOf("http://www.mytvsuper.com/tc/live/81/", "https://evil.test/tc/live/81/",
-            "https://www.mytvsuper.com/tc/live/82/", MyTvSuperSource.PAGE + "?token=secret"))
+            "https://www.mytvsuper.com/tc/live/83/", MyTvSuperSource.PAGE + "?token=secret"))
             assertFalse(MyTvSuperSource.recognizes(value))
+    }
+    @Test fun officialPearlAndPlusUseTheirOwnCheckoutAndLicense() = runBlocking {
+        for (entry in MyTvSuperSource.channels.filter { it.network != "J" }) {
+            val requests = mutableListOf<Request>()
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                requests.add(chain.request())
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body((if (chain.request().url.host == "www.mytvsuper.com") session else
+                        checkout().replace("ott_J_h264", "ott_${entry.network}_h264")).toResponseBody()).build()
+            }.build()
+            val result = MyTvSuperSource.resolve(client, page = entry.page)
+            assertEquals(entry.network, requests.last().url.queryParameter("network_code"))
+            assertTrue(result.licenseUrl.endsWith("ott_${entry.network}_h264"))
+            assertTrue(MyTvSuperSource.playlist(entry.page).contains(entry.name))
+            assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout(), entry.network) }
+        }
     }
     @Test fun rejectedRegionCannotUseToken() {
         assertThrows(IOException::class.java) { MyTvSuperSource.parseSession(session.replace("true", "false")) }

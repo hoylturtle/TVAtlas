@@ -86,6 +86,6 @@ internal fun phoneQrBitmap(url: String): Bitmap {
                 Text("接收一次或关闭窗口后失效。", style = MaterialTheme.typography.bodySmall)
             } ?: CircularProgressIndicator()
         }
-    }, confirmButton = { if (error != null) TextButton(onClick = { session?.close(); session = null; generation++ }) { Text("重新生成") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("返回") } })
+    }, confirmButton = { if (error != null) TvTextButton(onClick = { session?.close(); session = null; generation++ }) { Text("重新生成") } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text("返回") } })
 }

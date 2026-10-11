@@ -2,6 +2,7 @@ package com.tvatlas.player.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import com.google.zxing.DecodeHintType
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
@@ -36,7 +37,9 @@ class PhoneTransferTest {
             val bitmap = phoneQrBitmap(session.pageUrl)
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            val decoded = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(RGBLuminanceSource(bitmap.width, bitmap.height, pixels))))
+            // This is an exact, unrotated generated bitmap, not a camera photograph.
+            val decoded = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(RGBLuminanceSource(bitmap.width, bitmap.height, pixels))),
+                mapOf(DecodeHintType.PURE_BARCODE to true))
             assertEquals(session.pageUrl, decoded.text)
             var received: TransferInput? = null
             compose.setContent { MaterialTheme { PhoneTransferDialog(TransferKind.PROXY, {},

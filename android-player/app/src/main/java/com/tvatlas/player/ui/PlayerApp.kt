@@ -56,7 +56,7 @@ import com.tvatlas.player.storage.SubscriptionRow
 import java.text.DateFormat
 import java.util.Date
 
-private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Color(0xFFB8C3D8),
+internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Color(0xFFB8C3D8),
     background = Color(0xFF0D0F13), surface = Color(0xFF171A21), surfaceVariant = Color(0xFF292F3A), onPrimary = Color(0xFF162A4B))
 
 @Composable fun PlayerApp(model: PlayerViewModel) {
@@ -100,7 +100,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         Scaffold(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!immersive && !theater) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!tv && !immersive && !theater) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("TVAtlas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("选频道，即可观看", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
@@ -108,14 +108,16 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                     if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             }, bottomBar = {
-                if (!immersive && !theater) NavigationBar {
+                if (!tv && !immersive) NavigationBar {
                     listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
                     }
                 }
             }) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
+            Row(Modifier.fillMaxSize().padding(padding)) {
+                if (tv && !immersive) TvNavigation(tab, { tab = it; channelPanelOpen = true }, Modifier.fillMaxHeight())
+                Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
@@ -135,21 +137,9 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
-                            wide -> Box(Modifier.fillMaxSize()) {
-                                video(Modifier.fillMaxSize())
-                                Surface(Modifier.width((config.screenWidthDp * 0.52f).dp.coerceIn(300.dp, 520.dp)).fillMaxHeight(),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f), shadowElevation = 12.dp) {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text("TVAtlas", Modifier.padding(12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                            TextButton(onClick = { tab = 1 }) { Text("播放列表") }
-                                            TextButton(onClick = { tab = 2 }) { Text("路由") }
-                                            TextButton(onClick = { tab = 3 }) { Text("设置") }
-                                        }
-                                        ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })
-                                    }
-                                }
-                            }
+                            wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
+                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }) },
+                                picture = { video(Modifier.fillMaxSize()) })
                             else -> Column(Modifier.fillMaxSize()) {
                                 if (status.channelId != null) video(Modifier.fillMaxWidth())
                                 ChannelList(library, status, tv, Modifier.weight(1f), select, { detailId = it.id }, { tab = 1 })
@@ -164,6 +154,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate)
                 }
+                }
             }
         }
         if (logsOpen) DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
@@ -173,8 +164,8 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         }
         if (removeSubscription != null) AlertDialog(onDismissRequest = { removeSubscription = null },
             title = { Text("删除订阅？") }, text = { Text("将移除该订阅及其节点。引用这些节点的手动路由需要重新选择。") },
-            confirmButton = { TextButton(onClick = { model.deleteSubscription(removeSubscription!!); removeSubscription = null }) { Text("删除") } },
-            dismissButton = { TextButton(onClick = { removeSubscription = null }) { Text("取消") } })
+            confirmButton = { TvTextButton(onClick = { model.deleteSubscription(removeSubscription!!); removeSubscription = null }) { Text("删除") } },
+            dismissButton = { TvTextButton(onClick = { removeSubscription = null }) { Text("取消") } })
         if (addProxy || editProxyId != null) ProxyDialog(library.profiles.firstOrNull { it.id == editProxyId },
             { addProxy = false; editProxyId = null }) { p, credentials, replace ->
             model.saveProxy(p, credentials, replace); addProxy = false; editProxyId = null
@@ -192,24 +183,25 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
+        if (tv) Text("确认展开分组 · 长按频道设置线路", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Text("${library.channels.size} 个频道", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.labelLarge)
         if (library.channels.isEmpty()) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("从你的播放列表开始", style = MaterialTheme.typography.titleLarge)
                 Text("支持 HTTP(S) M3U / M3U8", Modifier.padding(12.dp))
-                Button(onClick = onAdd) { Text("添加播放列表") }
+                TvButton(onClick = onAdd) { Text("添加播放列表") }
             }
         } else {
             val filtered = library.channels.filter { it.name.contains(query, true) || it.group.contains(query, true) }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
                     item(key = "group:$group") {
-                        TextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
-                            modifier = Modifier.fillMaxWidth()
+                        TvTextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
+                            modifier = Modifier.fillMaxWidth().then(if (tv) Modifier.tvFocusOutline() else Modifier)
                                 .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
                                 .then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
-                            Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = MaterialTheme.colorScheme.secondary)
+                            Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
                             Text("${channels.size}")
                         }
                     }
@@ -217,9 +209,9 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
                             trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.primary) },
-                            colors = ListItemDefaults.colors(containerColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent),
+                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent, headlineColor = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
                             modifier = Modifier.onFocusChanged { focused = it.isFocused }
-                                .border(2.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
                                         event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress) { onDetails(channel); true } else false
@@ -244,8 +236,8 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     val player by model.playback.player.collectAsStateWithLifecycle()
     PlayerPaneLayout(fillPicture, modifier, picture = {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = true; isFocusableInTouchMode = true; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player },
-                onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = !tv || pictureFocused; isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.isFocusable = !tv || pictureFocused; it.isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused && !it.hasFocus()) it.post { it.requestFocus() } },
+                onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !tv || pictureFocused }.onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
                         Key.DirectionDown -> { onChannel(1); true }
@@ -255,6 +247,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                     }
                 })
         }, controls = {
+        if (tv && pictureFocused) Text("↑↓ 换台   确认 / ← 频道菜单   长按确认 线路设置", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         VideoControls(status.message, status.attempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
         } ?: "线路", status.attempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
@@ -288,11 +281,11 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {
+        TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {
             Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        TextButton(onClick = onFullscreen, modifier = Modifier.weight(1f)) { Text("全屏 / 频道", maxLines = 1) }
-        TextButton(onClick = onStop, enabled = canStop, modifier = Modifier.weight(1f)) { Text("停止", maxLines = 1) }
+        TvTextButton(onClick = onFullscreen, modifier = Modifier.weight(1f)) { Text("全屏 / 频道", maxLines = 1) }
+        TvTextButton(onClick = onStop, enabled = canStop, modifier = Modifier.weight(1f)) { Text("停止", maxLines = 1) }
     }
 }
 
@@ -301,8 +294,8 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
         item {
             Text("播放列表", style = MaterialTheme.typography.headlineMedium)
             Text("同名频道自动合并；更新保留路由和播放记忆。", Modifier.padding(vertical = 12.dp))
-            Button(onClick = onAdd, enabled = !busy) { Text("添加播放列表") }
-            OutlinedButton(onClick = onOfficial, enabled = !busy && library.playlists.none { com.tvatlas.player.source.MyTvSuperSource.recognizes(it.url) }) { Text("添加官方翡翠台（实验）") }
+            TvButton(onClick = onAdd, enabled = !busy) { Text("添加播放列表") }
+            TvOutlinedButton(onClick = onOfficial, enabled = !busy && library.playlists.none { com.tvatlas.player.source.MyTvSuperSource.recognizes(it.url) }) { Text("添加官方翡翠台（实验）") }
             Text("官方源需要支持 Widevine 的设备和服务允许的地区；添加后在频道线路设置中选择节点。Android 兼容性待实测。", style = MaterialTheme.typography.bodySmall)
         }
         items(library.playlists, key = { it.id }) { p ->
@@ -310,7 +303,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 Text(p.name, style = MaterialTheme.typography.titleLarge)
                 Text(redactedUrl(p.url), style = MaterialTheme.typography.bodySmall)
                 Text("最近更新：${date(p.lastUpdatedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = { onRefresh(p) }, enabled = !busy) { Text("刷新") }
+                TvOutlinedButton(onClick = { onRefresh(p) }, enabled = !busy) { Text("刷新") }
             } }
         }
     }
@@ -324,30 +317,30 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             Text("智能路由", style = MaterialTheme.typography.headlineMedium)
             Text("按频道或线路选择直连、代理或自动路由。", Modifier.padding(vertical = 12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onImport) { Text("导入 JSON") }
-                OutlinedButton(onClick = onExport) { Text("导出规则") }
+                TvButton(onClick = onImport) { Text("导入 JSON") }
+                TvOutlinedButton(onClick = onExport) { Text("导出规则") }
             }
             Text("${library.rules.name} · ${library.rules.rules.size} 条规则", Modifier.padding(vertical = 12.dp))
             Text("默认：${routeLabel(library.rules.defaultRoute, library.profiles)}", style = MaterialTheme.typography.bodySmall)
-            Button(onClick = onSubscribe, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) { Text("添加 Clash / Mihomo 订阅") }
+            TvButton(onClick = onSubscribe, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) { Text("添加 Clash / Mihomo 订阅") }
             Text("粘贴订阅地址即可导入节点，在频道或线路菜单中选择使用。", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = onAdd) { Text("手动添加 HTTP / SOCKS5") }
+            TvOutlinedButton(onClick = onAdd) { Text("手动添加 HTTP / SOCKS5") }
         }
         items(subscriptions, key = { "subscription:${it.id}" }) { sub ->
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                 Text(sub.name, style = MaterialTheme.typography.titleLarge)
                 Text("${sub.nodeCount} 个节点 · 更新于 ${date(sub.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { onRefresh(sub.id) }, enabled = !busy) { Text("更新订阅") }
-                    TextButton(onClick = { onDelete(sub.id) }, enabled = !busy) { Text("删除") }
+                    TvTextButton(onClick = { onRefresh(sub.id) }, enabled = !busy) { Text("更新订阅") }
+                    TvTextButton(onClick = { onDelete(sub.id) }, enabled = !busy) { Text("删除") }
                 }
             } }
         }
         items(library.profiles, key = { it.id }) { p ->
             Card(Modifier.fillMaxWidth()) { ListItem(headlineContent = { Text(p.name) },
                 supportingContent = { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${p.host}:${p.port} · ${if (p.enabled) "启用" else "停用"}") },
-                trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
-                    else TextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
+                trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
+                    else TvTextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
         }
         items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
             ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text(matchLabel(rule.match), style = MaterialTheme.typography.bodySmall) },
@@ -366,17 +359,17 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Text("设置", style = MaterialTheme.typography.headlineMedium)
         ListItem(headlineContent = { Text("播放诊断") }, supportingContent = { Text("显示脱敏地址、路由、命中规则和错误类型") },
-            trailingContent = { Switch(checked = diagnostics, onCheckedChange = onDiagnostics) })
-        Button(onClick = onLogs) { Text("调试日志") }
+            trailingContent = { Switch(modifier = Modifier.tvFocusOutline(), checked = diagnostics, onCheckedChange = onDiagnostics) })
+        TvButton(onClick = onLogs) { Text("调试日志") }
         Text("应用更新", style = MaterialTheme.typography.titleLarge)
         Text("当前版本：${BuildConfig.VERSION_NAME}")
-        Button(onClick = onCheckUpdate, enabled = !update.checking && !update.downloading) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
+        TvButton(onClick = onCheckUpdate, enabled = !update.checking && !update.downloading) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
         update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Text("更新网络", style = MaterialTheme.typography.titleMedium)
         UpdateNetworkPicker(profiles, updateRoute, !update.checking && !update.downloading, onUpdateRoute)
         Text("检查更新可使用已导入的代理节点。打开仓库由浏览器处理，请确保浏览器也能访问 GitHub。", style = MaterialTheme.typography.bodySmall)
-        OutlinedButton(onClick = onRepository) { Text("打开 GitHub 仓库") }
-        TextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }) {
+        TvOutlinedButton(onClick = onRepository) { Text("打开 GitHub 仓库") }
+        TvTextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }) {
             Text(if (repositoryCopied) "仓库链接已复制" else "复制仓库链接")
         }
         update.release?.let { release ->
@@ -385,12 +378,12 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 if (release.notes.isNotBlank()) Text(release.notes)
                 if (release.minSdk > android.os.Build.VERSION.SDK_INT) Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级")
                 else {
-                    Button(onClick = onDownload, enabled = !update.downloading) { Text(if (update.downloading) "下载中 ${update.downloadProgress}%" else "下载新版 APK") }
+                    TvButton(onClick = onDownload, enabled = !update.downloading) { Text(if (update.downloading) "下载中 ${update.downloadProgress}%" else "下载新版 APK") }
                     if (update.downloading) LinearProgressIndicator(progress = { update.downloadProgress / 100f })
-                    if (update.apkReady) Button(onClick = onInstall) { Text("安装更新") }
+                    if (update.apkReady) TvButton(onClick = onInstall) { Text("安装更新") }
                     Text("APP 通过选定的更新网络下载 APK，核对校验值和签名后，点击安装更新并按系统提示确认。无需 GitHub 登录，覆盖安装保留配置。", style = MaterialTheme.typography.bodySmall)
                 }
-                TextButton(onClick = { clipboard.setText(AnnotatedString(release.downloadUrl)); linkCopied = true }) {
+                TvTextButton(onClick = { clipboard.setText(AnnotatedString(release.downloadUrl)); linkCopied = true }) {
                     Text(if (linkCopied) "下载链接已复制" else "复制下载链接")
                 }
             } else Text("已是最新版本")
@@ -408,11 +401,11 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
     enabled: Boolean, onSelect: (RouteTarget) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { expanded = true }, enabled = enabled) { Text(routeLabel(selected, profiles)) }
+        TvOutlinedButton(onClick = { expanded = true }, enabled = enabled) { Text(routeLabel(selected, profiles)) }
         DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
+            DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
             profiles.filter { it.enabled }.forEach { profile ->
-                DropdownMenuItem(text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
+                DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
             }
         }
     }
@@ -435,11 +428,11 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             OutlinedTextField(name, { name = it }, label = { Text("名称") }, singleLine = true)
             OutlinedTextField(url, { url = it }, label = { Text("HTTP(S) M3U 地址") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), isError = url.isNotEmpty() && httpUri(url.trim()) == null)
-            OutlinedButton(onClick = { scan = true }, enabled = !busy) { Text("手机扫码输入") }
+            TvOutlinedButton(onClick = { scan = true }, enabled = !busy) { Text("手机扫码输入") }
             if (received) Text("手机地址已接收，请确认后加载并保存。", style = MaterialTheme.typography.bodySmall)
         }
-    }, confirmButton = { TextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("加载并保存") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    }, confirmButton = { TvTextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("加载并保存") } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text("取消") } })
 }
 
 @Composable private fun ProxyDialog(existing: ProxyProfile?, onDismiss: () -> Unit, onSave: (ProxyProfile, Credentials?, Boolean) -> Unit) {
@@ -468,12 +461,12 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             if (existing != null) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(clearCredentials, { clearCredentials = it }); Text("清除已有凭证") }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-    }, confirmButton = { TextButton(onClick = {
+    }, confirmButton = { TvTextButton(onClick = {
         val profile = ProxyProfile(id.trim(), name.trim(), type, host.trim(), port.toIntOrNull() ?: 0, enabled)
         val valid = runCatching { RuleCodec.validateProxy(profile); require(clearCredentials || (username.isBlank() == password.isBlank())) { "用户名和密码需同时填写" } }
         if (valid.isSuccess) onSave(profile, if (clearCredentials || username.isBlank()) null else Credentials(username, password),
             existing == null || clearCredentials || username.isNotBlank()) else error = valid.exceptionOrNull()?.message
-    }) { Text("保存") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    }) { Text("保存") } }, dismissButton = { TvTextButton(onClick = onDismiss) { Text("取消") } })
 }
 
 @Composable internal fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, playlists: List<Playlist>, status: PlaybackStatus, onDismiss: () -> Unit,
@@ -487,13 +480,13 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
             Text("线路", style = MaterialTheme.typography.labelLarge)
             var lineMenu by remember { mutableStateOf(false) }
             Box {
-                OutlinedButton(onClick = { lineMenu = true }, enabled = channel.streams.isNotEmpty()) {
+                TvOutlinedButton(onClick = { lineMenu = true }, enabled = channel.streams.isNotEmpty()) {
                     Text(selectedStream?.let { streamName(channel, it.id, playlists) } ?: "自动选线")
                 }
                 DropdownMenu(expanded = lineMenu, onDismissRequest = { lineMenu = false }) {
-                    DropdownMenuItem(text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
+                    DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
                     channel.streams.forEach { stream ->
-                        DropdownMenuItem(text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
+                        DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
                     }
                 }
             }
@@ -504,18 +497,18 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 RoutePicker(profiles, stream.manualRoute) { onRoute(stream.id, it) }
             }
         }
-    }, confirmButton = { TextButton(onClick = { onPlay(selectedStream?.id) }, enabled = channel.streams.isNotEmpty()) { Text("播放") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
+    }, confirmButton = { TvTextButton(onClick = { onPlay(selectedStream?.id) }, enabled = channel.streams.isNotEmpty()) { Text("播放") } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
 }
 
 @Composable internal fun RoutePicker(profiles: List<ProxyProfile>, selected: RouteTarget?, onRoute: (RouteTarget?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { open = true }) { Text(selected?.let { routeLabel(it, profiles) } ?: "跟随规则") }
+        TvOutlinedButton(onClick = { open = true }) { Text(selected?.let { routeLabel(it, profiles) } ?: "跟随规则") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             val targets: List<Pair<String, RouteTarget?>> = listOf("跟随规则" to null, "自动" to RouteTarget.AUTO, "直连" to RouteTarget.DIRECT) +
                 profiles.filter { it.enabled }.map { it.name to RouteTarget.proxy(it.id) }
-            targets.forEach { (label, target) -> DropdownMenuItem(text = { Text(label) }, onClick = { onRoute(target); open = false }) }
+            targets.forEach { (label, target) -> DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(label) }, onClick = { onRoute(target); open = false }) }
         }
     }
 }
@@ -560,17 +553,17 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
             OutlinedTextField(name, { name = it }, label = { Text("订阅名称") }, singleLine = true)
             OutlinedTextField(url, { url = it; clipboardMessage = null }, label = { Text("HTTP(S) 订阅地址") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-            TextButton(onClick = {
+            TvTextButton(onClick = {
                 val text = clipboard.getText()?.text?.trim().orEmpty()
                 if (text.isEmpty()) clipboardMessage = "剪贴板中没有文本，请先复制订阅地址"
                 else { url = text; clipboardMessage = null }
             }, enabled = !busy) { Text("粘贴订阅地址") }
-            OutlinedButton(onClick = { scan = true }, enabled = !busy) { Text("手机扫码输入") }
+            TvOutlinedButton(onClick = { scan = true }, enabled = !busy) { Text("手机扫码输入") }
             clipboardMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             Text("支持 Clash YAML 的 SS、VMess、VLESS、Trojan 等节点。地址及节点密钥仅加密保存在本机。", style = MaterialTheme.typography.bodySmall)
         }
-    }, confirmButton = { TextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("下载并导入") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    }, confirmButton = { TvTextButton(onClick = { onSave(name, url) }, enabled = !busy && name.isNotBlank() && httpUri(url.trim()) != null) { Text("下载并导入") } },
+        dismissButton = { TvTextButton(onClick = onDismiss) { Text("取消") } })
 }
 
 
@@ -583,9 +576,9 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("最近 500 条，重启后保留；不记录完整地址、认证标头或响应正文。失败后导出即可排查。", style = MaterialTheme.typography.bodySmall)
             Row {
-                TextButton(onClick = { clipboard.setText(AnnotatedString(snapshot())); copied = true }) { Text(if (copied) "已复制" else "复制日志") }
-                TextButton(onClick = onExport) { Text("导出 TXT") }
-                TextButton(onClick = { confirmClear = true }) { Text("清空") }
+                TvTextButton(onClick = { clipboard.setText(AnnotatedString(snapshot())); copied = true }) { Text(if (copied) "已复制" else "复制日志") }
+                TvTextButton(onClick = onExport) { Text("导出 TXT") }
+                TvTextButton(onClick = { confirmClear = true }) { Text("清空") }
             }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (lines.isEmpty()) item { Text("暂无日志，请重试播放后查看") }
@@ -596,9 +589,9 @@ private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNul
                 }
             }
         }
-    }, confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
+    }, confirmButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清空日志？") },
         text = { Text("将删除已保存的诊断记录。") },
-        confirmButton = { TextButton(onClick = { onClear(); copied = false; confirmClear = false }) { Text("确认清空") } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
+        confirmButton = { TvTextButton(onClick = { onClear(); copied = false; confirmClear = false }) { Text("确认清空") } },
+        dismissButton = { TvTextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }
