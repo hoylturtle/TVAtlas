@@ -5,6 +5,7 @@ import com.tvatlas.core.model.*
 import com.tvatlas.core.playlist.M3uParser
 import com.tvatlas.core.routing.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -18,6 +19,26 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
     private val dao = db.dao()
     private fun route(text: String?): RouteTarget? = text?.let { RuleCodec.json.decodeFromString<RouteTarget>(it) }
     private fun encoded(route: RouteTarget?) = route?.let { RuleCodec.json.encodeToString(it) }
+    suspend fun initializeDefaults(defaults: List<Playlist> = DefaultPlaylists.entries) {
+        // Persist entries before downloading, so offline first launches still offer refresh.
+        val pending = db.withTransaction {
+            defaults.mapNotNull { entry ->
+                val row = dao.playlist(entry.id) ?: PlaylistRow(entry.id, entry.name, entry.url).also {
+                    dao.savePlaylist(it)
+                }
+                if (row.enabled && row.lastUpdatedAt == null)
+                    Playlist(row.id, row.name, row.url, row.enabled, row.refreshIntervalHours)
+                else null
+            }
+        }
+        for (playlist in pending) {
+            try {
+                refresh(playlist)
+                log?.event("INFO", "DEFAULT_PLAYLIST", "loaded ${playlist.name}")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { log?.error("DEFAULT_PLAYLIST", error) }
+        }
+    }
     val library = combine(dao.playlists(), dao.channels(), dao.streams(), dao.proxies(), dao.rules()) { p, c, s, proxies, rules ->
         val enabled = p.filter { it.enabled }.map { it.id }.toSet()
         val channels = c.mapNotNull { ch ->

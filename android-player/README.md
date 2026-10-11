@@ -4,7 +4,7 @@
 
 ## 使用
 
-1. 在「播放列表」添加名称和 HTTP(S) M3U 地址。
+1. 首次启动自动加入「TVAtlas 频道订阅」和「翡翠台官方（实验）」。正式频道订阅使用 `https://raw.githubusercontent.com/hoylturtle/TVAtlas/main/tvatlas.m3u`，也可在「播放列表」添加其他 HTTP(S) M3U 地址。覆盖更新会补齐缺少的默认项，不改已有路由；下载失败时保留列表入口，可手动更新或下次启动重试。
 2. 在「路由」选择「添加 Clash/Mihomo 订阅」，填写名称，粘贴订阅 URL（支持长按粘贴和「粘贴订阅地址」按钮）并下载导入。也可手动添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
 3. 可选从系统文件选择器导入 JSON 规则。参考 `examples/routes-v1.json`。
 4. 在「直播」选择频道。长按频道查看线路、修改频道或单线路路由。

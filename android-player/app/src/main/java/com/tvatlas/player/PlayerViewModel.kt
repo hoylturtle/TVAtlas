@@ -71,6 +71,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     init {
+        action { repository.initializeDefaults() }
         viewModelScope.launch {
             library.collect { state ->
                 withContext(Dispatchers.IO) { core.update(state.profiles); pool.update(state.profiles) }

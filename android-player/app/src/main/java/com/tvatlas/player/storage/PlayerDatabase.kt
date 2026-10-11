@@ -35,6 +35,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Entity(tableName = "rules") data class RulesRow(@PrimaryKey val id: Int = 1, val json: String)
 
 @Dao interface PlayerDao {
+    @Query("SELECT * FROM playlists WHERE id = :id") suspend fun playlist(id: String): PlaylistRow?
     @Query("SELECT * FROM playlists ORDER BY name") fun playlists(): Flow<List<PlaylistRow>>
     @Query("SELECT * FROM channels ORDER BY channelGroup, name") fun channels(): Flow<List<ChannelRow>>
     @Query("SELECT * FROM streams ORDER BY sourcePlaylistId, id") fun streams(): Flow<List<StreamRow>>
