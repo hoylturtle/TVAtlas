@@ -11,8 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.material3.Text
@@ -36,7 +34,7 @@ class TvNavigationTest {
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         var played = false
         compose.setContent {
-            MaterialTheme(colorScheme = colors) { CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground, LocalTvMode provides true, LocalDensity provides Density(1f)) {
+            MaterialTheme(colorScheme = colors) { CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground, LocalTvMode provides true) {
                 Row(Modifier.requiredSize(960.dp, 540.dp).background(MaterialTheme.colorScheme.background).testTag("tv-layout")) {
                     TvNavigation(0, {}, Modifier.fillMaxHeight())
                     Box(Modifier.weight(1f)) { TvBrowseLayout(true, "翡翠台",
