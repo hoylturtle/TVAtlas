@@ -4,10 +4,31 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+val signingFile = System.getenv("TVATLAS_SIGNING_PROPERTIES")?.let { file(it) }
+val releaseSigning = java.util.Properties().apply {
+    if (signingFile != null) signingFile.inputStream().use { load(it) }
+}
 android {
     namespace = "com.tvatlas.player"
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = 9; versionName = "0.1.8"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("10").get().toInt(); versionName = "0.1.9"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    signingConfigs {
+        if (signingFile != null) create("tvatlasRelease") {
+            storeFile = file(requireNotNull(releaseSigning.getProperty("storeFile")))
+            storePassword = requireNotNull(releaseSigning.getProperty("storePassword"))
+            keyAlias = requireNotNull(releaseSigning.getProperty("keyAlias"))
+            keyPassword = requireNotNull(releaseSigning.getProperty("keyPassword"))
+            enableV1Signing = true
+            enableV2Signing = true
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isDebuggable = false
+            isMinifyEnabled = false
+            if (signingFile != null) signingConfig = signingConfigs.getByName("tvatlasRelease")
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }

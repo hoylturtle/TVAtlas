@@ -9,8 +9,8 @@ import org.junit.Test
 class UpdateRepositoryTest {
     private val sha = "a".repeat(40)
     private fun run(id: Int, conclusion: String = "success") = """{"id":$id,"status":"completed","conclusion":"$conclusion","event":"push","head_branch":"main","head_sha":"$sha"}"""
-    private val info = """{"versionCode":5,"versionName":"0.1.4","minSdk":23,"notes":"修复播放","downloadUrl":"https://untrusted.invalid/app.apk"}"""
-    private fun artifact(expired: Boolean = false) = """{"artifacts":[{"id":99,"name":"TVAtlas-Player-v0.1.4-debug","expired":$expired}]}"""
+    private val info = """{"versionCode":5,"versionName":"0.1.4","minSdk":23,"notes":"修复播放","signingCertificateSha256":"7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878","downloadUrl":"https://untrusted.invalid/app.apk"}"""
+    private fun artifact(expired: Boolean = false) = """{"artifacts":[{"id":99,"name":"TVAtlas-Player-v0.1.4-release","expired":$expired}]}"""
     private fun repository(server: MockWebServer) = UpdateRepository(OkHttpClient(), server.url("/api").toString(), server.url("/raw").toString(), "https://github.com/hoylturtle/TVAtlas")
 
     @Test fun skipsFailedBuildAndPinsMetadataAndDownloadToVerifiedCommitAndArtifact() {
@@ -48,4 +48,24 @@ class UpdateRepositoryTest {
             catch (error: UpdateException) { assertTrue(error.message!!.contains("可下载")) }
         }
     }
+    @Test fun mismatchedCertificateIsNeverOffered() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(1)}]}"""))
+            server.enqueue(MockResponse().setBody(info.replace("7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878", "b".repeat(64))))
+            try { repository(server).latest(); fail("Expected incompatible signature") }
+            catch (_: UpdateException) { assertEquals(2, server.requestCount) }
+        }
+    }
+    @Test fun unsignedAndTemporaryDebugArtifactsAreNeverOffered() {
+        for (name in listOf("TVAtlas-Player-v0.1.4-debug", "TVAtlas-signing-input-v0.1.4")) {
+            MockWebServer().use { server ->
+                server.enqueue(MockResponse().setBody("""{"workflow_runs":[${run(1)}]}"""))
+                server.enqueue(MockResponse().setBody(info))
+                server.enqueue(MockResponse().setBody(artifact().replace("TVAtlas-Player-v0.1.4-release", name)))
+                try { repository(server).latest(); fail("Expected unavailable release") }
+                catch (_: UpdateException) { assertEquals(3, server.requestCount) }
+            }
+        }
+    }
+
 }

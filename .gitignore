@@ -9,3 +9,7 @@ secrets/
 android-player/dist/
 __pycache__/
 **/jniLibs/*.so
+
+**/signing.properties
+**/*SIGNING_BUNDLE*
+*.p12

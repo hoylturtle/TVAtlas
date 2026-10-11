@@ -16,6 +16,7 @@ class UpdateRepository(
     private val api: String = "https://api.github.com/repos/hoylturtle/TVAtlas",
     private val raw: String = "https://raw.githubusercontent.com/hoylturtle/TVAtlas",
     private val web: String = "https://github.com/hoylturtle/TVAtlas",
+    private val signingCertificateSha256: String = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
 ) {
     fun latest(): PublishedUpdate {
         val runs = read("$api/actions/workflows/android.yml/runs?status=success&event=push&per_page=5")!!["workflow_runs"]?.jsonArray
@@ -34,10 +35,11 @@ class UpdateRepository(
             val version = info.text("versionName")
             val sdk = info["minSdk"]?.jsonPrimitive?.intOrNull ?: continue
             if (code <= 0 || sdk < 23 || !version.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+"))) continue
+            if (info.text("signingCertificateSha256").lowercase() != signingCertificateSha256) continue
             val runId = run["id"]?.jsonPrimitive?.longOrNull ?: continue
             val artifacts = read("$api/actions/runs/$runId/artifacts?per_page=100")!!["artifacts"]?.jsonArray ?: continue
             val artifact = artifacts.map { it.jsonObject }.firstOrNull {
-                it.text("name") == "TVAtlas-Player-v$version-debug" && it["expired"]?.jsonPrimitive?.booleanOrNull == false
+                it.text("name") == "TVAtlas-Player-v$version-release" && it["expired"]?.jsonPrimitive?.booleanOrNull == false
             } ?: continue
             val id = artifact["id"]?.jsonPrimitive?.longOrNull ?: continue
             if (id <= 0 || runId <= 0) continue

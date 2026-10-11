@@ -31,11 +31,21 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Restore fixed release signing identity
+        id: signing
+        env:
+          TVATLAS_SIGNING_BUNDLE: ${{ secrets.TVATLAS_SIGNING_BUNDLE }}
+        run: python3 scripts/prepare_signing.py
       - name: Bundle checksum-verified Mihomo Android cores
         run: python3 scripts/fetch_mihomo.py
-      - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+      - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --stacktrace
       - name: Verify package version and APK signature
-        run: python3 scripts/verify_apk.py
+        run: |
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            python3 scripts/verify_apk.py
+          else
+            python3 scripts/verify_apk.py --unsigned-input
+          fi
       - name: Package Mihomo corresponding source and notices
         run: python3 scripts/fetch_mihomo.py --source
       - name: Show lint findings on failure
@@ -53,9 +63,12 @@ jobs:
             android-player/app/build/reports/
       - uses: actions/upload-artifact@v4
         with:
-          name: TVAtlas-Player-v0.1.8-debug
+          name: ${{ steps.signing.outputs.signed == 'true' && 'TVAtlas-Player-v0.1.9-release' || 'TVAtlas-signing-input-v0.1.9' }}
           path: android-player/dist/
           if-no-files-found: error
+      - name: Remove private release key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/tvatlas-signing"
   native-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -82,7 +95,9 @@ jobs:
           target: google_apis
           disable-animations: true
           working-directory: android-player
-          script: gradle :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            gradle :app:connectedDebugAndroidTest --stacktrace
+            python3 scripts/verify_upgrade_install.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
