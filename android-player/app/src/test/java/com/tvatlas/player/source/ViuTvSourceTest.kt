@@ -22,6 +22,21 @@ class ViuTvSourceTest {
         assertThrows(IOException::class.java) { ViuTvSource.parseCheckout(fixture.replace("viu-live.akamaized.net", "evil.test")) }
         assertFalse(ViuTvSource.parseCheckout(fixture.replace(",\"drmToken\":\"fixture-token\"", "").replace("index.mpd", "index.m3u8")).drmRequired)
     }
+    @Test fun viuTvSixUses96CheckoutAndSameRegionGroup() = runBlocking {
+        var sent = ""
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            sent = okio.Buffer().also { chain.request().body!!.writeTo(it) }.readUtf8()
+            assertEquals(ViuTvSource.SIX_PAGE, chain.request().header("Referer"))
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(fixture.toResponseBody()).build()
+        }.build()
+        assertTrue(ViuTvSource.recognizes(ViuTvSource.SIX_PAGE))
+        ViuTvSource.resolve(client, page = ViuTvSource.SIX_PAGE)
+        val json = Json.parseToJsonElement(sent).jsonObject
+        assertEquals("096", json["channelno"]!!.jsonPrimitive.content)
+        assertEquals("096", json["contentId"]!!.jsonPrimitive.content)
+        assertTrue(ViuTvSource.playlist(ViuTvSource.SIX_PAGE).contains("香港 · 综合"))
+    }
     @Test fun checkoutAndLicenseFollowIndependentViuProtocol() = runBlocking {
         val requests = mutableListOf<Request>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->

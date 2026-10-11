@@ -45,7 +45,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             val streams = s.filter { it.channelId == ch.id && it.sourcePlaylistId in enabled }.distinctBy { it.url }.map {
                 Stream(it.id, it.url, it.sourcePlaylistId, route(it.manualRoute), it.lastSuccessAt, it.lastFailureAt, it.failureCount)
             }
-            if (streams.isEmpty()) null else Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, streams, route(ch.manualRoute))
+            if (streams.isEmpty()) null else Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, streams, route(ch.manualRoute)).normalizeHongKongGroup()
         }
         Library(p.map { Playlist(it.id, it.name, it.url, it.enabled, it.refreshIntervalHours, it.lastUpdatedAt) }, channels,
             proxies.map { ProxyProfile(it.id, it.name, ProxyType.valueOf(it.type), it.host, it.port, it.enabled, it.subscriptionId) },
@@ -54,7 +54,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
 
     suspend fun refresh(playlist: Playlist) = withContext(Dispatchers.IO) {
         require(httpUri(playlist.url) != null) { "请输入不含凭证的 HTTP(S) 地址" }
-        val body = if (com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.PLAYLIST else directClient.newCall(Request.Builder().url(playlist.url).build()).execute().use { response ->
+        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).execute().use { response ->
             log?.event("INFO", "PLAYLIST_HTTP", "status=${response.code} host=${response.request.url.host}")
             require(response.isSuccessful) { "播放列表请求失败（HTTP ${response.code}）" }
             val body = requireNotNull(response.body)

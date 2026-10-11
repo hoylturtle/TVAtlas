@@ -11,6 +11,8 @@ object DefaultPlaylists {
         Playlist(stableId(MyTvSuperSource.PEARL_PAGE), "明珠台官方（实验）", MyTvSuperSource.PEARL_PAGE),
         Playlist(stableId(MyTvSuperSource.PLUS_PAGE), "TVB Plus 官方（实验）", MyTvSuperSource.PLUS_PAGE),
         Playlist(stableId(com.tvatlas.player.source.ViuTvSource.PAGE), "ViuTV 官方（实验）", com.tvatlas.player.source.ViuTvSource.PAGE),
+        Playlist(stableId(MyTvSuperSource.FREE_PAGE), "TVB 官方免费频道（实验）", MyTvSuperSource.FREE_PAGE),
+        Playlist(stableId(com.tvatlas.player.source.ViuTvSource.SIX_PAGE), "ViuTVsix 官方（实验）", com.tvatlas.player.source.ViuTvSource.SIX_PAGE),
         Playlist(stableId(CHANNELS_URL), "TVAtlas 频道订阅", CHANNELS_URL),
     )
 }

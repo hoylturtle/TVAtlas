@@ -41,6 +41,6 @@ object M3uParser {
                 }
             }
         }
-        return channels.values.toList()
+        return channels.values.map { it.normalizeHongKongGroup() }
     }
 }
