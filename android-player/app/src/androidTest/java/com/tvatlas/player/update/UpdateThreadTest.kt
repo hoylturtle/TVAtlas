@@ -12,10 +12,11 @@ import org.junit.Test
 class UpdateThreadTest {
     @Test fun checkStartedFromUiActuallyReachesServerInsteadOfFailingMainThreadPolicy() = runBlocking {
         val server = MockWebServer().apply { start(); enqueue(MockResponse().setBody("[]")) }
+        val repository = UpdateRepository(OkHttpClient(), api = server.url("/repo").toString())
         try {
             withContext(Dispatchers.Main) {
                 try {
-                    UpdateRepository(OkHttpClient(), api = server.url("/repo").toString()).latestAsync()
+                    repository.latestAsync()
                     fail("No release expected")
                 } catch (error: UpdateException) {
                     assertTrue(error.message!!.contains("暂未找到"))
