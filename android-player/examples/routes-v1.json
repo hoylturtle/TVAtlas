@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "本机路由示例（请修改代理端点）",
+  "proxies": [
+    {"id": "US", "name": "美国代理", "type": "SOCKS5", "host": "127.0.0.1", "port": 7891, "enabled": true},
+    {"id": "HK", "name": "香港代理", "type": "HTTP", "host": "127.0.0.1", "port": 7890, "enabled": true}
+  ],
+  "rules": [
+    {"id": "jade-auto", "match": {"channel": "翡翠台"}, "route": {"type": "AUTO", "try": ["DIRECT", "US", "HK"]}},
+    {"id": "hk-auto", "match": {"group": "香港 · 综合"}, "route": {"type": "AUTO", "try": ["DIRECT", "US", "HK"]}},
+    {"id": "cctv-direct", "match": {"channelRegex": "^CCTV-"}, "route": {"type": "DIRECT"}}
+  ],
+  "defaultRoute": {"type": "DIRECT"}
+}

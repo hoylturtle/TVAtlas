@@ -1,0 +1,7 @@
+{
+  "versionCode": 11,
+  "versionName": "0.1.10",
+  "minSdk": 23,
+  "notes": "内置 TVAtlas 正式频道订阅和翡翠台官方入口，首次启动自动加载；覆盖更新补齐默认播放列表，保留已有配置。沿用固定发布签名。",
+  "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
+}

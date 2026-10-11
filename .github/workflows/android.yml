@@ -1,0 +1,106 @@
+name: Android Player
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['android-player/**', '.github/workflows/android.yml']
+  push:
+    branches: [main, feature/tvatlas-android-player, 'codex/tvatlas-player-*']
+    paths: ['android-player/**', '.github/workflows/android.yml']
+permissions:
+  contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android-player
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Restore fixed release signing identity
+        id: signing
+        env:
+          TVATLAS_SIGNING_BUNDLE: ${{ secrets.TVATLAS_SIGNING_BUNDLE }}
+        run: python3 scripts/prepare_signing.py
+      - name: Bundle checksum-verified Mihomo Android cores
+        run: python3 scripts/fetch_mihomo.py
+      - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --stacktrace
+      - name: Verify package version and APK signature
+        id: package
+        run: |
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            python3 scripts/verify_apk.py
+          else
+            python3 scripts/verify_apk.py --unsigned-input
+          fi
+      - name: Package Mihomo corresponding source and notices
+        run: python3 scripts/fetch_mihomo.py --source
+      - name: Show lint findings on failure
+        if: failure()
+        run: |
+          if [ -f app/build/reports/lint-results-debug.txt ]; then
+            cat app/build/reports/lint-results-debug.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results
+          path: |
+            android-player/core/build/reports/tests/
+            android-player/app/build/reports/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: android-player/dist/
+          if-no-files-found: error
+      - name: Remove private release key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/tvatlas-signing"
+  native-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android-player
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: python3 scripts/fetch_mihomo.py
+      - name: Enable emulator acceleration
+        run: |
+          sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          working-directory: android-player
+          script: |
+            gradle :app:connectedDebugAndroidTest --stacktrace
+            python3 scripts/verify_upgrade_install.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-core-test-results
+          path: android-player/app/build/reports/androidTests/
