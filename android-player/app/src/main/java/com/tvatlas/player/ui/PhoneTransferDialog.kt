@@ -32,7 +32,7 @@ internal fun createLanTransferSession(context: Context, kind: TransferKind): Pho
 
 internal fun phoneQrBitmap(url: String): Bitmap {
     val matrix = QRCodeWriter().encode(url, BarcodeFormat.QR_CODE, 512, 512,
-        mapOf(EncodeHintType.MARGIN to 2, EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M))
+        mapOf(EncodeHintType.MARGIN to 4, EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M))
     val pixels = IntArray(512 * 512) { index -> if (matrix[index % 512, index / 512]) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
     return Bitmap.createBitmap(pixels, 512, 512, Bitmap.Config.ARGB_8888)
 }
@@ -66,7 +66,7 @@ internal fun phoneQrBitmap(url: String): Bitmap {
         finally { receiver?.close() }
     }
     LaunchedEffect(session) {
-        while (session != null) { seconds = session?.remainingSeconds ?: 0; delay(1000) }
+        while (session?.state?.value?.active == true) { seconds = session?.remainingSeconds ?: 0; delay(1000) }
     }
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) session?.close() }
