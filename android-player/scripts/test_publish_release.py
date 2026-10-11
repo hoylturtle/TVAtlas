@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 
 class PublishingTest(unittest.TestCase):
-    def execute(self, bad_certificate=False):
+    def execute(self, bad_certificate=False, published=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
@@ -39,6 +39,11 @@ class PublishingTest(unittest.TestCase):
                 method = request.get_method()
                 operations.append(method)
                 if method == "GET":
+                    if published:
+                        result = dict(draft=False, target_commitish=commit,
+                            assets=[dict(name=name) for name in [apk.name, "SHA256SUMS.txt", "build-info.txt", "release-info.json"]],
+                            html_url="https://github.com/hoylturtle/TVAtlas/releases/tag/v0.1.13-beta.1")
+                        return io.BytesIO(json.dumps(result).encode())
                     raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
                 if parsed.hostname == "uploads.github.com":
                     uploads.append(urllib.parse.parse_qs(parsed.query)["name"][0])
@@ -56,7 +61,9 @@ class PublishingTest(unittest.TestCase):
                 return io.BytesIO(json.dumps(result).encode())
             env = dict(GITHUB_REF="refs/heads/main", GITHUB_REPOSITORY="hoylturtle/TVAtlas",
                 GITHUB_SHA=commit, GITHUB_TOKEN="offline-fixture")
-            with patch.dict(os.environ, env), patch("urllib.request.build_opener") as factory:
+            old_manifest = dict(info, commit=commit, apkSha256="c" * 64, apkSize=100)
+            with patch.dict(os.environ, env), patch("urllib.request.build_opener") as factory, \
+                    patch("urllib.request.urlopen", return_value=io.BytesIO(json.dumps(old_manifest).encode())):
                 factory.return_value.open.side_effect = open_request
                 if bad_certificate:
                     with self.assertRaises(AssertionError):
@@ -64,8 +71,12 @@ class PublishingTest(unittest.TestCase):
                     factory.assert_not_called()
                 else:
                     runpy.run_path(str(script), run_name="__main__")
-                    self.assertEqual("PATCH", operations[-1])
-                    self.assertIn(apk.name, uploads)
+                    if published:
+                        self.assertEqual(["GET"], operations)
+                        self.assertEqual([], uploads)
+                    else:
+                        self.assertEqual("PATCH", operations[-1])
+                        self.assertIn(apk.name, uploads)
                     manifest = json.loads((dist / "release-info.json").read_text())
                     self.assertEqual(digest, manifest["apkSha256"])
                     self.assertEqual(commit, manifest["commit"])
@@ -73,6 +84,8 @@ class PublishingTest(unittest.TestCase):
         self.execute()
     def test_unverified_signer_never_starts_publication(self):
         self.execute(bad_certificate=True)
+    def test_rerun_preserves_existing_public_apk_even_when_rebuild_hash_changes(self):
+        self.execute(published=True)
 
 if __name__ == "__main__":
     unittest.main()

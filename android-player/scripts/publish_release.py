@@ -60,7 +60,12 @@ if release and not release["draft"]:
     manifest_url = f"https://github.com/{repo}/releases/download/{tag}/release-info.json"
     with urllib.request.urlopen(manifest_url, timeout=30) as response:
         existing = json.loads(response.read(1024 * 1024))
-    assert existing == manifest, "Published version differs; increment version before publishing"
+    # Rebuilt APK ZIP timestamps can differ even for the same source commit.
+    # Keep the first verified public APK instead of replacing it on a CI rerun.
+    for key in ("versionCode", "versionName", "minSdk", "releaseTag", "commit", "signingCertificateSha256"):
+        assert existing[key] == manifest[key], "Published version differs; increment version before publishing"
+    assert re.fullmatch(r"[a-f0-9]{64}", existing["apkSha256"])
+    assert existing["apkSize"] > 0
     print("Existing public testing release verified:", release["html_url"])
 else:
     if release is None:
