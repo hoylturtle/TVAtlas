@@ -13,6 +13,9 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
+    outputs:
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      signed: ${{ steps.signing.outputs.signed }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -38,6 +41,8 @@ jobs:
         run: python3 scripts/prepare_signing.py
       - name: Bundle checksum-verified Mihomo Android cores
         run: python3 scripts/fetch_mihomo.py
+      - name: Validate release publication without network writes
+        run: python3 scripts/test_publish_release.py
       - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --stacktrace
       - name: Verify package version and APK signature
         id: package
@@ -104,3 +109,20 @@ jobs:
         with:
           name: native-core-test-results
           path: android-player/app/build/reports/androidTests/
+  publish-testing-release:
+    needs: [verify, native-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.verify.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.verify.outputs.artifact_name }}
+          path: android-player/dist/
+      - name: Publish verified public testing APK and update manifest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 android-player/scripts/publish_release.py

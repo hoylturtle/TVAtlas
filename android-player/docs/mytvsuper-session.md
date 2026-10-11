@@ -28,3 +28,14 @@ No HTML-only bootstrap remains: a page GET does not execute guest JavaScript.
 Unit tests check pairing method, fields, order, bounded retries and failure handling.
 These tests do not prove official-service acceptance or Xiaomi Widevine playback;
 a real Hong Kong route/device run is still required to validate those stages.
+
+v0.1.10 device logs confirmed guest initialization, HK region, checkout and DASH
+manifest retrieval succeeded, but mlicense returned HTTP 400 on every retry.
+This is server rejection of the license request, not proof of missing Widevine.
+Public frontend inspected on 2026-10-11: _app-d3319d88fb6487a5.js maps Android web
+clients to web_android; 2687-a3967bf169f5936e.js uses that platform identifier and
+requests SW_SECURE_CRYPTO for video/audio. v0.1.11 aligns the web guest license
+request with web_android and requests Widevine L3, without changing the service
+endpoint or persisting credentials. Logging reports actual security level and
+request size only. This compatibility change requires an actual-device playback
+test; CI does not establish that the official service accepts Android MediaDrm.
