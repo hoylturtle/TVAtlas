@@ -349,7 +349,7 @@ private val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Co
                 if (release.minSdk > android.os.Build.VERSION.SDK_INT) Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级")
                 else {
                     Button(onClick = onDownload) { Text("打开下载页面") }
-                    Text("在 GitHub 登录后下载 ZIP，解压安装其中的 APK。调试签名可能变化；升级前记下播放列表地址、导出路由规则，卸载会清除旧数据。", style = MaterialTheme.typography.bodySmall)
+                    Text("在 GitHub 登录后下载 ZIP，解压并安装其中的新版 APK，即可覆盖更新并保留配置，无需卸载。", style = MaterialTheme.typography.bodySmall)
                 }
                 TextButton(onClick = { clipboard.setText(AnnotatedString(release.downloadUrl)); linkCopied = true }) {
                     Text(if (linkCopied) "下载链接已复制" else "复制下载链接")

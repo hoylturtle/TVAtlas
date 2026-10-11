@@ -23,10 +23,12 @@
 
 ```sh
 python3 scripts/fetch_mihomo.py
-gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 ```
 
-APK 输出：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的 `Android Player` 工作流上传 `TVAtlas-Player-v0.1.4-debug` 构建产物及测试报告。此包由 Android 调试密钥签名，可安装用于验收；正式发行签名需另行配置私有密钥。不同 CI 构建的临时调试签名可能不同，不能保证覆盖安装。升级前记下播放列表地址并导出路由规则；若出现签名不一致，卸载旧包后安装并重新导入，卸载会删除应用私有数据。
+发布包输出：`app/build/outputs/apk/release/app-release.apk`。从 v0.1.9 起，GitHub Actions 使用固定私有发布密钥并上传 `TVAtlas-Player-v0.1.9-release`。首次设置 repository secret `TVATLAS_SIGNING_BUNDLE`，本地签名则通过 `TVATLAS_SIGNING_PROPERTIES` 指定私有 properties 文件，详见 [固定签名说明](docs/signing.md)。未设置密钥时只生成不可安装的待签名输入，不提供更新下载；签名不匹配时构建失败。密钥与密码不进入仓库。
+
+v0.1.8 及更早版本使用无法恢复的临时 debug 密钥，需要迁移卸载一次，迁移前保存播放列表/订阅地址并导出路由。安装 v0.1.9 固定签名版后，后续相同签名、更高 versionCode 的版本可覆盖安装并保留数据。CI 会实际执行一次同签名 `adb install -r`，验证私有文件和节点偏好保留。
 
 Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留节点 ID、失败更新保留旧数据，以及本地 SOCKS 监听到节点的实际转发。
 
@@ -44,9 +46,9 @@ Mihomo 使用 GPL-3.0；许可和声明随应用提供。构建产物同时包�
 
 ## 检查更新
 
-「设置 → 检查更新」显示当前版本、新版说明和下载入口。版本按整数 versionCode 比较，只采纳本仓库 Android Player 工作流的成功 push 构建，并要求存在未过期、版本匹配的 APK 产物。版本信息读取该成功构建提交的 `release-info.json`，不会读取尚未验证的分支 HEAD。更新失败可重试，不影响播放；不在后台自动下载或安装。
+「设置 → 检查更新」显示当前版本、新版说明和下载入口。版本按整数 versionCode 比较，只采纳本仓库 Android Player 工作流的成功 push 构建，并要求存在未过期、版本匹配的 release APK 产物和匹配固定证书的元数据。版本信息读取该成功构建提交的 `release-info.json`，不会读取尚未验证的分支 HEAD。更新失败可重试，不影响播放；不在后台自动下载或安装。
 
-「打开下载页面」使用系统浏览器打开 GitHub 安装包页面，需 GitHub 登录下载 ZIP 后解压 APK。没有浏览器的电视可以「复制下载链接」，在其他设备下载后传入安装。每次发新版需要同步 `release-info.json`、Gradle versionCode/versionName 和工作流产物名称；CI 校验这些信息一致。临时调试签名不保证覆盖安装，正式无损升级需稳定发行签名。
+「打开下载页面」使用系统浏览器打开 GitHub 安装包页面，需 GitHub 登录下载 ZIP 后解压 APK。没有浏览器的电视可以「复制下载链接」，在其他设备下载后传入安装。每次发新版需要同步 `release-info.json`、Gradle versionCode/versionName 和工作流产物名称；CI 校验这些信息一致。v0.1.9 起采用固定签名，无需每次卸载；debug 与待签名产物不会被当作可覆盖更新。
 
 ## 规则语义
 
