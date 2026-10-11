@@ -10,6 +10,14 @@ import org.junit.Test
 import java.io.IOException
 
 class MyTvSuperSourceTest {
+    @Test fun webGuestLicenseUsesAndroidWebEntitlementAndBinaryPayloadType() {
+        val headers = MyTvSuperSource.licenseHeaders("fixture-token")
+        assertEquals("web_android", headers["X-Client-Platform"])
+        assertEquals("application/octet-stream", headers["Content-Type"])
+        assertEquals("fixture-token", headers["X-User-Token"])
+        assertEquals("super", headers["X-Service-Id"])
+        assertFalse(headers.containsKey("Cookie"))
+    }
     private val session = """{"supported_country":true,"user":{"token":"fixture-token","guest_mode":true}}"""
     private fun checkout(host: String = "edgeware-live.edgeware.tvb.com", stage: String = "free") = """
         {"content_id":"ott_J_h264","protocol":"dash","drm":"cenc_m","video_stage":"$stage",

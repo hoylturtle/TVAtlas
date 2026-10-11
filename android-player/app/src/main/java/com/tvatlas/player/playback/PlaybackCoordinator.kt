@@ -11,7 +11,9 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.drm.DefaultDrmSessionManagerProvider
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
 import com.tvatlas.player.source.MyTvSuperSource
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
@@ -115,10 +117,24 @@ class PlaybackCoordinator(
             })
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
         if (source != null) {
-            val drmProvider = DefaultDrmSessionManagerProvider()
             // Media3 can retry redirected license POSTs itself; constrain all token-bearing requests.
-            drmProvider.setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
-            mediaSourceFactory.setDrmSessionManagerProvider(drmProvider)
+            val callback = HttpMediaDrmCallback(MyTvSuperSource.LICENSE, true,
+                OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
+            MyTvSuperSource.licenseHeaders(source.userToken).forEach { (key, value) -> callback.setKeyRequestProperty(key, value) }
+            // This source uses a web guest entitlement. The official web player requests
+            // SW_SECURE_CRYPTO; select the corresponding Widevine software implementation.
+            val manager = DefaultDrmSessionManager.Builder()
+                .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID) { uuid ->
+                    val drm = FrameworkMediaDrm.DEFAULT_PROVIDER.acquireExoMediaDrm(uuid)
+                    if (drm is FrameworkMediaDrm) {
+                        try { drm.setPropertyString("securityLevel", "L3") }
+                        catch (error: RuntimeException) { log?.error("DRM_CONFIG", error) }
+                        val level = runCatching { drm.getPropertyString("securityLevel") }.getOrDefault("unknown")
+                        log?.event("INFO", "DRM_CONFIG", "platform=web_android securityLevel=${level.takeIf { it in listOf("L1", "L2", "L3") } ?: "unknown"}")
+                    } else log?.event("ERROR", "DRM_CONFIG", "Widevine unavailable")
+                    drm
+                }.build(callback)
+            mediaSourceFactory.setDrmSessionManagerProvider { manager }
         }
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
         _player.value = instance
@@ -130,7 +146,13 @@ class PlaybackCoordinator(
         fun fail(failure: PlaybackFailure, drmCode: Int? = null) {
             if (token != generation || instance !== _player.value || failing) return
             failing = true
-            val reason = drmCode?.let { "官方 DRM 授权失败（$it），请确认设备支持 Widevine；网页会话可能不兼容 Android" }
+            val reason = drmCode?.let {
+                when {
+                    failure.httpStatus != null -> "官方 DRM 授权请求失败（HTTP ${failure.httpStatus}，播放器代码 $it）"
+                    it == PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED -> "设备不支持所需的 Widevine DRM（$it）"
+                    else -> "DRM 会话失败（$it），请查看调试日志"
+                }
+            }
                 ?: (failure.kind.name + (failure.httpStatus?.let { " HTTP $it" } ?: ""))
             log?.event("ERROR", "FAILOVER", reason)
             _status.value = _status.value.copy(message = "连接暂不可用，正在尝试其他线路", error = reason)
@@ -170,7 +192,9 @@ class PlaybackCoordinator(
                 val kind = when {
                     error.errorCode in 4000..4999 -> FailureKind.DECODER
                     error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
-                        error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> FailureKind.MANIFEST
+                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> FailureKind.MANIFEST
                     http != null -> FailureKind.HTTP
                     lastLoadType == C.DATA_TYPE_MEDIA && SystemClock.elapsedRealtime() - loadErrorAt < 30000 -> FailureKind.SEGMENT
                     else -> FailureKind.NETWORK
@@ -182,9 +206,7 @@ class PlaybackCoordinator(
             .setUri(source.url).setMimeType(MimeTypes.APPLICATION_MPD)
             .setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                 .setLicenseUri(MyTvSuperSource.LICENSE)
-                .setLicenseRequestHeaders(mapOf("X-User-Token" to source.userToken,
-                    "X-Client-Platform" to "android", "X-Service-Id" to "super",
-                    "Origin" to "https://www.mytvsuper.com", "Referer" to MyTvSuperSource.PAGE))
+                .setLicenseRequestHeaders(MyTvSuperSource.licenseHeaders(source.userToken))
                 .build()).build()
         instance.setMediaItem(item)
         instance.prepare(); instance.playWhenReady = true

@@ -16,6 +16,11 @@ object MyTvSuperSource {
     const val PAGE = "https://www.mytvsuper.com/tc/live/81/"
     const val PLAYLIST = "#EXTM3U\n#EXTINF:-1 tvg-id=\"Jade.hk\" group-title=\"香港\",翡翠台\n$PAGE\n"
     const val LICENSE = "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_J_h264"
+    fun licenseHeaders(userToken: String) = mapOf(
+        "X-User-Token" to userToken, "X-Client-Platform" to "web_android",
+        "X-Service-Id" to "super", "Content-Type" to "application/octet-stream",
+        "Origin" to "https://www.mytvsuper.com", "Referer" to PAGE,
+    )
     fun recognizes(value: String): Boolean {
         val url = value.toHttpUrlOrNull() ?: return false
         return url.scheme == "https" && url.host == "www.mytvsuper.com" && url.username.isEmpty() &&
@@ -67,7 +72,7 @@ object MyTvSuperSource {
                 throw IOException("拒绝向其他地址发送官方授权凭据")
             val started = System.nanoTime()
             val stage = if (request.header("X-User-Token") != null) "DRM_LICENSE" else "DRM_PROVISION"
-            log?.event("INFO", stage, "start host=${request.url.host} method=${request.method}")
+            log?.event("INFO", stage, "start host=${request.url.host} method=${request.method} requestBytes=${request.body?.contentLength() ?: 0}")
             try {
                 val response = chain.proceed(request)
                 log?.event("INFO", stage, "status=${response.code} elapsedMs=${(System.nanoTime() - started) / 1000000}")

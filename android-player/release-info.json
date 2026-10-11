@@ -1,7 +1,7 @@
 {
-  "versionCode": 11,
-  "versionName": "0.1.10",
+  "versionCode": 12,
+  "versionName": "0.1.11",
   "minSdk": 23,
-  "notes": "内置 TVAtlas 正式频道订阅和翡翠台官方入口，首次启动自动加载；覆盖更新补齐默认播放列表，保留已有配置。沿用固定发布签名。",
+  "notes": "实验性翡翠台官方线路采用网页 Android 授权平台标识和 Widevine 软件安全级别；授权失败提示显示 HTTP 状态，日志增加安全级别与请求字节数。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
 }
