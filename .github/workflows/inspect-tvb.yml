@@ -1,0 +1,13 @@
+name: Inspect Official Frontend
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect public guest route definitions without credentials
+        run: python3 .github/scripts/inspect_tvb.py

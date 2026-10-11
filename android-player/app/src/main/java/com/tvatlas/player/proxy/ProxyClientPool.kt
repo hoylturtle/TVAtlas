@@ -1,0 +1,77 @@
+package com.tvatlas.player.proxy
+
+import com.tvatlas.core.model.*
+import com.tvatlas.player.storage.CredentialVault
+import okhttp3.Credentials
+import okhttp3.Dns
+import okhttp3.OkHttpClient
+import java.io.IOException
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.util.concurrent.TimeUnit
+
+class ProxyClientPool(
+    private val readCredentials: (String) -> com.tvatlas.player.storage.Credentials?,
+    private val coreEndpoint: (String) -> CoreEndpoint,
+) {
+    constructor(readCredentials: (String) -> com.tvatlas.player.storage.Credentials?) : this(readCredentials, { throw IOException("Subscription core unavailable") })
+    constructor(vault: CredentialVault) : this(vault::get)
+    constructor(vault: CredentialVault, core: MihomoRuntime) : this(vault::get, core::endpoint)
+    private var profiles = emptyList<ProxyProfile>()
+    private val clients = mutableMapOf<String, OkHttpClient>()
+    val direct: OkHttpClient = builder().proxy(Proxy.NO_PROXY).build()
+    private fun builder() = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS)
+        .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+
+    @Synchronized fun update(profiles: List<ProxyProfile>, credentialsChanged: Boolean = false) {
+        if (this.profiles == profiles && !credentialsChanged) return
+        this.profiles = profiles
+        clients.values.forEach { it.connectionPool.evictAll() }; clients.clear()
+    }
+    @Synchronized fun label(target: RouteTarget): String = when (target.type) {
+        RouteType.DIRECT -> "直连"
+        RouteType.AUTO -> "自动"
+        RouteType.PROXY -> profiles.firstOrNull { it.id == target.profile }?.name ?: "节点不可用"
+    }
+    fun client(target: RouteTarget): OkHttpClient {
+        if (target.type == RouteType.DIRECT) return direct
+        if (target.type != RouteType.PROXY) throw IOException("Route must be concrete")
+        val original = synchronized(this) { profiles.firstOrNull { it.id == target.profile && it.enabled } }
+            ?: throw IOException("Proxy unavailable")
+        val endpoint = if (original.type == ProxyType.MIHOMO) coreEndpoint(original.id) else null
+        val p = if (endpoint != null) original.copy(type = ProxyType.SOCKS5, host = "127.0.0.1", port = endpoint.port) else original
+        val cacheKey = if (endpoint != null) "${p.id}:${endpoint.port}:${endpoint.credentials.password.hashCode()}" else p.id
+        synchronized(this) { clients[cacheKey] }?.let { return it }
+        val credentials = endpoint?.credentials ?: try { readCredentials(p.id) } catch (_: Exception) { throw IOException("Proxy credentials unavailable") }
+        val client = builder().apply {
+            when (p.type) {
+                ProxyType.HTTP -> {
+                    proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(p.host, p.port)))
+                    if (credentials != null) proxyAuthenticator { _, response ->
+                        if (response.request.header("Proxy-Authorization") != null) null else response.request.newBuilder()
+                            .header("Proxy-Authorization", Credentials.basic(credentials.username, credentials.password)).build()
+                    }
+                }
+                ProxyType.SOCKS5 -> {
+                    proxy(Proxy.NO_PROXY)
+                    socketFactory(Socks5SocketFactory(p, credentials))
+                    dns(object : Dns {
+                        override fun lookup(hostname: String): List<InetAddress> =
+                            listOf(InetAddress.getByAddress(hostname, byteArrayOf(0, 0, 0, 1)))
+                    })
+                }
+                ProxyType.MIHOMO -> throw IOException("Core route not resolved")
+            }
+        }.build()
+        return synchronized(this) {
+            if (profiles.none { it == original && it.enabled }) throw IOException("Proxy configuration changed")
+            clients.getOrPut(cacheKey) { client }
+        }
+    }
+    @Synchronized fun close() {
+        (clients.values + direct).forEach { it.dispatcher.cancelAll(); it.connectionPool.evictAll() }
+        clients.clear()
+    }
+}
