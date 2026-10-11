@@ -236,8 +236,8 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
     val player by model.playback.player.collectAsStateWithLifecycle()
     PlayerPaneLayout(fillPicture, modifier, picture = {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = !tv || pictureFocused; isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player; if (pictureFocused && !it.hasFocus()) it.post { it.requestFocus() } },
-                onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = !tv || pictureFocused; isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.isFocusable = !tv || pictureFocused; it.isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused && !it.hasFocus()) it.post { it.requestFocus() } },
+                onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !tv || pictureFocused }.onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
                         Key.DirectionDown -> { onChannel(1); true }
