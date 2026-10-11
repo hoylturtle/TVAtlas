@@ -20,12 +20,16 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
         val manual = context.stream.manualRoute ?: context.channel.manualRoute
         // Manual AUTO asks the rule engine for its ordered strategy; forced DIRECT/PROXY remain authoritative.
         val route = manual?.takeUnless { it.type == RouteType.AUTO } ?: rule?.route ?: config.defaultRoute
-        val selected = if (manual?.type == RouteType.AUTO && route.type == RouteType.DIRECT && rule == null)
+        val hongKong = if (rule == null && (manual == null || manual.type == RouteType.AUTO) && context.channel.isHongKong())
+            profiles.filter { it.enabled && isHongKongLabel(it.name) }.map { it.id } else emptyList()
+        val selected = if (hongKong.isNotEmpty()) RouteTarget(RouteType.AUTO, `try` = hongKong)
+            else if (manual?.type == RouteType.AUTO && route.type == RouteType.DIRECT && rule == null)
             RouteTarget.AUTO else route
         val reason = when {
             context.stream.manualRoute?.type != null && context.stream.manualRoute.type != RouteType.AUTO -> "线路手动设置"
             context.stream.manualRoute == null && context.channel.manualRoute?.type != null && context.channel.manualRoute.type != RouteType.AUTO -> "频道手动设置"
             rule != null -> rule.id
+            hongKong.isNotEmpty() -> "香港默认代理"
             manual?.type == RouteType.AUTO -> "手动 AUTO"
             else -> "defaultRoute"
         }

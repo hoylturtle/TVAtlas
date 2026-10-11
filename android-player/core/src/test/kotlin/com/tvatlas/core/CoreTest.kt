@@ -75,11 +75,11 @@ class CoreTest {
     }
     @Test fun disabledProxyAndUnavailableHistoryAreSkipped() {
         val r = DefaultRouteResolver(RuleConfig(defaultRoute = RouteTarget.AUTO), listOf(us.copy(enabled = false), hk))
-        assertEquals(listOf(RouteTarget.DIRECT, RouteTarget.proxy("HK")), r.channelPlan(channel, SuccessfulRoute("s", RouteTarget.proxy("US"), 1)).attempts.map { it.target })
+        assertEquals(listOf(RouteTarget.proxy("HK")), r.channelPlan(channel, SuccessfulRoute("s", RouteTarget.proxy("US"), 1)).attempts.map { it.target })
     }
     @Test fun historyPrefersBothStreamAndRoute() {
         val second = stream.copy(id = "s2", url = "https://x/2")
-        val p = resolver().channelPlan(channel.copy(streams = listOf(stream, second)), SuccessfulRoute("s2", RouteTarget.proxy("US"), 1))
+        val p = resolver().channelPlan(channel.copy(group = "其他", streams = listOf(stream, second)), SuccessfulRoute("s2", RouteTarget.proxy("US"), 1))
         assertEquals("s2", p.attempts[0].streamId)
         assertEquals(RouteTarget.proxy("US"), p.attempts[0].target)
         assertEquals(6, p.attempts.size)
@@ -90,7 +90,7 @@ class CoreTest {
         assertEquals(RouteTarget.DIRECT, r.requestTarget(StreamContext(channel, stream), "https://keys.example.com/key", RouteTarget.proxy("US")))
     }
     @Test fun failoverNetworkTriesOtherProxiesThenNextStream() {
-        val c = channel.copy(streams = listOf(stream, stream.copy(id = "s2")))
+        val c = channel.copy(group = "其他", streams = listOf(stream, stream.copy(id = "s2")))
         val session = FailoverSession(resolver().channelPlan(c, null))
         assertEquals(RouteTarget.DIRECT, session.start()!!.target)
         assertEquals(RouteTarget.proxy("US"), session.fail(PlaybackFailure(FailureKind.HTTP, 403))!!.target)

@@ -193,7 +193,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 TvButton(onClick = onAdd) { Text("添加播放列表") }
             }
         } else {
-            val filtered = library.channels.filter { it.name.contains(query, true) || it.group.contains(query, true) }
+            val filtered = library.channels.filter { it.name.contains(query, true) || it.group.contains(query, true) }.hongKongFirst()
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
                     item(key = "group:$group") {
