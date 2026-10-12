@@ -24,7 +24,7 @@ class CancellableCallTest {
         } finally { client.dispatcher.cancelAll(); server.shutdown() }
     }
     @Test fun cancelAlsoClosesBlockedBodyAfterHeadersWereDelivered() = runBlocking {
-        val server = MockWebServer().apply { start(); enqueue(MockResponse().setBody("slow response body").throttleBody(1, 30, TimeUnit.SECONDS)) }
+        val server = MockWebServer().apply { start(); enqueue(MockResponse().setBody("x").setHeader("Content-Length", 1000)) }
         val client = OkHttpClient.Builder().readTimeout(30, TimeUnit.SECONDS).build()
         val call = client.newCall(Request.Builder().url(server.url("/body")).build())
         val headers = CompletableDeferred<Unit>()

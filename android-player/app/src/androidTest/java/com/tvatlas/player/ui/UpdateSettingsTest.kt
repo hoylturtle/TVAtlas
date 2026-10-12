@@ -82,4 +82,11 @@ class UpdateSettingsTest {
         compose.runOnIdle { assertTrue(cancelled) }
     }
 
+    @Test fun incompleteUpdateCheckNeverClaimsAlreadyLatest() {
+        val release = PublishedUpdate(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 23, "", "", checkComplete = false)
+        compose.setContent { MaterialTheme { SettingsPage(false, {}, UpdateState(checked = true, release = release), {}, {}) } }
+        compose.onNodeWithText("部分更新信息未完成，请重试检查").assertIsDisplayed()
+        compose.onNodeWithText("已是最新版本").assertDoesNotExist()
+    }
+
 }

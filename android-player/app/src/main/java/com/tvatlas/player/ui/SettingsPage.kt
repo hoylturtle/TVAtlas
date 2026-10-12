@@ -49,6 +49,7 @@ import com.tvatlas.player.update.*
                     update.apkReady -> "安装包已校验，可以安装"
                     update.error != null -> update.error
                     release != null && release.versionCode > BuildConfig.VERSION_CODE -> "发现新版本：${release.versionName}"
+                    update.checked && release != null && !release.checkComplete -> "部分更新信息未完成，请重试检查"
                     update.checked && release != null -> "已是最新版本"
                     else -> "尚未检查更新"
                 }
@@ -60,6 +61,7 @@ import com.tvatlas.player.update.*
                 Text("自动模式先直连，失败后尝试已有节点。手动选择时仅使用所选网络。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (release != null && release.versionCode > BuildConfig.VERSION_CODE) {
+                    if (!release.checkComplete) Text("此安装包已校验发布信息；部分其他版本暂不可达。", style = MaterialTheme.typography.bodySmall)
                     if (release.notes.isNotBlank()) Text(release.notes, style = MaterialTheme.typography.bodySmall)
                     if (release.minSdk > Build.VERSION.SDK_INT) {
                         Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级", color = MaterialTheme.colorScheme.error)
