@@ -43,7 +43,8 @@ class RegionDefaultsTest {
     @Test fun explicitOverridesAndNoHongKongNodeFallback() {
         val resolver = DefaultRouteResolver(RuleConfig(), nodes)
         assertEquals(RouteTarget.DIRECT, resolver.resolve(StreamContext(hk.copy(manualRoute = RouteTarget.DIRECT), stream)).attempts.single().target)
-        assertEquals(RouteTarget.proxy("us"), resolver.resolve(StreamContext(hk, stream.copy(manualRoute = RouteTarget.proxy("us")))).attempts.single().target)
+        assertEquals(listOf(RouteTarget.proxy("us"), RouteTarget.proxy("hk1"), RouteTarget.proxy("hk2")),
+            resolver.resolve(StreamContext(hk, stream.copy(manualRoute = RouteTarget.proxy("us")))).attempts.map { it.target })
         val rule = Rule("custom", Match(group = hk.group), RouteTarget.proxy("us"))
         assertEquals(RouteTarget.proxy("us"), DefaultRouteResolver(RuleConfig(rules = listOf(rule)), nodes).resolve(StreamContext(hk, stream)).attempts.single().target)
         assertTrue(DefaultRouteResolver(RuleConfig(defaultRoute = RouteTarget.DIRECT), nodes.take(1)).resolve(StreamContext(hk, stream)).attempts.isEmpty())

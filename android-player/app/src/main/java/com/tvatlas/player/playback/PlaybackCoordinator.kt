@@ -58,10 +58,14 @@ class PlaybackCoordinator(
     private var watcher: Job? = null
     private var preparation: Job? = null
     private var generation = 0L
+    private var drmActive: java.util.concurrent.atomic.AtomicBoolean? = null
     private val renewed = mutableSetOf<RouteAttempt>()
 
     fun preparing(channel: Channel) { _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…") }
 
+    fun preparationFailed(channel: Channel) {
+        _status.value = PlaybackStatus(channel.id, "无法准备播放", error = "节点准备失败，请检查代理配置后重试")
+    }
     fun play(channel: Channel, resolver: DefaultRouteResolver, streamId: String? = null) {
         stop(false)
         renewed.clear()
@@ -86,6 +90,7 @@ class PlaybackCoordinator(
     private suspend fun attempt(channel: Channel, resolver: DefaultRouteResolver, route: RouteAttempt?, token: Long) {
         if (token != generation) return
         watcher?.cancel()
+        drmActive?.set(false); drmActive = null
         _player.value?.release(); _player.value = null
         if (route == null) {
             log?.event("ERROR", "PLAY", "all routes exhausted channel=${channel.name} detail=${_status.value.error}")
@@ -146,6 +151,7 @@ class PlaybackCoordinator(
             // This source uses a web guest entitlement. The official web player requests
             // SW_SECURE_CRYPTO; select the corresponding Widevine software implementation.
             val provisioningTargets = resolver.provisioningTargets(StreamContext(channel, stream), route.target)
+            val active = java.util.concurrent.atomic.AtomicBoolean(true).also { drmActive = it }
             val fallbackCallback = FallbackDrmCallback(callback, provisioningTargets, { target ->
                 val client = pool.client(target).newBuilder()
                     .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -153,7 +159,7 @@ class PlaybackCoordinator(
                     .callTimeout(4, java.util.concurrent.TimeUnit.SECONDS).retryOnConnectionFailure(false).build()
                 // No TVB/ViuTV key-request headers are attached to Google device provisioning.
                 HttpMediaDrmCallback("", false, OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(client, log)))
-            }, log)
+            }, log, active::get)
             val manager = DefaultDrmSessionManager.Builder()
                 .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(0))
                 .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID) { uuid ->
@@ -181,13 +187,20 @@ class PlaybackCoordinator(
             if (failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
             val reason = drmCode?.let {
                 when {
-                    failure.kind == FailureKind.NETWORK -> "DRM 网络连接失败（$it），正在尝试备用链路"
+                    failure.kind == FailureKind.NETWORK -> "DRM 网络连接失败（$it）"
                     failure.httpStatus != null -> "官方 DRM 授权请求失败（HTTP ${failure.httpStatus}，播放器代码 $it）"
                     it == PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED -> "设备不支持所需的 Widevine DRM（$it）"
                     else -> "DRM 会话失败（$it），请查看调试日志"
                 }
             }
-                ?: (failure.kind.name + (failure.httpStatus?.let { " HTTP $it" } ?: ""))
+                ?: when (failure.kind) {
+                    FailureKind.NETWORK -> "播放源网络连接失败"
+                    FailureKind.HTTP -> "播放源请求失败（HTTP ${failure.httpStatus}）"
+                    FailureKind.SEGMENT -> "视频分片下载失败"
+                    FailureKind.MANIFEST -> "播放源格式无效或不受支持"
+                    FailureKind.DECODER -> "设备无法解码当前播放源"
+                    FailureKind.DRM -> "DRM 授权或设备初始化失败"
+                }
             log?.event("ERROR", "FAILOVER", reason)
             _status.value = _status.value.copy(message = "连接暂不可用，正在尝试其他线路", error = reason)
             preparation = scope.launch {
@@ -264,6 +277,7 @@ class PlaybackCoordinator(
     fun stop(showMessage: Boolean = true) {
         log?.event("INFO", "PLAY", "stop showMessage=$showMessage")
         generation++
+        drmActive?.set(false); drmActive = null
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
         if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, lastAttempt = null, error = null)

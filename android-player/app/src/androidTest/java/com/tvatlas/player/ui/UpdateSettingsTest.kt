@@ -75,4 +75,11 @@ class UpdateSettingsTest {
         compose.onNodeWithText("检查更新").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(checked) }
     }
+    @Test fun checkingCanBeCancelledWithoutLeavingSettings() {
+        var cancelled = false
+        compose.setContent { MaterialTheme { SettingsPage(false, {}, UpdateState(checking = true), {}, {}, onCancel = { cancelled = true }) } }
+        compose.onNodeWithText("取消检查").performScrollTo().performClick()
+        compose.runOnIdle { assertTrue(cancelled) }
+    }
+
 }

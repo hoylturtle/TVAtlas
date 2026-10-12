@@ -11,7 +11,7 @@ import com.tvatlas.core.model.*
 import com.tvatlas.core.routing.RuleConfig
 import com.tvatlas.player.playback.PlaybackStatus
 import com.tvatlas.player.storage.Library
-import org.junit.Assert.assertEquals
+import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
@@ -68,4 +68,18 @@ class ChannelPresentationTest {
         compose.onNodeWithText("播放").performClick()
         compose.runOnIdle { assertEquals(second.id, played) }
     }
+    @Test fun restoreAutoClearsSourceSelectionAndExplainsPrecedence() {
+        val channel = Channel("c1", "新闻频道", "香港", streams = listOf(first.copy(manualRoute = RouteTarget.proxy(profile.id))), manualRoute = RouteTarget.DIRECT)
+        val status = PlaybackStatus(channelId = channel.id, lastAttempt = RouteAttempt(first.id, first.url, RouteTarget.proxy(profile.id), "manual"))
+        var restored = false
+        var played: String? = "not played"
+        compose.setContent { MaterialTheme { ChannelDialog(channel, listOf(profile), emptyList(), status, {}, { _, _ -> },
+            { played = it }, onResetRoutes = { restored = true }) } }
+        compose.onNodeWithText("首选节点：香港节点").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("恢复自动路由").performScrollTo().performClick()
+        compose.onNodeWithText("自动选线").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("播放").performClick()
+        compose.runOnIdle { assertTrue(restored); assertNull(played) }
+    }
+
 }

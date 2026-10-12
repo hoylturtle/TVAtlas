@@ -4,11 +4,11 @@ import time
 import sys
 import json
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-VERSION = "1.0.5"
+VERSION = "1.0.6"
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config" / "channels.json"
@@ -725,6 +725,37 @@ def first_hls_uri(text, base_url, want_variant=False):
     return None
 
 
+# These observations prove a source cannot be consumed by the player. Network or
+# region failures alone do not: keep those candidates for devices in their region.
+INVALID_FALLBACK_REASONS = {
+    "player-blocklisted", "player-audio-incompatible", "html", "invalid-hls",
+    "invalid-variant", "master-no-variant", "media-no-segment", "segment-html",
+    "segment-text", "segment-short", "unrecognized-media", "short",
+}
+
+
+def is_media_sample(data):
+    """Recognize common clear media containers instead of trusting response size."""
+    if len(data) < 188:
+        return False
+    # MPEG-TS sync bytes repeat every packet; one leading ASCII 'G' is insufficient.
+    for offset, packet in ((0, 188), (4, 192)):
+        if len(data) > offset + packet * 2 and all(data[offset + packet * i] == 0x47 for i in range(3)):
+            return True
+    if len(data) >= 8 and data[4:8] in (b"ftyp", b"styp", b"moof", b"moov", b"mdat"):
+        return int.from_bytes(data[:4], "big") >= 8
+    if data.startswith((b"FLV", b"OggS", b"ID3", b"\x00\x00\x01\xba")):
+        return True
+    # ADTS/MP3 frame sync. This is a format probe, not codec or DRM verification.
+    return data[0] == 0xff and (data[1] & 0xe0) == 0xe0
+
+
+def eligible_fallback(entry, health):
+    url = entry["url"]
+    reason = health.get(url, (False, 99.0, "not-probed"))[2]
+    return url.decode("utf-8", errors="ignore") not in PLAYER_BLOCKLIST and reason not in INVALID_FALLBACK_REASONS
+
+
 def check_stream(entry):
     """Playback-oriented probe: playlist -> media playlist -> real media bytes."""
     url = entry["url"].decode("utf-8", errors="ignore")
@@ -752,7 +783,12 @@ def check_stream(entry):
 
         is_hls = ".m3u8" in url.lower() or stripped.startswith(b"#EXTM3U")
         if not is_hls:
-            return (len(data) >= 188), elapsed, "media-bytes" if len(data) >= 188 else "short"
+            # DASH cannot be verified by an HLS probe. Retain it as unverified
+            # rather than treating XML as media bytes or deleting a valid source.
+            if re.match(rb"(?:<\?xml[^>]*\?>\s*)?<MPD(?:\s|>)", stripped):
+                return False, elapsed, "dash-unverified"
+            valid = is_media_sample(data)
+            return valid, elapsed, "media-bytes" if valid else "unrecognized-media"
 
         if not stripped.startswith(b"#EXTM3U"):
             return False, elapsed, "invalid-hls"
@@ -784,6 +820,8 @@ def check_stream(entry):
             return False, elapsed, "segment-unreachable"
         if segment_data.lstrip()[:64].lower().startswith((b"<html", b"<!doctype")):
             return False, elapsed, "segment-html"
+        if segment_data.lstrip().startswith((b"{", b"[", b"<?xml")):
+            return False, elapsed, "segment-text"
         if len(segment_data) < 188:
             return False, elapsed, "segment-short"
 
@@ -860,14 +898,14 @@ def probe_candidates(results):
             # broken in a real player must never be emitted as a fallback.
             eligible = [
                 entry for entry in candidates
-                if entry["url"].decode("utf-8", errors="ignore") not in PLAYER_BLOCKLIST
+                if eligible_fallback(entry, health)
             ]
             selected = eligible[0] if eligible else None
             result["selected"] = selected
             # Dynamic channels keep the freshly discovered eligible pool. The
             # TV/player can still succeed where GitHub's runner is geo-blocked.
             result["ranked"] = eligible
-            result["health"] = "fallback-unverified" if selected else "missing-player-blocked"
+            result["health"] = "fallback-unverified" if selected else "missing-invalid"
             result["probe_results"] = {entry["url"]: health.get(entry["url"], (False, 99.0, "not-probed")) for entry in candidates}
             if selected:
                 fallback_channels += 1
@@ -882,7 +920,7 @@ def probe_candidates(results):
                         print(
                             f"JADE-PROBE: source={entry['source_id']} "
                             f"ok={ok} time={elapsed:.2f}s reason={reason} "
-                            f"url={entry['url'].decode('utf-8', errors='replace')}"
+                            f"host={urlsplit(entry['url'].decode('utf-8', errors='replace')).hostname}"
                         )
             else:
                 missing_channels += 1
@@ -1067,7 +1105,7 @@ def build_playlist(results, orange=False):
             output.extend(entry["extras"])
             output.append(entry["url"])
         emit(selected)
-        if orange:
+        if orange or channel.get("region") == "HK":
             region = channel.get("region", "CN")
             is_cctv = config_cctv(channel) is not None
             if region == "HK" or is_cctv:
@@ -1288,3 +1326,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -67,9 +67,9 @@ class TvNavigationTest {
         compose.setContent { MaterialTheme(colorScheme = colors) { TvNavigation(selected, { selected = it }) } }
         compose.onNodeWithText("直播").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithText("直播").performKeyInput { pressKey(Key.DirectionDown) }
-        compose.onNodeWithText("播放列表").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("频道源").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertEquals(1, selected) }
-        compose.onNodeWithText("播放列表").performKeyInput { pressKey(Key.DirectionDown); pressKey(Key.DirectionDown) }
+        compose.onNodeWithText("频道源").performKeyInput { pressKey(Key.DirectionDown); pressKey(Key.DirectionDown) }
         compose.onNodeWithText("设置").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertEquals(3, selected) }
     }

@@ -15,6 +15,7 @@ internal class FallbackDrmCallback(
     private val routes: List<RouteTarget>,
     private val provisioning: (RouteTarget) -> MediaDrmCallback,
     private val log: DebugLog? = null,
+    private val active: () -> Boolean = { true },
 ) : MediaDrmCallback {
     override fun executeKeyRequest(uuid: UUID, request: ExoMediaDrm.KeyRequest): ByteArray =
         license.executeKeyRequest(uuid, request)
@@ -28,10 +29,11 @@ internal class FallbackDrmCallback(
             return license.executeProvisionRequest(uuid, request)
         var last: Exception? = null
         for ((index, route) in routes.distinct().take(3).withIndex()) {
-            if (Thread.currentThread().isInterrupted) throw IOException("设备初始化已取消")
+            if (!active() || Thread.currentThread().isInterrupted) throw IOException("设备初始化已取消")
             log?.event("INFO", "DRM_PROVISION_ROUTE", "attempt=${index + 1} route=${route.type} profile=${route.profile}")
             try {
                 val bytes = provisioning(route).executeProvisionRequest(uuid, request)
+                if (!active()) throw IOException("设备初始化已取消")
                 log?.event("INFO", "DRM_PROVISION_ROUTE", "completed attempt=${index + 1}")
                 return bytes
             } catch (error: Exception) {

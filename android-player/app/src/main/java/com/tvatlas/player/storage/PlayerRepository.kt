@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
@@ -45,8 +46,9 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
     val ruleFiles = dao.ruleFiles()
     val library = combine(dao.playlists(), dao.channels(), dao.streams(), dao.proxies(), dao.rules()) { p, c, s, proxies, rules ->
         val enabled = p.filter { it.enabled }.map { it.id }.toSet()
+        val byChannel = s.filter { it.sourcePlaylistId in enabled }.groupBy { it.channelId }
         val channels = c.mapNotNull { ch ->
-            val streams = s.filter { it.channelId == ch.id && it.sourcePlaylistId in enabled }.distinctBy { it.url }.map {
+            val streams = byChannel[ch.id].orEmpty().distinctBy { it.url }.map {
                 Stream(it.id, it.url, it.sourcePlaylistId, route(it.manualRoute), it.lastSuccessAt, it.lastFailureAt, it.failureCount)
             }
             if (streams.isEmpty()) null else Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, streams, route(ch.manualRoute)).normalizeHongKongGroup()
@@ -54,7 +56,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         Library(p.map { Playlist(it.id, it.name, it.url, it.enabled, it.refreshIntervalHours, it.lastUpdatedAt) }, channels,
             proxies.map { ProxyProfile(it.id, it.name, ProxyType.valueOf(it.type), it.host, it.port, it.enabled, it.subscriptionId) },
             rules?.let { RuleCodec.json.decodeFromString<RuleConfig>(it.json) } ?: RuleConfig())
-    }
+    }.flowOn(Dispatchers.Default)
 
     suspend fun refresh(playlist: Playlist) = withContext(Dispatchers.IO) {
         require(httpUri(playlist.url) != null) { "请输入不含凭证的 HTTP(S) 地址" }
@@ -137,6 +139,10 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             }
             dao.saveRules(RulesRow(json = RuleCodec.export(config)))
         }
+    }
+    suspend fun resetChannelRoutes(id: String) = db.withTransaction {
+        dao.channelRoute(id, null)
+        dao.resetStreamRoutes(id)
     }
     suspend fun setChannelRoute(id: String, target: RouteTarget?) = dao.channelRoute(id, encoded(target))
     suspend fun setStreamRoute(id: String, target: RouteTarget?) = dao.streamRoute(id, encoded(target))

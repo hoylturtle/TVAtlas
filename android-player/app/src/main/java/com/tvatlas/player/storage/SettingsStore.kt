@@ -26,10 +26,9 @@ class SettingsStore(private val context: Context) {
     val updateRoute = context.settingsDataStore.data.map { preferences ->
         preferences[updateRouteKey]?.let { value ->
             runCatching { RuleCodec.json.decodeFromString<RouteTarget>(value) }.getOrNull()
-        }?.takeIf { it.type != RouteType.AUTO } ?: RouteTarget.DIRECT
+        } ?: RouteTarget.AUTO
     }
     suspend fun updateRoute(route: RouteTarget) {
-        require(route.type != RouteType.AUTO)
         context.settingsDataStore.edit { it[updateRouteKey] = RuleCodec.json.encodeToString(route) }
     }
     suspend fun diagnostics(enabled: Boolean) { context.settingsDataStore.edit { it[diagnosticsKey] = enabled } }
