@@ -129,7 +129,10 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             val row = id?.let { requireNotNull(dao.ruleFile(it)) { "规则文件不存在" } }
             val config = row?.let { RuleCodec.parse(it.json, profiles) } ?: RuleConfig()
             dao.deactivateRuleFiles()
-            if (row != null) dao.saveRuleFile(row.copy(active = true))
+            if (row != null) {
+                dao.saveRuleFile(row.copy(active = true))
+                dao.saveProxies(config.proxies.map { ProxyRow(it.id, it.name, it.type.name, it.host, it.port, it.enabled) })
+            }
             dao.saveRules(RulesRow(json = RuleCodec.export(config)))
         }
     }
