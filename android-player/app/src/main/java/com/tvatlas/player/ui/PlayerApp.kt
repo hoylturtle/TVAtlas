@@ -68,6 +68,9 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         val update by model.update.collectAsStateWithLifecycle()
         val diagnostics by model.diagnostics.collectAsStateWithLifecycle()
         val updateRoute by model.updateRoute.collectAsStateWithLifecycle()
+        val subscriptionRoute by model.subscriptionRoute.collectAsStateWithLifecycle()
+        val subscriptionFeedback by model.subscriptionFeedback.collectAsStateWithLifecycle()
+        val updatingSubscription by model.updatingSubscription.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val config = LocalConfiguration.current
@@ -100,7 +103,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         Scaffold(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!tv && !immersive && !theater) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (!tv && !immersive && !theater && tab == 0) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("TVAtlas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("选频道，即可观看", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
@@ -109,7 +112,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 }
             }, bottomBar = {
                 if (!tv && !immersive) NavigationBar {
-                    listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
+                    listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
                     }
@@ -150,7 +153,8 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                     2 -> RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
-                        { removeSubscription = it }, model::enableNode)
+                        { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
+                        subscriptionFeedback, updatingSubscription)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate)
                 }
@@ -305,46 +309,6 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 Text("最近更新：${date(p.lastUpdatedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TvOutlinedButton(onClick = { onRefresh(p) }, enabled = !busy) { Text("刷新") }
             } }
-        }
-    }
-}
-
-@Composable private fun RoutingPage(library: Library, onImport: () -> Unit, onExport: () -> Unit, onAdd: () -> Unit, onEdit: (ProxyProfile) -> Unit,
-    subscriptions: List<SubscriptionRow>, busy: Boolean, onSubscribe: () -> Unit, onRefresh: (String) -> Unit,
-    onDelete: (String) -> Unit, onEnable: (ProxyProfile) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("智能路由", style = MaterialTheme.typography.headlineMedium)
-            Text("按频道或线路选择直连、代理或自动路由。", Modifier.padding(vertical = 12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TvButton(onClick = onImport) { Text("导入 JSON") }
-                TvOutlinedButton(onClick = onExport) { Text("导出规则") }
-            }
-            Text("${library.rules.name} · ${library.rules.rules.size} 条规则", Modifier.padding(vertical = 12.dp))
-            Text("默认：${routeLabel(library.rules.defaultRoute, library.profiles)}", style = MaterialTheme.typography.bodySmall)
-            TvButton(onClick = onSubscribe, enabled = !busy, modifier = Modifier.padding(top = 16.dp)) { Text("添加 Clash / Mihomo 订阅") }
-            Text("粘贴订阅地址即可导入节点，在频道或线路菜单中选择使用。", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
-            TvOutlinedButton(onClick = onAdd) { Text("手动添加 HTTP / SOCKS5") }
-        }
-        items(subscriptions, key = { "subscription:${it.id}" }) { sub ->
-            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
-                Text(sub.name, style = MaterialTheme.typography.titleLarge)
-                Text("${sub.nodeCount} 个节点 · 更新于 ${date(sub.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TvTextButton(onClick = { onRefresh(sub.id) }, enabled = !busy) { Text("更新订阅") }
-                    TvTextButton(onClick = { onDelete(sub.id) }, enabled = !busy) { Text("删除") }
-                }
-            } }
-        }
-        items(library.profiles, key = { it.id }) { p ->
-            Card(Modifier.fillMaxWidth()) { ListItem(headlineContent = { Text(p.name) },
-                supportingContent = { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${p.host}:${p.port} · ${if (p.enabled) "启用" else "停用"}") },
-                trailingContent = { if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
-                    else TvTextButton(onClick = { onEdit(p) }) { Text("编辑") } }) }
-        }
-        items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
-            ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text(matchLabel(rule.match), style = MaterialTheme.typography.bodySmall) },
-                trailingContent = { Text(routeLabel(rule.route, library.profiles)) })
         }
     }
 }
@@ -524,12 +488,12 @@ internal fun streamName(channel: Channel, id: String, playlists: List<Playlist>)
     val siblings = channel.streams.filter { it.sourcePlaylistId == stream.sourcePlaylistId }
     return if (siblings.size > 1) "$name ${siblings.indexOf(stream) + 1}" else name
 }
-private fun date(timestamp: Long?): String = timestamp?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it)) } ?: "暂无"
+internal fun date(timestamp: Long?): String = timestamp?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it)) } ?: "暂无"
 private fun redactedUrl(url: String): String = runCatching {
     val uri = java.net.URI(url)
     "${uri.scheme}://${uri.host}${if (uri.port > 0) ":${uri.port}" else ""}/…"
 }.getOrDefault("已隐藏地址")
-private fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNull(
+internal fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNull(
     m.channel?.let { "频道：$it" }, m.group?.let { "分组：$it" }, m.domain?.let { "域名：$it" },
     m.domainSuffix?.let { "域名后缀：$it" }, m.channelRegex?.let { "频道正则：$it" },
     m.url?.let { "URL：${redactedUrl(it)}" }, m.urlContains?.let { "URL 关键词（已隐藏）" }, m.playlistId?.let { "播放列表：$it" },

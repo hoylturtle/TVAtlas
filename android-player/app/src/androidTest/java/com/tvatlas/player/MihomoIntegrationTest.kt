@@ -43,11 +43,19 @@ class MihomoIntegrationTest {
             repo.add("fixture", url)
             val old = db.dao().subscriptionNodes(id).map { it.id }
             assertEquals(4, old.size)
+            val disabled = db.dao().subscriptionNodes(id).first()
+            db.dao().saveProxies(listOf(disabled.copy(enabled = false)))
             server.enqueue(MockResponse().setBody(yaml.replace("fixture-password", "updated-fixture")))
             repo.refresh(id)
             assertEquals(old, db.dao().subscriptionNodes(id).map { it.id })
+            assertFalse(db.dao().subscriptionNodes(id).first { it.id == disabled.id }.enabled)
             server.enqueue(MockResponse().setBody("proxies: [invalid"))
             try { repo.refresh(id); fail("Expected invalid subscription") } catch (_: SubscriptionException) { }
+            assertEquals(old, db.dao().subscriptionNodes(id).map { it.id })
+            val lastSuccess = db.dao().subscription(id)!!.lastUpdatedAt
+            server.enqueue(MockResponse().setResponseCode(503))
+            try { repo.refresh(id); fail("Expected failed download") } catch (_: SubscriptionException) { }
+            assertEquals(lastSuccess, db.dao().subscription(id)!!.lastUpdatedAt)
             assertEquals(old, db.dao().subscriptionNodes(id).map { it.id })
             repo.remove(id)
             assertNull(db.dao().subscription(id))

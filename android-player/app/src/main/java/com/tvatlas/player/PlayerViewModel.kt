@@ -17,6 +17,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.ByteArrayOutputStream
 
+data class SubscriptionFeedback(val id: String?, val message: String, val error: Boolean = false)
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
     val debugLog = com.tvatlas.player.debug.DebugLog(java.io.File(application.noBackupFilesDir, "debug/player.log"),
@@ -28,11 +30,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val playlistClient = pool.direct.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
     private val repository = PlayerRepository(database, playlistClient, debugLog)
-    private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core, debugLog)
+    private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core, debugLog) { url ->
+        val profiles = library.value.profiles
+        val selected = settings.subscriptionRoute.first()
+        withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
+        SubscriptionDownloader(pool::client, debugLog).download(url, subscriptionTargets(selected, profiles))
+    }
     val subscriptions = subscriptionRepository.subscriptions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val settings = SettingsStore(application)
     val library = repository.library.stateIn(viewModelScope, SharingStarted.Eagerly, Library(emptyList(), emptyList(), emptyList(), RuleConfig()))
     val diagnostics = settings.diagnostics.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val subscriptionRoute = settings.subscriptionRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.AUTO)
+    private val _subscriptionFeedback = MutableStateFlow<SubscriptionFeedback?>(null)
+    val subscriptionFeedback = _subscriptionFeedback.asStateFlow()
+    private val _updatingSubscription = MutableStateFlow<String?>(null)
+    val updatingSubscription = _updatingSubscription.asStateFlow()
+    fun setSubscriptionRoute(route: RouteTarget) = action { settings.subscriptionRoute(route) }
     val updateRoute = settings.updateRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.DIRECT)
     val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog)
     private val _message = MutableStateFlow<String?>(null)
@@ -162,18 +175,43 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun stopPlayback(showMessage: Boolean = true) { playJob?.cancel(); playback.stop(showMessage) }
-    fun addSubscription(name: String, url: String) = action {
-        debugLog.event("INFO", "SUBSCRIPTION", "import requested name=$name")
-        val skipped = subscriptionRepository.add(name, url)
-        pool.update(library.value.profiles, true)
-        _message.value = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个不支持的节点" else ""
+    private suspend fun synchronizeSubscriptionClients() = withContext(Dispatchers.IO) {
+        // Read the committed database snapshot rather than a possibly stale StateFlow value.
+        val profiles = repository.library.first().profiles
+        core.update(profiles); pool.update(profiles, true)
     }
-    fun refreshSubscription(id: String) = action("订阅已更新，节点路由设置已保留") {
-        debugLog.event("INFO", "SUBSCRIPTION", "refresh requested")
-        subscriptionRepository.refresh(id); pool.update(library.value.profiles, true)
+    fun addSubscription(name: String, url: String) = action {
+        _updatingSubscription.value = "new"
+        _subscriptionFeedback.value = null
+        try {
+            debugLog.event("INFO", "SUBSCRIPTION", "import requested")
+            val skipped = subscriptionRepository.add(name, url)
+            synchronizeSubscriptionClients()
+            val message = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个不支持的节点" else ""
+            _subscriptionFeedback.value = SubscriptionFeedback(null, message)
+            _message.value = message
+        } catch (error: SubscriptionException) {
+            _subscriptionFeedback.value = SubscriptionFeedback(null, error.message ?: "订阅导入失败", true)
+            throw error
+        } finally { _updatingSubscription.value = null }
+    }
+    fun refreshSubscription(id: String) = action {
+        _updatingSubscription.value = id
+        _subscriptionFeedback.value = null
+        try {
+            debugLog.event("INFO", "SUBSCRIPTION", "refresh requested")
+            val skipped = subscriptionRepository.refresh(id)
+            synchronizeSubscriptionClients()
+            val message = "订阅已更新，节点设置已保留" + if (skipped > 0) "；忽略 $skipped 个不支持的节点" else ""
+            _subscriptionFeedback.value = SubscriptionFeedback(id, message)
+            _message.value = message
+        } catch (error: SubscriptionException) {
+            _subscriptionFeedback.value = SubscriptionFeedback(id, error.message ?: "更新失败，已保留旧节点", true)
+            throw error
+        } finally { _updatingSubscription.value = null }
     }
     fun deleteSubscription(id: String) = action("订阅及其节点已移除") {
-        subscriptionRepository.remove(id); pool.update(library.value.profiles, true)
+        subscriptionRepository.remove(id); synchronizeSubscriptionClients()
     }
     fun enableNode(profile: ProxyProfile) = action {
         require(profile.type == ProxyType.MIHOMO)

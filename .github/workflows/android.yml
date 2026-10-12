@@ -106,6 +106,7 @@ jobs:
             adb shell wm density 160
             gradle :app:connectedDebugAndroidTest --stacktrace
             adb pull /sdcard/Pictures/TVAtlas/tv-layout.png app/build/reports/androidTests/tv-layout.png
+            adb pull /sdcard/Pictures/TVAtlas/phone-proxy-layout.png app/build/reports/androidTests/phone-proxy-layout.png
             python3 scripts/verify_upgrade_install.py
       - uses: actions/upload-artifact@v4
         if: always()
