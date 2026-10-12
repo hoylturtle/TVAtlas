@@ -31,8 +31,13 @@ internal class FallbackDrmCallback(
         for ((index, route) in routes.distinct().take(3).withIndex()) {
             if (!active() || Thread.currentThread().isInterrupted) throw IOException("设备初始化已取消")
             log?.event("INFO", "DRM_PROVISION_ROUTE", "attempt=${index + 1} route=${route.type} profile=${route.profile}")
+            val provider = try { provisioning(route) } catch (error: IOException) {
+                log?.error("DRM_PROVISION_ROUTE", error)
+                last = error
+                continue
+            }
             try {
-                val bytes = provisioning(route).executeProvisionRequest(uuid, request)
+                val bytes = provider.executeProvisionRequest(uuid, request)
                 if (!active()) throw IOException("设备初始化已取消")
                 log?.event("INFO", "DRM_PROVISION_ROUTE", "completed attempt=${index + 1}")
                 return bytes

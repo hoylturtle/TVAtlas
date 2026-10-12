@@ -62,4 +62,22 @@ class PlaybackFallbackTest {
         assertEquals(FailureKind.DRM, PlaybackErrorClassifier.classifyCode(6004, IOException("license rejected"), false).kind)
         assertEquals(FailureKind.MANIFEST, PlaybackErrorClassifier.classifyCode(3003, IOException("HTML"), false).kind)
     }
+    @Test fun stoppedPlaybackDoesNotStartAnotherProvisioningRoute() {
+        var active = true
+        var attempts = 0
+        val callback = FallbackDrmCallback(callback({ byteArrayOf() }), listOf(RouteTarget.proxy("hk1"), RouteTarget.DIRECT), {
+            callback({ attempts++; active = false; throw SSLHandshakeException("EOF") })
+        }, active = { active })
+        assertThrows(IOException::class.java) { callback.executeProvisionRequest(uuid, request) }
+        assertEquals(1, attempts)
+    }
+
+    @Test fun unavailableProxyClientDoesNotPreventDirectDeviceProvisioning() {
+        val callback = FallbackDrmCallback(callback({ byteArrayOf() }), listOf(RouteTarget.proxy("gone"), RouteTarget.DIRECT), { route ->
+            if (route.type == com.tvatlas.core.model.RouteType.PROXY) throw IOException("proxy removed")
+            callback({ byteArrayOf(8) })
+        })
+        assertArrayEquals(byteArrayOf(8), callback.executeProvisionRequest(uuid, request))
+    }
+
 }

@@ -187,7 +187,8 @@ class PlaybackCoordinator(
             if (failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
             val reason = drmCode?.let {
                 when {
-                    failure.kind == FailureKind.NETWORK -> "DRM 网络连接失败（$it）"
+                    failure.kind == FailureKind.NETWORK && it == PlaybackException.ERROR_CODE_DRM_PROVISIONING_FAILED -> "设备初始化网络连接失败（$it）"
+                    failure.kind == FailureKind.NETWORK -> "DRM 授权网络连接失败（$it）"
                     failure.httpStatus != null -> "官方 DRM 授权请求失败（HTTP ${failure.httpStatus}，播放器代码 $it）"
                     it == PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED -> "设备不支持所需的 Widevine DRM（$it）"
                     else -> "DRM 会话失败（$it），请查看调试日志"

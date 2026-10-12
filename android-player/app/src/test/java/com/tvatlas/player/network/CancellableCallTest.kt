@@ -23,4 +23,18 @@ class CancellableCallTest {
             assertEquals(0, client.dispatcher.runningCallsCount())
         } finally { client.dispatcher.cancelAll(); server.shutdown() }
     }
+    @Test fun cancelAlsoClosesBlockedBodyAfterHeadersWereDelivered() = runBlocking {
+        val server = MockWebServer().apply { start(); enqueue(MockResponse().setBody("slow response body").throttleBody(1, 30, TimeUnit.SECONDS)) }
+        val client = OkHttpClient.Builder().readTimeout(30, TimeUnit.SECONDS).build()
+        val call = client.newCall(Request.Builder().url(server.url("/body")).build())
+        val headers = CompletableDeferred<Unit>()
+        try {
+            val job = launch(Dispatchers.Default) { call.readCancellable { headers.complete(Unit); it.body!!.string() } }
+            withTimeout(5000) { headers.await() }
+            withTimeout(2000) { job.cancelAndJoin() }
+            assertTrue(call.isCanceled())
+            assertEquals(0, client.dispatcher.runningCallsCount())
+        } finally { client.dispatcher.cancelAll(); server.shutdown() }
+    }
+
 }
