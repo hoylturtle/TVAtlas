@@ -1,9 +1,9 @@
 {
-  "versionCode": 23,
-  "versionName": "0.1.22",
+  "versionCode": 24,
+  "versionName": "0.1.23",
   "minSdk": 23,
-  "notes": "内置订阅可打开来源和频道详情；代理页新增内核信息，显示 Mihomo 版本、架构和运行状态，内核随 APP 发版更新。",
+  "notes": "内置不可修改的地区保底规则：大陆直连，港澳/台湾/日本/韩国匹配地区节点；支持多个自定义规则文件单选生效，未匹配时保底路由；加入 HTTPS 延迟测速、低延迟优先和同地区节点故障回退。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.22-beta.1",
+  "releaseTag": "v0.1.23-beta.1",
   "coreVersion": "v1.19.32"
 }

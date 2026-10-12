@@ -4,7 +4,8 @@ import com.tvatlas.core.model.*
 
 interface RouteResolver { fun resolve(context: StreamContext): RoutePlan }
 
-class DefaultRouteResolver(private val config: RuleConfig, private val profiles: List<ProxyProfile>) : RouteResolver {
+class DefaultRouteResolver(private val config: RuleConfig, private val profiles: List<ProxyProfile>,
+    private val health: Map<String, NodeHealth> = emptyMap(), private val now: Long = System.currentTimeMillis()) : RouteResolver {
     private val rules = config.rules.withIndex().sortedWith(compareBy(
         { it.value.match.rank() }, { it.value.priority ?: Int.MAX_VALUE }, { it.index },
     )).map { it.value }
@@ -20,16 +21,20 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
         val manual = context.stream.manualRoute ?: context.channel.manualRoute
         // Manual AUTO asks the rule engine for its ordered strategy; forced DIRECT/PROXY remain authoritative.
         val route = manual?.takeUnless { it.type == RouteType.AUTO } ?: rule?.route ?: config.defaultRoute
-        val hongKong = if (rule == null && (manual == null || manual.type == RouteType.AUTO) && context.channel.isHongKong())
-            profiles.filter { it.enabled && isHongKongLabel(it.name) }.map { it.id } else emptyList()
-        val selected = if (hongKong.isNotEmpty()) RouteTarget(RouteType.AUTO, `try` = hongKong)
-            else if (manual?.type == RouteType.AUTO && route.type == RouteType.DIRECT && rule == null)
-            RouteTarget.AUTO else route
+        val region = context.channel.playbackRegion().takeIf { rule == null && (manual == null || manual.type == RouteType.AUTO) }
+        val regional = region?.let { orderedRegionNodes(profiles, it, health, now).map { p -> p.id } }.orEmpty()
+        if (region != null && region != PlaybackRegion.MAINLAND && regional.isEmpty()) return RoutePlan(emptyList())
+        val selected = when {
+            region == PlaybackRegion.MAINLAND -> RouteTarget.DIRECT
+            region != null -> RouteTarget(RouteType.AUTO, `try` = regional)
+            manual?.type == RouteType.AUTO && route.type == RouteType.DIRECT && rule == null -> RouteTarget.AUTO
+            else -> route
+        }
         val reason = when {
             context.stream.manualRoute?.type != null && context.stream.manualRoute.type != RouteType.AUTO -> "线路手动设置"
             context.stream.manualRoute == null && context.channel.manualRoute?.type != null && context.channel.manualRoute.type != RouteType.AUTO -> "频道手动设置"
             rule != null -> rule.id
-            hongKong.isNotEmpty() -> "香港默认代理"
+            region != null -> "地区自动路由：${region.label}"
             manual?.type == RouteType.AUTO -> "手动 AUTO"
             else -> "defaultRoute"
         }
@@ -39,6 +44,11 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
         val attempts = channel.streams.filter { onlyStreamId == null || it.id == onlyStreamId }
             .flatMap { resolve(StreamContext(channel, it)).attempts }.distinctBy { it.streamId to it.target }
         val preferred = history?.let { h -> attempts.firstOrNull { it.streamId == h.streamId && it.target == h.target } }
+        if (attempts.any { it.matchedRule.startsWith("地区自动路由：") }) {
+            // Retain preferred source without letting old successful nodes outrank current latency results.
+            val streamId = preferred?.streamId
+            return RoutePlan(if (streamId != null) attempts.filter { it.streamId == streamId } + attempts.filter { it.streamId != streamId } else attempts)
+        }
         return RoutePlan(if (preferred != null) listOf(preferred) + attempts.filterNot { it == preferred } else attempts)
     }
     fun requestTarget(context: StreamContext, requestUrl: String, sessionTarget: RouteTarget): RouteTarget {

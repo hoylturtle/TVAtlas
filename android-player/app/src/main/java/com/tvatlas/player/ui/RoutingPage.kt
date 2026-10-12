@@ -22,21 +22,25 @@ import com.tvatlas.player.storage.*
     subscriptionRoute: RouteTarget = RouteTarget.AUTO, onSubscriptionRoute: (RouteTarget) -> Unit = {},
     feedback: SubscriptionFeedback? = null, updatingId: String? = null,
     coreInfo: CoreInfo = CoreInfo(BuildConfig.MIHOMO_VERSION, "", false, false),
-    onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {}) {
+    onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {},
+    nodeHealth: Map<String, NodeHealth> = emptyMap(), nodeTesting: Boolean = false, onTestNodes: () -> Unit = {},
+    ruleFiles: List<RuleFileRow> = emptyList(), onSelectRule: (String?) -> Unit = {}) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     var nodeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var hongKongOnly by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(section) { if (section == 3) onCoreInfo() }
     val shownNodes = library.profiles.filter { (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
-        (!hongKongOnly || isHongKongLabel(it.name)) && it.name.contains(query, true) }
+        (!hongKongOnly || isHongKongLabel(it.name)) && it.name.contains(query, true) }.sortedWith(compareBy<ProxyProfile>(
+        { val sample = nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
+        { nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE }))
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("代理与订阅", style = MaterialTheme.typography.headlineSmall)
             Text("订阅获取节点，播放时按频道选择使用。", Modifier.padding(top = 4.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TabRow(selectedTabIndex = section) {
-                listOf("订阅", "节点", "高级", "内核").forEachIndexed { index, title ->
+                listOf("订阅", "节点", "规则", "内核").forEachIndexed { index, title ->
                     Tab(selected = section == index, onClick = { section = index; nodeSubscription = null },
                         modifier = Modifier.tvFocusOutline(), text = { Text(title) })
                 }
@@ -93,18 +97,24 @@ import com.tvatlas.player.storage.*
                     Text(subscriptions.firstOrNull { it.id == nodeSubscription }?.name ?: "订阅节点", style = MaterialTheme.typography.titleMedium)
                     TvTextButton(onClick = { nodeSubscription = null }) { Text("查看所有订阅节点") }
                 }
+                TvOutlinedButton(onClick = onTestNodes, enabled = !busy && !nodeTesting, modifier = Modifier.fillMaxWidth()) { Text(if (nodeTesting) "测速中…" else "测速全部节点") }
+                if (nodeTesting) LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("延迟为通过节点的 HTTPS 响应耗时。大陆直连；港澳、台湾、日本、韩国使用对应地区节点，低延迟优先。", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索节点名称") })
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${shownNodes.size} 个节点", Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodyMedium)
                     TvTextButton(onClick = { hongKongOnly = !hongKongOnly }) { Text(if (hongKongOnly) "显示全部节点" else "只看香港节点") }
                 }
-                Text("启用代表允许使用；香港频道会自动优先香港节点，其他频道可在直播线路菜单选择。", style = MaterialTheme.typography.bodySmall)
+                Text("连接失败会切换到同地区其他节点。手动线路与自定义规则优先。", style = MaterialTheme.typography.bodySmall)
             }
             if (shownNodes.isEmpty()) item { Text("没有符合条件的节点") }
             items(shownNodes, key = { it.id }) { p ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     ListItem(headlineContent = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${if (p.enabled) "已启用" else "已停用"}", style = MaterialTheme.typography.bodySmall) },
+                        supportingContent = { Column { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${if (p.enabled) "已启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)
+                            val sample = nodeHealth[p.id]
+                            Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "不可达"; else -> "延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
+                        } },
                         trailingContent = {
                             if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
                             else TvTextButton(onClick = { onEdit(p) }, enabled = !busy) { Text("编辑") }
@@ -114,12 +124,35 @@ import com.tvatlas.player.storage.*
             item { TvOutlinedButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
         } else if (section == 2) {
             item {
-                Text("播放路由", style = MaterialTheme.typography.titleMedium)
-                Text("香港频道：默认优先香港节点\n其他频道：${routeLabel(library.rules.defaultRoute, library.profiles)}\n手动线路与自定义规则优先。", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
-                Text("${library.rules.rules.size} 条自定义规则", style = MaterialTheme.typography.bodySmall)
+                Text("代理规则", style = MaterialTheme.typography.titleMedium)
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("内置地区规则 · 不可修改", style = MaterialTheme.typography.titleSmall)
+                        Text("大陆：直连\n港澳 → 香港 · 台湾 → 台湾\n日本 → 日本 · 韩国 → 韩国\n同地区低延迟优先，连接失败切换其他节点。", style = MaterialTheme.typography.bodyMedium)
+                        Text("自定义文件未匹配时，内置规则保底生效。手动线路优先。", style = MaterialTheme.typography.bodySmall)
+                        Row {
+                            RadioButton(selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = Modifier.tvFocusOutline())
+                            TvTextButton(onClick = { onSelectRule(null) }, enabled = !busy) { Text("仅使用内置规则") }
+                        }
+                    }
+                }
+                Text("自定义规则文件", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium)
+                Text("可保存多个文件，同时只能选一个生效。导入后自动选中新文件，覆盖匹配到的频道。", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TvOutlinedButton(onClick = onImport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导入规则") }
-                    TvOutlinedButton(onClick = onExport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导出规则") }
+                    TvOutlinedButton(onClick = onExport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导出当前规则") }
+                }
+            }
+            items(ruleFiles, key = { "rulefile:${it.id}" }) { file ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(12.dp)) {
+                        RadioButton(selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = Modifier.tvFocusOutline())
+                        Column(Modifier.weight(1f)) {
+                            Text(file.name, style = MaterialTheme.typography.titleMedium)
+                            Text(if (file.active) "当前生效" else "未启用", style = MaterialTheme.typography.bodySmall)
+                            TvTextButton(onClick = { onSelectRule(file.id) }, enabled = !busy && !file.active) { Text("使用此规则文件") }
+                        }
+                    }
                 }
             }
             items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->

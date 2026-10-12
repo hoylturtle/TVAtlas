@@ -40,6 +40,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             catch (error: Exception) { log?.error("DEFAULT_PLAYLIST", error) }
         }
     }
+    val ruleFiles = dao.ruleFiles()
     val library = combine(dao.playlists(), dao.channels(), dao.streams(), dao.proxies(), dao.rules()) { p, c, s, proxies, rules ->
         val enabled = p.filter { it.enabled }.map { it.id }.toSet()
         val channels = c.mapNotNull { ch ->
@@ -111,13 +112,29 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         RuleCodec.validateProxy(profile)
         dao.saveProxies(listOf(ProxyRow(profile.id, profile.name, profile.type.name, profile.host, profile.port, profile.enabled, profile.subscriptionId)))
     }
-    suspend fun importRules(text: String, profiles: List<ProxyProfile>): RuleConfig {
+    suspend fun importRules(text: String, profiles: List<ProxyProfile>, fileName: String? = null): RuleConfig {
         val config = withContext(Dispatchers.Default) { RuleCodec.parse(text, profiles) }
         db.withTransaction {
             dao.saveProxies(config.proxies.map { ProxyRow(it.id, it.name, it.type.name, it.host, it.port, it.enabled) })
-            dao.saveRules(RulesRow(json = RuleCodec.export(config)))
+            dao.deactivateRuleFiles()
+            val json = RuleCodec.export(config)
+            dao.saveRuleFile(RuleFileRow(stableId(text), fileName?.takeIf { it.isNotBlank() }?.take(100) ?: config.name, json, System.currentTimeMillis(), true))
+            dao.saveRules(RulesRow(json = json))
         }
         return config
+    }
+    suspend fun selectRuleFile(id: String?) {
+        val profiles = library.first().profiles
+        db.withTransaction {
+            val row = id?.let { requireNotNull(dao.ruleFile(it)) { "规则文件不存在" } }
+            val config = row?.let { RuleCodec.parse(it.json, profiles) } ?: RuleConfig()
+            dao.deactivateRuleFiles()
+            if (row != null) {
+                dao.saveRuleFile(row.copy(active = true))
+                dao.saveProxies(config.proxies.map { ProxyRow(it.id, it.name, it.type.name, it.host, it.port, it.enabled) })
+            }
+            dao.saveRules(RulesRow(json = RuleCodec.export(config)))
+        }
     }
     suspend fun setChannelRoute(id: String, target: RouteTarget?) = dao.channelRoute(id, encoded(target))
     suspend fun setStreamRoute(id: String, target: RouteTarget?) = dao.streamRoute(id, encoded(target))
