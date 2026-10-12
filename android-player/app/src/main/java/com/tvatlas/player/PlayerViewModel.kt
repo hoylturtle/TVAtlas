@@ -155,7 +155,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     init {
         action { repository.initializeDefaults() }
         viewModelScope.launch {
+            var previousProfiles = emptyList<ProxyProfile>()
             library.collect { state ->
+                if (previousProfiles != state.profiles) { latency.invalidate(); previousProfiles = state.profiles }
                 withContext(Dispatchers.IO) { core.update(state.profiles); pool.update(state.profiles) }
             }
         }
