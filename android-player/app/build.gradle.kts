@@ -6,6 +6,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+val mihomoVersion = groovy.json.JsonSlurper().parse(file("../mihomo-lock.json"))
+    .let { (it as Map<*, *>)["version"] as String }
 val signingFile = System.getenv("TVATLAS_SIGNING_PROPERTIES")?.let { file(it) }
 val releaseSigning = Properties().apply {
     if (signingFile != null) signingFile.inputStream().use { load(it) }
@@ -13,7 +15,8 @@ val releaseSigning = Properties().apply {
 android {
     namespace = "com.tvatlas.player"
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("22").get().toInt(); versionName = "0.1.21"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("23").get().toInt(); versionName = "0.1.22"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {
             storeFile = file(requireNotNull(releaseSigning.getProperty("storeFile")))

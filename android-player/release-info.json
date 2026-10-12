@@ -1,8 +1,9 @@
 {
-  "versionCode": 22,
-  "versionName": "0.1.21",
+  "versionCode": 23,
+  "versionName": "0.1.22",
   "minSdk": 23,
-  "notes": "内置常规频道、TVB 与 ViuTV 统一展示为一个 TVAtlas 频道订阅，一次刷新所有来源；失败来源保留原频道，旧线路设置与播放记忆不变；自定义频道源独立保留。",
+  "notes": "内置订阅可打开来源和频道详情；代理页新增内核信息，显示 Mihomo 版本、架构和运行状态，内核随 APP 发版更新。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.21-beta.1"
+  "releaseTag": "v0.1.22-beta.1",
+  "coreVersion": "v1.19.32"
 }

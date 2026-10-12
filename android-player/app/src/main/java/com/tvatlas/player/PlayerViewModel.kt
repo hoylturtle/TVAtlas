@@ -11,6 +11,7 @@ import com.tvatlas.core.routing.*
 import com.tvatlas.player.playback.PlaybackCoordinator
 import com.tvatlas.player.proxy.ProxyClientPool
 import com.tvatlas.player.proxy.MihomoRuntime
+import com.tvatlas.player.proxy.CoreInfo
 import com.tvatlas.core.subscription.SubscriptionException
 import com.tvatlas.player.storage.*
 import kotlinx.coroutines.*
@@ -60,6 +61,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var downloadJob: Job? = null
     private var downloadedApk: java.io.File? = null
 
+    private val _coreInfo = MutableStateFlow(CoreInfo(BuildConfig.MIHOMO_VERSION, android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(), false, false))
+    val coreInfo = _coreInfo.asStateFlow()
+    fun refreshCoreInfo() { viewModelScope.launch { _coreInfo.value = withContext(Dispatchers.IO) { core.info() } } }
     fun checkUpdate() {
         debugLog.event("INFO", "UPDATE", "check requested")
         if (_update.value.checking || _update.value.downloading) return
