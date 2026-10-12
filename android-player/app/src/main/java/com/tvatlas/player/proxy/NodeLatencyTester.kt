@@ -48,10 +48,10 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
         } finally { _testing.value = false; mutex.unlock() }
     }
     private suspend fun probe(target: RouteTarget): Long? {
-        val started = System.nanoTime()
         val network = try { client(target).newBuilder().callTimeout(4, TimeUnit.SECONDS).connectTimeout(3, TimeUnit.SECONDS)
             .readTimeout(3, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build() }
         catch (_: IOException) { return null }
+        val started = System.nanoTime() // Exclude local core startup; compare actual network responses.
         return suspendCancellableCoroutine { continuation ->
             val call = network.newCall(Request.Builder().url(endpoint).header("Cache-Control", "no-cache").build())
             continuation.invokeOnCancellation { call.cancel() }
