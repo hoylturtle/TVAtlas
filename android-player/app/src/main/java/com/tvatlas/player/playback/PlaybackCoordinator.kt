@@ -14,6 +14,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
 import androidx.media3.exoplayer.drm.FrameworkMediaDrm
 import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
+import com.tvatlas.player.source.ViuTvSource
 import com.tvatlas.player.source.MyTvSuperSource
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
