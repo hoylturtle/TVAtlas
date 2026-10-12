@@ -55,6 +55,24 @@ class NetworkRoutingTest {
         } finally { pool.close(); proxy.shutdown() }
     }
 
+    @Test fun manualPrimaryCannotOverrideConcreteFallbackMediaRoute() {
+        val primary = MockWebServer().apply { start() }
+        val fallback = MockWebServer().apply { start(); enqueue(MockResponse().setBody("fallback segment")) }
+        val nodes = listOf(ProxyProfile("hk1", "香港 1", ProxyType.HTTP, "127.0.0.1", primary.port),
+            ProxyProfile("hk2", "香港 2", ProxyType.HTTP, "127.0.0.1", fallback.port))
+        val pool = ProxyClientPool { null }.apply { update(nodes) }
+        try {
+            val stream = Stream("s", "http://origin.test/master.m3u8", "p")
+            val context = StreamContext(Channel("c", "test", "香港", streams = listOf(stream), manualRoute = RouteTarget.proxy("hk1")), stream)
+            val factory = RoutedCallFactory(pool, DefaultRouteResolver(RuleConfig(), nodes), context, RouteTarget.proxy("hk2"))
+            factory.newCall(Request.Builder().url("http://cdn.test/segment.ts").build()).execute().use {
+                assertEquals("fallback segment", it.body!!.string())
+            }
+            assertEquals(0, primary.requestCount)
+            assertEquals(1, fallback.requestCount)
+        } finally { pool.close(); primary.shutdown(); fallback.shutdown() }
+    }
+
     @Test fun socks5CredentialsAndDnsStayPerProfile() {
         val server = ServerSocket(0)
         val executor = Executors.newSingleThreadExecutor()

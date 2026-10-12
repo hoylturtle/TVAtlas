@@ -1,5 +1,7 @@
 package com.tvatlas.player.storage
 
+import com.tvatlas.player.network.readCancellable
+
 import androidx.room.withTransaction
 import com.tvatlas.core.model.*
 import com.tvatlas.core.playlist.M3uParser
@@ -56,7 +58,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
 
     suspend fun refresh(playlist: Playlist) = withContext(Dispatchers.IO) {
         require(httpUri(playlist.url) != null) { "请输入不含凭证的 HTTP(S) 地址" }
-        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).execute().use { response ->
+        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).readCancellable { response ->
             log?.event("INFO", "PLAYLIST_HTTP", "status=${response.code} host=${response.request.url.host}")
             require(response.isSuccessful) { "播放列表请求失败（HTTP ${response.code}）" }
             val body = requireNotNull(response.body)

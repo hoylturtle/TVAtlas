@@ -1,5 +1,7 @@
 package com.tvatlas.player.update
 
+import com.tvatlas.player.network.readCancellable
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -18,7 +20,7 @@ class ApkDownloader(private val client: OkHttpClient) {
         destination.parentFile?.mkdirs()
         val partial = File(destination.parentFile, destination.name + ".part")
         try {
-            client.newCall(Request.Builder().url(release.downloadUrl).build()).execute().use { response ->
+            client.newCall(Request.Builder().url(release.downloadUrl).build()).readCancellable { response ->
                 if (!response.isSuccessful) throw UpdateException("下载安装包失败（HTTP ${response.code}）")
                 val body = response.body ?: throw UpdateException("安装包内容为空")
                 if (body.contentLength() > release.apkSize) throw UpdateException("安装包大小与发布信息不符")

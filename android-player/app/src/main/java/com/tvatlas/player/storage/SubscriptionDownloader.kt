@@ -1,5 +1,7 @@
 package com.tvatlas.player.storage
 
+import com.tvatlas.player.network.readCancellable
+
 import com.tvatlas.core.model.*
 import com.tvatlas.core.subscription.ClashSubscription
 import com.tvatlas.core.subscription.SubscriptionException
@@ -32,8 +34,8 @@ class SubscriptionDownloader(private val client: (RouteTarget) -> OkHttpClient, 
                 val network = client(target).newBuilder().followRedirects(true).followSslRedirects(false)
                     .connectTimeout(8, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
                     .callTimeout(20, TimeUnit.SECONDS).retryOnConnectionFailure(true).build()
-                network.newCall(Request.Builder().url(url).header("User-Agent", "ClashMeta/1.19.32")
-                    .header("Accept", "application/yaml, text/yaml, text/plain").build()).execute().use { response ->
+                val downloaded = network.newCall(Request.Builder().url(url).header("User-Agent", "ClashMeta/1.19.32")
+                    .header("Accept", "application/yaml, text/yaml, text/plain").build()).readCancellable { response ->
                     log?.event("INFO", "SUBSCRIPTION_HTTP", "status=${response.code} host=${response.request.url.host}")
                     if (!response.isSuccessful) {
                         val message = when (response.code) {
@@ -42,7 +44,7 @@ class SubscriptionDownloader(private val client: (RouteTarget) -> OkHttpClient, 
                             429 -> "更新过于频繁（HTTP 429），请稍后重试"
                             else -> "订阅下载失败（HTTP ${response.code}）"
                         }
-                        if (response.code in 500..599) { reason = message; return@use }
+                        if (response.code in 500..599) { reason = message; return@readCancellable null }
                         throw SubscriptionException("$message；已保留旧节点")
                     }
                     val body = response.body ?: throw SubscriptionException("订阅内容为空；已保留旧节点")
@@ -56,8 +58,9 @@ class SubscriptionDownloader(private val client: (RouteTarget) -> OkHttpClient, 
                             output.write(buffer, 0, count)
                         }
                     }
-                    return@withContext output.toString("UTF-8")
+                    output.toString("UTF-8")
                 }
+                if (downloaded != null) return@withContext downloaded
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: IOException) {
                 reason = when (error) {

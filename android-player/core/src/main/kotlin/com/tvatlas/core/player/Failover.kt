@@ -2,9 +2,9 @@ package com.tvatlas.core.player
 
 import com.tvatlas.core.model.*
 
-enum class FailureKind { NETWORK, HTTP, MANIFEST, SEGMENT, DECODER }
+enum class FailureKind { NETWORK, HTTP, MANIFEST, SEGMENT, DECODER, DRM }
 data class PlaybackFailure(val kind: FailureKind, val httpStatus: Int? = null) {
-    val skipStream: Boolean get() = httpStatus in listOf(404, 410) || kind in listOf(FailureKind.MANIFEST, FailureKind.DECODER)
+    val skipStream: Boolean get() = httpStatus in listOf(404, 410) || kind in listOf(FailureKind.MANIFEST, FailureKind.DECODER, FailureKind.DRM)
 }
 class FailoverSession(plan: RoutePlan) {
     private val remaining = plan.attempts.toMutableList()

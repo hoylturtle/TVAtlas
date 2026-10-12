@@ -1,5 +1,10 @@
 package com.tvatlas.player.update
 
+import com.tvatlas.player.network.readCancellable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+
 import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,8 +26,8 @@ class UpdateRepository(
     private val web: String = REPOSITORY_URL,
     private val signingCertificateSha256: String = RELEASE_CERTIFICATE_SHA256,
 ) {
-    suspend fun latestAsync(): PublishedUpdate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { latest() }
-    fun latest(): PublishedUpdate {
+    fun latest(): PublishedUpdate = runBlocking { latestAsync() }
+    suspend fun latestAsync(): PublishedUpdate = withContext(Dispatchers.IO) {
         // /latest excludes prereleases. This app deliberately follows the public testing channel.
         val releases = read("$api/releases?per_page=10") as? JsonArray
             ?: throw UpdateException("更新信息无效，请稍后重试")
@@ -61,12 +66,12 @@ class UpdateRepository(
             val candidate = PublishedUpdate(code, version, sdk, info.text("notes").take(1000), apk.text("browser_download_url"), info.text("apkSha256"), size, info.text("coreVersion").takeIf { it.matches(Regex("v?[0-9]{1,5}\\.[0-9]{1,5}\\.[0-9]{1,5}")) } ?: "")
             if (newest == null || candidate.versionCode > newest.versionCode) newest = candidate
         }
-        return newest ?: throw UpdateException("暂未找到公开的测试版安装包，请打开仓库查看 Releases")
+        newest ?: throw UpdateException("暂未找到公开的测试版安装包，请打开仓库查看 Releases")
     }
-    private fun read(url: String, optional: Boolean = false): JsonElement? {
-        client.newCall(Request.Builder().url(url).header("User-Agent", "TVAtlas-UpdateChecker")
-            .header("Accept", "application/json").build()).execute().use { response ->
-            if (optional && response.code == 404) return null
+    private suspend fun read(url: String, optional: Boolean = false): JsonElement? {
+        return client.newCall(Request.Builder().url(url).header("User-Agent", "TVAtlas-UpdateChecker")
+            .header("Accept", "application/json").build()).readCancellable { response ->
+            if (optional && response.code == 404) return@readCancellable null
             if (response.code == 403 || response.code == 429) throw UpdateException("更新服务请求受限，请稍后重试")
             if (!response.isSuccessful) throw UpdateException("更新服务暂不可用（HTTP ${response.code}）")
             val body = response.body ?: throw UpdateException("更新信息为空")
@@ -79,7 +84,7 @@ class UpdateRepository(
                     output.write(buffer, 0, count)
                 }
             }
-            return try { Json.parseToJsonElement(output.toString("UTF-8")) }
+            try { Json.parseToJsonElement(output.toString("UTF-8")) }
             catch (_: Exception) { throw UpdateException("更新信息无效，请稍后重试") }
         }
     }
