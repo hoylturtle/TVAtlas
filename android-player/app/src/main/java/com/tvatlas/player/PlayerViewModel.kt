@@ -197,6 +197,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(channel, null, streamId)
             val ids = initial.attempts.mapNotNull { it.target.profile }.toSet()
             if (ids.isNotEmpty()) {
+                playback.preparing(channel)
                 debugLog.event("INFO", "NODE_TEST", "automatic region=${channel.playbackRegion()?.label} candidates=${ids.size}")
                 latency.measure(current.profiles.filter { it.id in ids }, staleOnly = true)
             }

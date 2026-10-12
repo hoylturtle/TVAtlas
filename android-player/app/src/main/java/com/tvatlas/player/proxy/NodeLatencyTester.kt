@@ -20,15 +20,17 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
     val health = _health.asStateFlow()
     private val _testing = MutableStateFlow(false)
     val testing = _testing.asStateFlow()
-    fun invalidate() { _health.value = emptyMap() }
+    private var generation = 0L
+    @Synchronized fun invalidate() { generation++; _health.value = emptyMap() }
     @Synchronized fun failed(target: RouteTarget) {
         target.profile?.let { _health.value = _health.value + (it to NodeHealth(null, System.currentTimeMillis())) }
     }
-    @Synchronized private fun save(id: String, sample: NodeHealth) { _health.value = _health.value + (id to sample) }
+    @Synchronized private fun save(id: String, sample: NodeHealth, token: Long) { if (token == generation) _health.value = _health.value + (id to sample) }
     suspend fun measure(profiles: List<ProxyProfile>, staleOnly: Boolean = false) {
         if (!mutex.tryLock()) return
         _testing.value = true
         try {
+            val token = synchronized(this) { generation }
             val candidates = profiles.filter { it.enabled && (!staleOnly || _health.value[it.id]?.fresh(System.currentTimeMillis()) != true) }
             val semaphore = Semaphore(4)
             withTimeoutOrNull(if (staleOnly) 10_000L else 120_000L) {
@@ -39,7 +41,7 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
                             val delay = probe(RouteTarget.proxy(profile.id))
                             if (delay != null) values.add(delay)
                         }
-                        save(profile.id, NodeHealth(values.sorted().let { it.getOrNull(it.size / 2) }, System.currentTimeMillis()))
+                        save(profile.id, NodeHealth(values.sorted().let { it.getOrNull(it.size / 2) }, System.currentTimeMillis()), token)
                     }
                 } }.joinAll() }
             }

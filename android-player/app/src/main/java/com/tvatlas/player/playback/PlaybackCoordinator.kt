@@ -57,6 +57,8 @@ class PlaybackCoordinator(
     private var generation = 0L
     private val renewed = mutableSetOf<RouteAttempt>()
 
+    fun preparing(channel: Channel) { _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…") }
+
     fun play(channel: Channel, resolver: DefaultRouteResolver, streamId: String? = null) {
         stop(false)
         renewed.clear()
