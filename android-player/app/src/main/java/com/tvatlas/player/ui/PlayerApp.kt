@@ -73,6 +73,8 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         val updatingSubscription by model.updatingSubscription.collectAsStateWithLifecycle()
         val playlistFeedback by model.playlistFeedback.collectAsStateWithLifecycle()
         val coreInfo by model.coreInfo.collectAsStateWithLifecycle()
+        val nodeHealth by model.nodeHealth.collectAsStateWithLifecycle()
+        val nodeTesting by model.nodeTesting.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val config = LocalConfiguration.current
@@ -156,7 +158,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
-                        subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() })
+                        subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() }, nodeHealth, nodeTesting, model::testNodes)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate)
                 }

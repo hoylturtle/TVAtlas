@@ -12,6 +12,7 @@ import com.tvatlas.player.playback.PlaybackCoordinator
 import com.tvatlas.player.proxy.ProxyClientPool
 import com.tvatlas.player.proxy.MihomoRuntime
 import com.tvatlas.player.proxy.CoreInfo
+import com.tvatlas.player.proxy.NodeLatencyTester
 import com.tvatlas.core.subscription.SubscriptionException
 import com.tvatlas.player.storage.*
 import kotlinx.coroutines.*
@@ -48,7 +49,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val updatingSubscription = _updatingSubscription.asStateFlow()
     fun setSubscriptionRoute(route: RouteTarget) = action { settings.subscriptionRoute(route) }
     val updateRoute = settings.updateRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.DIRECT)
-    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog)
+    private val latency = NodeLatencyTester(pool::client)
+    val nodeHealth = latency.health
+    val nodeTesting = latency.testing
+    fun testNodes() {
+        viewModelScope.launch {
+            val profiles = library.value.profiles
+            withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
+            latency.measure(profiles)
+        }
+    }
+    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog, latency::failed)
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
@@ -183,12 +194,19 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         playJob = viewModelScope.launch {
             val current = library.value
             withContext(Dispatchers.IO) { core.update(current.profiles); pool.update(current.profiles) }
-            playback.play(channel, DefaultRouteResolver(current.rules, current.profiles), streamId)
+            val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(channel, null, streamId)
+            val ids = initial.attempts.mapNotNull { it.target.profile }.toSet()
+            if (ids.isNotEmpty()) {
+                debugLog.event("INFO", "NODE_TEST", "automatic region=${channel.playbackRegion()?.label} candidates=${ids.size}")
+                latency.measure(current.profiles.filter { it.id in ids }, staleOnly = true)
+            }
+            playback.play(channel, DefaultRouteResolver(current.rules, current.profiles, latency.health.value), streamId)
         }
     }
     fun stopPlayback(showMessage: Boolean = true) { playJob?.cancel(); playback.stop(showMessage) }
     private suspend fun synchronizeSubscriptionClients() = withContext(Dispatchers.IO) {
         // Read the committed database snapshot rather than a possibly stale StateFlow value.
+        latency.invalidate()
         val profiles = repository.library.first().profiles
         core.update(profiles); pool.update(profiles, true)
     }

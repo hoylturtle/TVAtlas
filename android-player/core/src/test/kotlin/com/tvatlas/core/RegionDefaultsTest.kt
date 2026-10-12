@@ -37,7 +37,7 @@ class RegionDefaultsTest {
         val resolver = DefaultRouteResolver(RuleConfig(defaultRoute = RouteTarget.DIRECT), nodes)
         val plan = resolver.channelPlan(hk, SuccessfulRoute("s", RouteTarget.DIRECT, 1))
         assertEquals(listOf(RouteTarget.proxy("hk1"), RouteTarget.proxy("hk2")), plan.attempts.map { it.target })
-        assertEquals("香港默认代理", plan.attempts.first().matchedRule)
+        assertEquals("地区自动路由：香港", plan.attempts.first().matchedRule)
         assertEquals(RouteTarget.DIRECT, resolver.resolve(StreamContext(hk.copy(group = "大陆"), stream)).attempts.single().target)
     }
     @Test fun explicitOverridesAndNoHongKongNodeFallback() {
@@ -46,6 +46,6 @@ class RegionDefaultsTest {
         assertEquals(RouteTarget.proxy("us"), resolver.resolve(StreamContext(hk, stream.copy(manualRoute = RouteTarget.proxy("us")))).attempts.single().target)
         val rule = Rule("custom", Match(group = hk.group), RouteTarget.proxy("us"))
         assertEquals(RouteTarget.proxy("us"), DefaultRouteResolver(RuleConfig(rules = listOf(rule)), nodes).resolve(StreamContext(hk, stream)).attempts.single().target)
-        assertEquals(RouteTarget.DIRECT, DefaultRouteResolver(RuleConfig(defaultRoute = RouteTarget.DIRECT), nodes.take(1)).resolve(StreamContext(hk, stream)).attempts.single().target)
+        assertTrue(DefaultRouteResolver(RuleConfig(defaultRoute = RouteTarget.DIRECT), nodes.take(1)).resolve(StreamContext(hk, stream)).attempts.isEmpty())
     }
 }

@@ -19,6 +19,8 @@ class FailoverSession(plan: RoutePlan) {
     }
     fun fail(failure: PlaybackFailure): RouteAttempt? {
         if (stopped) return null
+        if (failure.kind == FailureKind.NETWORK && current?.target?.type == RouteType.PROXY)
+            remaining.removeAll { it.target == current?.target }
         if (failure.skipStream) remaining.removeAll { it.streamId == current?.streamId }
         return next()
     }

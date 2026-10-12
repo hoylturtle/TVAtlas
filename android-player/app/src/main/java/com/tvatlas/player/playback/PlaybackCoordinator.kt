@@ -45,6 +45,7 @@ class PlaybackCoordinator(
     private val context: Context, private val repository: PlayerRepository,
     private val pool: ProxyClientPool, private val scope: CoroutineScope,
     private val log: com.tvatlas.player.debug.DebugLog? = null,
+    private val onNodeFailure: (RouteTarget) -> Unit = {},
 ) {
     private val _player = MutableStateFlow<ExoPlayer?>(null)
     val player = _player.asStateFlow()
@@ -64,7 +65,9 @@ class PlaybackCoordinator(
         preparation = scope.launch {
             val history = repository.preferred(channel.id)
             if (token != generation) return@launch
-            val newSession = FailoverSession(resolver.channelPlan(channel, history, streamId))
+            val plan = resolver.channelPlan(channel, history, streamId)
+            if (plan.attempts.isEmpty()) _status.value = _status.value.copy(error = "该地区没有启用的匹配节点，请导入对应地区节点或手动选择线路")
+            val newSession = FailoverSession(plan)
             session = newSession
             attempt(channel, resolver, newSession.start(), token)
         }
@@ -95,6 +98,7 @@ class PlaybackCoordinator(
             val reason = if (e is IOException) e.message ?: "官方源连接失败" else "官方响应格式不兼容"
             log?.event("ERROR", "SOURCE", reason)
             _status.value = _status.value.copy(error = reason)
+            onNodeFailure(route.target)
             repository.recordFailure(channel.id, route, reason)
             if (token == generation) attempt(channel, resolver, session?.fail(PlaybackFailure(FailureKind.NETWORK)), token)
             return
@@ -149,6 +153,7 @@ class PlaybackCoordinator(
         fun fail(failure: PlaybackFailure, drmCode: Int? = null) {
             if (token != generation || instance !== _player.value || failing) return
             failing = true
+            if (drmCode == null && failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
             val reason = drmCode?.let {
                 when {
                     failure.httpStatus != null -> "官方 DRM 授权请求失败（HTTP ${failure.httpStatus}，播放器代码 $it）"
