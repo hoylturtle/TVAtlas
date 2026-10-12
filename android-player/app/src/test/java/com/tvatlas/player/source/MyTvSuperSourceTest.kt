@@ -65,6 +65,14 @@ class MyTvSuperSourceTest {
         assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout("evil.test")) }
         assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout(stage = "paid")) }
     }
+    @Test fun acceptsOfficialSessionCdnButRejectsLookalikeHosts() {
+        assertTrue(MyTvSuperSource.parseCheckout(checkout("hk4-edge18-1.edgeware.tvb.com")).contains("hk4-edge18-1"))
+        listOf("edgeware.tvb.com.evil.test", "evil-edgeware.tvb.com", "evil.test").forEach { host ->
+            assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout(host)) }
+        }
+        assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout().replace("https://", "http://")) }
+        assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout("edgeware-live.edgeware.tvb.com:8443")) }
+    }
     @Test fun resolvesFreshGuestAndAuthenticatesOnlyCheckout() = runBlocking {
         val requests = mutableListOf<Request>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->
