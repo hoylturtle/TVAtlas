@@ -22,8 +22,7 @@ import com.tvatlas.player.storage.*
     subscriptionRoute: RouteTarget = RouteTarget.AUTO, onSubscriptionRoute: (RouteTarget) -> Unit = {},
     feedback: SubscriptionFeedback? = null, updatingId: String? = null,
     coreInfo: CoreInfo = CoreInfo(BuildConfig.MIHOMO_VERSION, "", false, false),
-    onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {}) {}, onCoreInfo: () -> Unit = {}, onCheckCore: () -> Unit = {},
-    onDownloadCore: () -> Unit = {}, onInstallCore: () -> Unit = {}) {
+    onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {}) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     var nodeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
