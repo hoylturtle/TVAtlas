@@ -11,6 +11,7 @@ import urllib.request
 root = Path(__file__).resolve().parents[1]
 dist = root / "dist"
 info = json.loads((root / "release-info.json").read_text())
+assert info["coreVersion"] == json.loads((root / "mihomo-lock.json").read_text())["version"]
 tag = info["releaseTag"]
 assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+", tag)
 assert tag.split("-beta.")[0] == "v" + info["versionName"]
@@ -62,7 +63,7 @@ if release and not release["draft"]:
         existing = json.loads(response.read(1024 * 1024))
     # Rebuilt APK ZIP timestamps can differ even for the same source commit.
     # Keep the first verified public APK instead of replacing it on a CI rerun.
-    for key in ("versionCode", "versionName", "minSdk", "releaseTag", "commit", "signingCertificateSha256"):
+    for key in ("versionCode", "versionName", "minSdk", "releaseTag", "commit", "signingCertificateSha256", "coreVersion"):
         assert existing[key] == manifest[key], "Published version differs; increment version before publishing"
     assert re.fullmatch(r"[a-f0-9]{64}", existing["apkSha256"])
     assert existing["apkSize"] > 0

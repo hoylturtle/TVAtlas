@@ -21,6 +21,10 @@ class PlaylistBundleTest {
         compose.onAllNodesWithText("TVAtlas 频道订阅").assertCountEquals(1)
         compose.onNodeWithText("TVB Plus 官方（实验）").assertDoesNotExist()
         compose.onNodeWithText("ViuTV 官方（实验）").assertDoesNotExist()
+        compose.onNodeWithText("查看内置线路详情").performScrollTo().performClick()
+        compose.onNodeWithText("内置订阅详情").assertIsDisplayed()
+        compose.onNodeWithText("翡翠台官方（实验）").assertExists()
+        compose.onNodeWithText("关闭").performClick()
         compose.onNodeWithText("刷新订阅").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(allRefreshed) }
         compose.onNodeWithText("我的频道源").performScrollTo().assertIsDisplayed()

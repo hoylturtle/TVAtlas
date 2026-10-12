@@ -14,6 +14,8 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.UUID
 
+data class CoreInfo(val version: String, val abi: String, val available: Boolean, val running: Boolean)
+
 data class CoreEndpoint(val port: Int, val credentials: Credentials)
 
 /** Isolated application-layer core. No VPN, TUN, controller API or LAN listeners are enabled. */
@@ -24,6 +26,8 @@ class MihomoRuntime(private val context: Context, private val vault: CredentialV
     private val executable get() = File(context.applicationInfo.nativeLibraryDir, "libmihomo.so")
     private val home = File(context.noBackupFilesDir, "mihomo").apply { mkdirs() }
 
+    @Synchronized fun info() = CoreInfo(com.tvatlas.player.BuildConfig.MIHOMO_VERSION,
+        android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(), executable.canExecute(), process?.let(::alive) == true)
     @Synchronized fun update(value: List<ProxyProfile>) {
         val selected = value.filter { it.type == ProxyType.MIHOMO && it.enabled }.sortedBy { it.id }
         if (selected != profiles) { close(); profiles = selected }

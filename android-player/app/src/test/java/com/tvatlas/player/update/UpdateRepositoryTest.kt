@@ -10,7 +10,7 @@ class UpdateRepositoryTest {
     private val sha = "a".repeat(40)
     private val certificate = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
     private fun manifest(version: String = "0.1.13", code: Int = 14, cert: String = certificate) = """
-        {"versionCode":$code,"versionName":"$version","minSdk":23,"notes":"测试版",
+        {"versionCode":$code,"versionName":"$version","minSdk":23,"notes":"测试版","coreVersion":"v1.19.32",
          "releaseTag":"v$version-beta.1","commit":"$sha","signingCertificateSha256":"$cert","apkSize":1000,"apkSha256":"${"b".repeat(64)}"}
     """.trimIndent()
     private fun release(server: MockWebServer, version: String = "0.1.13", draft: Boolean = false,
@@ -30,6 +30,7 @@ class UpdateRepositoryTest {
             server.enqueue(MockResponse().setBody(manifest()))
             val result = repository(server).latest()
             assertEquals(14, result.versionCode)
+            assertEquals("v1.19.32", result.coreVersion)
             assertEquals(server.url("/web/releases/download/v0.1.13-beta.1/TVAtlas-Player-v0.1.13-release.apk").toString(), result.downloadUrl)
             assertEquals("/api/releases?per_page=10", server.takeRequest().path)
             assertEquals("/web/releases/download/v0.1.13-beta.1/release-info.json", server.takeRequest().path)

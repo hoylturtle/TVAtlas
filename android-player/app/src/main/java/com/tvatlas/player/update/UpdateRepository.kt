@@ -10,7 +10,7 @@ class UpdateException(message: String) : IOException(message)
 const val REPOSITORY_URL = "https://github.com/hoylturtle/TVAtlas"
 const val RELEASE_CERTIFICATE_SHA256 = "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878"
 data class PublishedUpdate(val versionCode: Int, val versionName: String, val minSdk: Int, val notes: String,
-    val downloadUrl: String, val apkSha256: String = "", val apkSize: Long = 0)
+    val downloadUrl: String, val apkSha256: String = "", val apkSize: Long = 0, val coreVersion: String = "")
 data class UpdateState(val checking: Boolean = false, val checked: Boolean = false, val release: PublishedUpdate? = null,
     val error: String? = null, val downloading: Boolean = false, val downloadProgress: Int = 0, val apkReady: Boolean = false)
 
@@ -58,7 +58,7 @@ class UpdateRepository(
             } ?: continue
             val size = info["apkSize"]?.jsonPrimitive?.longOrNull ?: continue
             if (size !in 1..MAX_UPDATE_APK_BYTES || apk["size"]?.jsonPrimitive?.longOrNull != size) continue
-            val candidate = PublishedUpdate(code, version, sdk, info.text("notes").take(1000), apk.text("browser_download_url"), info.text("apkSha256"), size)
+            val candidate = PublishedUpdate(code, version, sdk, info.text("notes").take(1000), apk.text("browser_download_url"), info.text("apkSha256"), size, info.text("coreVersion").takeIf { it.matches(Regex("v?[0-9]{1,5}\\.[0-9]{1,5}\\.[0-9]{1,5}")) } ?: "")
             if (newest == null || candidate.versionCode > newest.versionCode) newest = candidate
         }
         return newest ?: throw UpdateException("暂未找到公开的测试版安装包，请打开仓库查看 Releases")

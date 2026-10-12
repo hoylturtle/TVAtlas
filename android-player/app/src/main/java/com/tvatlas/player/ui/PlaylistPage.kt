@@ -4,7 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
+import com.tvatlas.core.playlist.M3uParser
+import com.tvatlas.player.source.MyTvSuperSource
+import com.tvatlas.player.source.ViuTvSource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tvatlas.core.model.*
@@ -12,6 +18,7 @@ import com.tvatlas.player.storage.*
 
 @Composable internal fun PlaylistPage(library: Library, busy: Boolean, onAdd: () -> Unit,
     onRefresh: (Playlist) -> Unit, onRefreshBuiltIn: () -> Unit, feedback: String? = null) {
+    var details by remember { mutableStateOf(false) }
     val builtIn = library.playlists.filter(DefaultPlaylists::contains)
     val custom = library.playlists.filterNot(DefaultPlaylists::contains)
     val enabled = builtIn.filter { it.enabled }.map { it.id }.toSet()
@@ -25,12 +32,13 @@ import com.tvatlas.player.storage.*
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (builtIn.isNotEmpty()) item(key = "built-in-bundle") {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Card(onClick = { details = true }, modifier = Modifier.fillMaxWidth().tvFocusOutline(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("TVAtlas 频道订阅", style = MaterialTheme.typography.titleMedium)
                     Text("$count 个频道 · 内置订阅", style = MaterialTheme.typography.bodyMedium)
                     Text("包含常规频道、TVB 官方免费频道、ViuTV 与 ViuTVsix。", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TvTextButton(onClick = { details = true }, modifier = Modifier.fillMaxWidth()) { Text("查看内置线路详情") }
                     Text("上次完整更新：${date(updatedAt)}", style = MaterialTheme.typography.bodySmall)
                     if (builtIn.any { !it.enabled }) Text("部分内置来源已停用，刷新保留原设置。", style = MaterialTheme.typography.bodySmall)
                     if (feedback != null) Text(feedback, style = MaterialTheme.typography.bodySmall)
@@ -55,4 +63,33 @@ import com.tvatlas.player.storage.*
             }
         }
     }
+    if (details) AlertDialog(onDismissRequest = { details = false }, title = { Text("内置订阅详情") },
+        text = {
+            var expanded by remember { mutableStateOf<String?>(null) }
+            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("$count 个频道 · ${builtIn.size} 个来源", style = MaterialTheme.typography.bodyMedium)
+                builtIn.forEach { source ->
+                    val official = when {
+                        source.url == MyTvSuperSource.FREE_PAGE || MyTvSuperSource.recognizes(source.url) -> MyTvSuperSource.playlist(source.url)
+                        ViuTvSource.recognizes(source.url) -> ViuTvSource.playlist(source.url)
+                        else -> null
+                    }
+                    val urls = official?.let { M3uParser.parse(it, source.id).flatMap { it.streams }.map { it.url }.toSet() }.orEmpty()
+                    val channels = library.channels.filter { ch -> ch.streams.any { it.sourcePlaylistId == source.id || it.url in urls } }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(source.name, style = MaterialTheme.typography.titleSmall)
+                            Text("${channels.size} 个频道 · ${if (source.enabled) "启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)
+                            Text("最近更新：${date(source.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall)
+                            Text(source.url, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                            TvTextButton(onClick = { expanded = if (expanded == source.id) null else source.id }) {
+                                Text(if (expanded == source.id) "收起频道" else "查看频道")
+                            }
+                            if (expanded == source.id) Text(channels.joinToString("、") { it.name }.ifBlank { "暂无已加载频道" }, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }, confirmButton = { TvTextButton(onClick = { details = false }) { Text("关闭") } })
+
 }

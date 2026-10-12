@@ -11,17 +11,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tvatlas.core.model.*
 import com.tvatlas.player.SubscriptionFeedback
+import com.tvatlas.player.proxy.CoreInfo
+import com.tvatlas.player.BuildConfig
+import com.tvatlas.player.update.*
 import com.tvatlas.player.storage.*
 
 @Composable internal fun RoutingPage(library: Library, onImport: () -> Unit, onExport: () -> Unit, onAdd: () -> Unit,
     onEdit: (ProxyProfile) -> Unit, subscriptions: List<SubscriptionRow>, busy: Boolean, onSubscribe: () -> Unit,
     onRefresh: (String) -> Unit, onDelete: (String) -> Unit, onEnable: (ProxyProfile) -> Unit,
     subscriptionRoute: RouteTarget = RouteTarget.AUTO, onSubscriptionRoute: (RouteTarget) -> Unit = {},
-    feedback: SubscriptionFeedback? = null, updatingId: String? = null) {
+    feedback: SubscriptionFeedback? = null, updatingId: String? = null,
+    coreInfo: CoreInfo = CoreInfo(BuildConfig.MIHOMO_VERSION, "", false, false),
+    onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {}) {}, onCoreInfo: () -> Unit = {}, onCheckCore: () -> Unit = {},
+    onDownloadCore: () -> Unit = {}, onInstallCore: () -> Unit = {}) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     var nodeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var hongKongOnly by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(section) { if (section == 3) onCoreInfo() }
     val shownNodes = library.profiles.filter { (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
         (!hongKongOnly || isHongKongLabel(it.name)) && it.name.contains(query, true) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -30,7 +37,7 @@ import com.tvatlas.player.storage.*
             Text("订阅获取节点，播放时按频道选择使用。", Modifier.padding(top = 4.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TabRow(selectedTabIndex = section) {
-                listOf("订阅", "节点", "高级").forEachIndexed { index, title ->
+                listOf("订阅", "节点", "高级", "内核").forEachIndexed { index, title ->
                     Tab(selected = section == index, onClick = { section = index; nodeSubscription = null },
                         modifier = Modifier.tvFocusOutline(), text = { Text(title) })
                 }
@@ -106,7 +113,7 @@ import com.tvatlas.player.storage.*
                 }
             }
             item { TvOutlinedButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
-        } else {
+        } else if (section == 2) {
             item {
                 Text("播放路由", style = MaterialTheme.typography.titleMedium)
                 Text("香港频道：默认优先香港节点\n其他频道：${routeLabel(library.rules.defaultRoute, library.profiles)}\n手动线路与自定义规则优先。", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
@@ -120,6 +127,10 @@ import com.tvatlas.player.storage.*
                 ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text(matchLabel(rule.match)) }, trailingContent = { Text(routeLabel(rule.route, library.profiles)) })
             }
         }
+        if (section == 3) item {
+            CoreManagement(coreInfo, onCoreAppUpdate)
+        }
+
     }
 }
 

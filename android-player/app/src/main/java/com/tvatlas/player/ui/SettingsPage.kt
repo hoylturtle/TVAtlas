@@ -111,7 +111,7 @@ import com.tvatlas.player.update.*
                     Text("代理凭证加密保存在本机，导出的规则不含用户名或密码。播放历史只保存在本机，日志不会自动上传。", style = MaterialTheme.typography.bodySmall)
                 }
                 SettingsDisclosure("开源许可", licenses, { licenses = !licenses }) {
-                    Text("Mihomo v1.19.32 © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随发布包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
+                    Text("Mihomo ${BuildConfig.MIHOMO_VERSION} © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随发布包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

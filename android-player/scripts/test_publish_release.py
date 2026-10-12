@@ -23,7 +23,8 @@ class PublishingTest(unittest.TestCase):
             certificate = "a" * 64
             commit = "b" * 40
             info = dict(versionName="0.1.13", versionCode=14, releaseTag="v0.1.13-beta.1",
-                minSdk=23, notes="test", signingCertificateSha256=certificate)
+                minSdk=23, notes="test", coreVersion="v1.19.32", signingCertificateSha256=certificate)
+            (root / "mihomo-lock.json").write_text(json.dumps(dict(version="v1.19.32")))
             (root / "release-info.json").write_text(json.dumps(info))
             apk = dist / "TVAtlas-Player-v0.1.13-release.apk"
             apk.write_bytes(b"fixture package")
