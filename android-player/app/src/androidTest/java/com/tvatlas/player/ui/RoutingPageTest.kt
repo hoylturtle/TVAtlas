@@ -27,7 +27,7 @@ class RoutingPageTest {
     private val subscriptions = listOf(SubscriptionRow("sub", "艾可云", 1791763200000, 2))
     @Test fun phoneStartsWithSubscriptionManagementAndNodesCanFilterHongKong() {
         compose.setContent { MaterialTheme(colorScheme = colors) {
-            Box(Modifier.width(360.dp).height(650.dp).background(MaterialTheme.colorScheme.background).testTag("phone-proxy-layout")) {
+            Surface(Modifier.width(360.dp).height(650.dp).testTag("phone-proxy-layout"), color = MaterialTheme.colorScheme.background) {
                 RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {}, {}, {}, {})
             }
         } }
