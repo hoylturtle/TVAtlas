@@ -67,7 +67,12 @@ class PlaybackCoordinator(
         preparation = scope.launch {
             val history = repository.preferred(channel.id)
             if (token != generation) return@launch
-            val plan = resolver.channelPlan(channel, history, streamId)
+            val officialIds = channel.streams.filter {
+                MyTvSuperSource.recognizes(it.url) || ViuTvSource.recognizes(it.url)
+            }.map { it.id }.toSet()
+            val orderedChannel = channel.copy(streams = channel.streams.sortedBy { if (it.id in officialIds) 0 else 1 })
+            val preferred = history?.takeIf { streamId != null || officialIds.isEmpty() || it.streamId in officialIds }
+            val plan = resolver.channelPlan(orderedChannel, preferred, streamId)
             if (plan.attempts.isEmpty()) _status.value = _status.value.copy(error = "该地区没有启用的匹配节点，请导入对应地区节点或手动选择线路")
             val newSession = FailoverSession(plan)
             session = newSession
@@ -189,6 +194,7 @@ class PlaybackCoordinator(
                 if (!wasCanceled) {
                     val http = generateSequence<Throwable>(error) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
                     log?.event("WARN", "MEDIA", "loadType=${mediaLoadData.dataType} host=${loadEventInfo.uri.host} http=$http exception=${error.javaClass.simpleName}")
+                    log?.error("MEDIA", error)
                     lastLoadType = mediaLoadData.dataType; loadErrorAt = SystemClock.elapsedRealtime() }
             }
         })
