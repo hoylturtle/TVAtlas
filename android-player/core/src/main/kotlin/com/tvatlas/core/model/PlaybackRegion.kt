@@ -17,7 +17,7 @@ data class NodeHealth(val delayMs: Long?, val checkedAt: Long) {
     fun fresh(now: Long) = now - checkedAt in 0..300_000
 }
 fun orderedRegionNodes(profiles: List<ProxyProfile>, region: PlaybackRegion, health: Map<String, NodeHealth>, now: Long): List<ProxyProfile> =
-    profiles.filter { it.enabled && playbackRegion(it.name) == region }.sortedWith(compareBy<ProxyProfile>(
+    profiles.filter { it.enabled && (if (region == PlaybackRegion.HONG_KONG) isHongKongLabel(it.name) else playbackRegion(it.name) == region) }.sortedWith(compareBy<ProxyProfile>(
         { val sample = health[it.id]?.takeIf { it.fresh(now) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
         { health[it.id]?.takeIf { it.fresh(now) }?.delayMs ?: Long.MAX_VALUE },
     ))
