@@ -1,0 +1,15 @@
+{
+  "before_run": 38278775051,
+  "after_run": 38282802514,
+  "after_head": "15f914795522703155fb502c2952919a75a2e979",
+  "merge_commit": "354b06205c2cec8a90b1f782f03a154c49254e52",
+  "native_tests": 40,
+  "source": "Synthetic Android API 35 Compose fixture screenshots, captured in this audit, saved and inspected locally. Not private-node playback.",
+  "scope": [
+    "subscription management",
+    "update settings",
+    "TV focus/navigation",
+    "playback recovery"
+  ],
+  "main_release_run": 38313942277
+}
