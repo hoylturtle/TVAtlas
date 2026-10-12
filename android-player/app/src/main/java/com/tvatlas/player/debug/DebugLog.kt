@@ -40,8 +40,13 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
         val frames = error.stackTrace.take(5).joinToString(" | ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
         event("ERROR", stage, "$causes frames=$frames")
     }
-    fun snapshot(): String = "TVAtlas debug log\n${sanitize(environment)}\nURLs, headers and bodies omitted; no automatic upload.\n\n" +
-        synchronized(lock) { _lines.value.joinToString("\n") } + "\n"
+    fun snapshot(): String {
+        val rows = synchronized(lock) { _lines.value }
+        val current = rows.indexOfLast { it.contains(" INFO APP ") }.coerceAtLeast(0)
+        return "TVAtlas debug log\n${sanitize(environment)}\nURLs, headers and bodies omitted; no automatic upload.\n\n" +
+            "--- Current launch / 本次启动 ---\n" + rows.drop(current).joinToString("\n") + "\n" +
+            if (current > 0) "\n--- Earlier launches / 历史记录（可能来自旧版本）---\n" + rows.take(current).joinToString("\n") + "\n" else ""
+    }
     fun clear() = synchronized(lock) {
         generation++
         _lines.value = emptyList()

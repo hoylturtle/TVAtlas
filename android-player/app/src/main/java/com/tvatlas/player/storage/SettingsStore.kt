@@ -15,6 +15,13 @@ private val Context.settingsDataStore by preferencesDataStore("player_settings")
 class SettingsStore(private val context: Context) {
     private val diagnosticsKey = booleanPreferencesKey("diagnostics")
     private val updateRouteKey = stringPreferencesKey("update_route")
+    private val subscriptionRouteKey = stringPreferencesKey("subscription_route")
+    val subscriptionRoute = context.settingsDataStore.data.map { preferences ->
+        preferences[subscriptionRouteKey]?.let { runCatching { RuleCodec.json.decodeFromString<RouteTarget>(it) }.getOrNull() } ?: RouteTarget.AUTO
+    }
+    suspend fun subscriptionRoute(route: RouteTarget) {
+        context.settingsDataStore.edit { it[subscriptionRouteKey] = RuleCodec.json.encodeToString(route) }
+    }
     val diagnostics = context.settingsDataStore.data.map { it[diagnosticsKey] ?: false }
     val updateRoute = context.settingsDataStore.data.map { preferences ->
         preferences[updateRouteKey]?.let { value ->

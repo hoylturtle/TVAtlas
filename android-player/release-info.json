@@ -1,8 +1,8 @@
 {
-  "versionCode": 19,
-  "versionName": "0.1.18",
+  "versionCode": 20,
+  "versionName": "0.1.19",
   "minSdk": 23,
-  "notes": "香港频道归入综合、新闻、影视、综艺、体育、纪实和音乐分类；移除单独香港分组；补充官方免费 TVB 目录和 ViuTVsix 96 台动态入口，沿用默认香港代理。",
+  "notes": "手机代理页拆分订阅、节点和高级规则；订阅下载支持自动重试与指定代理网络，显示明确错误并保留旧节点；日志区分本次启动与历史。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.18-beta.1"
+  "releaseTag": "v0.1.19-beta.1"
 }
