@@ -14,13 +14,45 @@ import kotlin.coroutines.resumeWithException
 /** Official free TVB channels. Never persist session credentials or signed stream URLs. */
 object MyTvSuperSource {
     const val PAGE = "https://www.mytvsuper.com/tc/live/81/"
-    const val PLAYLIST = "#EXTM3U\n#EXTINF:-1 tvg-id=\"Jade.hk\" group-title=\"香港\",翡翠台\n$PAGE\n"
+    const val PLAYLIST = "#EXTM3U\n#EXTINF:-1 tvg-id=\"Jade.hk\" group-title=\"香港 · 综合\",翡翠台\n$PAGE\n"
     const val PEARL_PAGE = "https://www.mytvsuper.com/tc/live/84/"
     const val PLUS_PAGE = "https://www.mytvsuper.com/tc/live/82/"
-    data class OfficialChannel(val page: String, val network: String, val name: String, val tvgId: String)
-    val channels = listOf(OfficialChannel(PAGE, "J", "翡翠台", "Jade.hk"),
-        OfficialChannel(PEARL_PAGE, "P", "明珠台", "Pearl.hk"),
-        OfficialChannel(PLUS_PAGE, "B", "TVB Plus", "TVBPlus.hk"))
+    const val FREE_PAGE = "https://www.mytvsuper.com/tc/live/"
+    data class OfficialChannel(val page: String, val network: String, val name: String, val tvgId: String, val group: String)
+    // Public official Freezone catalog, checked 2026-10-12. Paid and mainland channels are excluded.
+    val channels = listOf(
+        OfficialChannel("https://www.mytvsuper.com/tc/live/81/", "J", "翡翠台", "Jade.hk", "香港 · 综合"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/84/", "P", "明珠台", "Pearl.hk", "香港 · 综合"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/82/", "B", "TVB Plus", "TVBPlus.hk", "香港 · 综合"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/1/", "CWIN", "SUPER FREE", "CWIN.hk", "香港 · 综合"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/2/", "SVAR", "SUPER Game Show", "SVAR.hk", "香港 · 综艺"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/3/", "SEYT", "愛．回家SUPER煲", "SEYT.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/4/", "SFOO", "SUPER識食", "SFOO.hk", "香港 · 纪实"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/5/", "STRA", "SUPER資訊娛樂", "STRA.hk", "香港 · 综艺"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/6/", "SMUS", "SUPER Music", "SMUS.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/7/", "SGOL", "SUPER靈異", "SGOL.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/8/", "SSIT", "SUPER處境劇", "SSIT.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/9/", "STVM", "SUPER亞視劇", "STVM.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/10/", "SDOC", "真情SUPER煲", "SDOC.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/11/", "SSPT", "SUPER Sports", "SSPT.hk", "香港 · 体育"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/80/", "TVG", "黄金翡翠台", "TVG.hk", "香港 · 综合"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/83/", "C", "无线新闻台", "C.hk", "香港 · 新闻"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/91/", "CTVE", "娱乐新闻台", "CTVE.hk", "香港 · 新闻"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/207/", "ACTM", "Action Hollywood Movies", "ACTM.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/208/", "RCM", "Rialto Classic Movies (RCM)", "RCM.hk", "香港 · 影视"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/305/", "TRSP", "TRACE Sport Stars", "TRSP.hk", "香港 · 体育"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/408/", "PETC", "Pet Club TV", "PETC.hk", "香港 · 纪实"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/409/", "GLBT", "Globetrotter", "GLBT.hk", "香港 · 纪实"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/410/", "DOCV", "Docsville", "DOCV.hk", "香港 · 纪实"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/411/", "PULS", "Wild Stuff", "PULS.hk", "香港 · 纪实"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/626/", "NOW7", "that's 70s", "NOW7.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/627/", "NOW8", "that's 80s", "NOW8.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/628/", "NOWR", "that's Rock", "NOWR.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/629/", "NOW9", "that's 90s00s", "NOW9.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/630/", "CONC", "Concerto", "CONC.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/631/", "TRUR", "TRACE Urban", "TRUR.hk", "香港 · 音乐"),
+        OfficialChannel("https://www.mytvsuper.com/tc/live/709/", "NSWD", "NewsWorld", "NSWD.hk", "香港 · 新闻")
+    )
     fun channel(value: String): OfficialChannel? {
         val url = value.toHttpUrlOrNull() ?: return null
         if (url.scheme != "https" || url.host != "www.mytvsuper.com" || url.username.isNotEmpty() ||
@@ -32,8 +64,10 @@ object MyTvSuperSource {
         }
     }
     fun playlist(value: String): String {
-        val entry = requireNotNull(channel(value))
-        return "#EXTM3U\n#EXTINF:-1 tvg-id=\"${entry.tvgId}\" group-title=\"香港\",${entry.name}\n${entry.page}\n"
+        val entries = if (value.trimEnd('/') == FREE_PAGE.trimEnd('/')) channels else listOf(requireNotNull(channel(value)))
+        return "#EXTM3U\n" + entries.joinToString("") { entry ->
+            "#EXTINF:-1 tvg-id=\"${entry.tvgId}\" group-title=\"${entry.group}\",${entry.name}\n${entry.page}\n"
+        }
     }
     const val LICENSE = "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_J_h264"
     fun licenseHeaders(userToken: String) = mapOf(

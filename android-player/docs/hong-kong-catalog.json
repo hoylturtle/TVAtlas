@@ -1,0 +1,219 @@
+[
+  {
+    "number": 81,
+    "network": "J",
+    "name": "翡翠台",
+    "tvgId": "Jade.hk",
+    "group": "香港 · 综合"
+  },
+  {
+    "number": 84,
+    "network": "P",
+    "name": "明珠台",
+    "tvgId": "Pearl.hk",
+    "group": "香港 · 综合"
+  },
+  {
+    "number": 82,
+    "network": "B",
+    "name": "TVB Plus",
+    "tvgId": "TVBPlus.hk",
+    "group": "香港 · 综合"
+  },
+  {
+    "number": 1,
+    "network": "CWIN",
+    "name": "SUPER FREE",
+    "tvgId": "CWIN.hk",
+    "group": "香港 · 综合"
+  },
+  {
+    "number": 2,
+    "network": "SVAR",
+    "name": "SUPER Game Show",
+    "tvgId": "SVAR.hk",
+    "group": "香港 · 综艺"
+  },
+  {
+    "number": 3,
+    "network": "SEYT",
+    "name": "愛．回家SUPER煲",
+    "tvgId": "SEYT.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 4,
+    "network": "SFOO",
+    "name": "SUPER識食",
+    "tvgId": "SFOO.hk",
+    "group": "香港 · 纪实"
+  },
+  {
+    "number": 5,
+    "network": "STRA",
+    "name": "SUPER資訊娛樂",
+    "tvgId": "STRA.hk",
+    "group": "香港 · 综艺"
+  },
+  {
+    "number": 6,
+    "network": "SMUS",
+    "name": "SUPER Music",
+    "tvgId": "SMUS.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 7,
+    "network": "SGOL",
+    "name": "SUPER靈異",
+    "tvgId": "SGOL.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 8,
+    "network": "SSIT",
+    "name": "SUPER處境劇",
+    "tvgId": "SSIT.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 9,
+    "network": "STVM",
+    "name": "SUPER亞視劇",
+    "tvgId": "STVM.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 10,
+    "network": "SDOC",
+    "name": "真情SUPER煲",
+    "tvgId": "SDOC.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 11,
+    "network": "SSPT",
+    "name": "SUPER Sports",
+    "tvgId": "SSPT.hk",
+    "group": "香港 · 体育"
+  },
+  {
+    "number": 80,
+    "network": "TVG",
+    "name": "黄金翡翠台",
+    "tvgId": "TVG.hk",
+    "group": "香港 · 综合"
+  },
+  {
+    "number": 83,
+    "network": "C",
+    "name": "无线新闻台",
+    "tvgId": "C.hk",
+    "group": "香港 · 新闻"
+  },
+  {
+    "number": 91,
+    "network": "CTVE",
+    "name": "娱乐新闻台",
+    "tvgId": "CTVE.hk",
+    "group": "香港 · 新闻"
+  },
+  {
+    "number": 207,
+    "network": "ACTM",
+    "name": "Action Hollywood Movies",
+    "tvgId": "ACTM.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 208,
+    "network": "RCM",
+    "name": "Rialto Classic Movies (RCM)",
+    "tvgId": "RCM.hk",
+    "group": "香港 · 影视"
+  },
+  {
+    "number": 305,
+    "network": "TRSP",
+    "name": "TRACE Sport Stars",
+    "tvgId": "TRSP.hk",
+    "group": "香港 · 体育"
+  },
+  {
+    "number": 408,
+    "network": "PETC",
+    "name": "Pet Club TV",
+    "tvgId": "PETC.hk",
+    "group": "香港 · 纪实"
+  },
+  {
+    "number": 409,
+    "network": "GLBT",
+    "name": "Globetrotter",
+    "tvgId": "GLBT.hk",
+    "group": "香港 · 纪实"
+  },
+  {
+    "number": 410,
+    "network": "DOCV",
+    "name": "Docsville",
+    "tvgId": "DOCV.hk",
+    "group": "香港 · 纪实"
+  },
+  {
+    "number": 411,
+    "network": "PULS",
+    "name": "Wild Stuff",
+    "tvgId": "PULS.hk",
+    "group": "香港 · 纪实"
+  },
+  {
+    "number": 626,
+    "network": "NOW7",
+    "name": "that's 70s",
+    "tvgId": "NOW7.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 627,
+    "network": "NOW8",
+    "name": "that's 80s",
+    "tvgId": "NOW8.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 628,
+    "network": "NOWR",
+    "name": "that's Rock",
+    "tvgId": "NOWR.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 629,
+    "network": "NOW9",
+    "name": "that's 90s00s",
+    "tvgId": "NOW9.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 630,
+    "network": "CONC",
+    "name": "Concerto",
+    "tvgId": "CONC.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 631,
+    "network": "TRUR",
+    "name": "TRACE Urban",
+    "tvgId": "TRUR.hk",
+    "group": "香港 · 音乐"
+  },
+  {
+    "number": 709,
+    "network": "NSWD",
+    "name": "NewsWorld",
+    "tvgId": "NSWD.hk",
+    "group": "香港 · 新闻"
+  }
+]

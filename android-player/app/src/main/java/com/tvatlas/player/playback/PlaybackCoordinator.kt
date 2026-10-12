@@ -86,7 +86,7 @@ class PlaybackCoordinator(
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
-            if (viu) com.tvatlas.player.source.ViuTvSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log)
+            if (viu) com.tvatlas.player.source.ViuTvSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
             else MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
         } catch (e: CancellationException) { throw e
         } catch (e: Exception) {

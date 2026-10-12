@@ -21,7 +21,7 @@ class CoreTest {
         val channels = M3uParser.parse(text, "home")
         assertEquals(1, channels.size)
         assertEquals("翡翠台", channels[0].name)
-        assertEquals("香港,综合", channels[0].group)
+        assertEquals("香港 · 综合", channels[0].group)
         assertEquals("jade", channels[0].tvgId)
         assertEquals(2, channels[0].streams.size)
         assertEquals(channels[0].id, M3uParser.parse("#EXTINF:-1,翡翠台\nhttps://x/new", "home")[0].id)

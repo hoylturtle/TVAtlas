@@ -28,7 +28,7 @@ class MyTvSuperSourceTest {
         assertTrue(MyTvSuperSource.recognizes(MyTvSuperSource.PAGE))
         assertTrue(MyTvSuperSource.recognizes(MyTvSuperSource.PAGE + "%E7%BF%A1%E7%BF%A0%E5%8F%B0/"))
         for (value in listOf("http://www.mytvsuper.com/tc/live/81/", "https://evil.test/tc/live/81/",
-            "https://www.mytvsuper.com/tc/live/83/", MyTvSuperSource.PAGE + "?token=secret"))
+            "https://www.mytvsuper.com/tc/live/85/", MyTvSuperSource.PAGE + "?token=secret"))
             assertFalse(MyTvSuperSource.recognizes(value))
     }
     @Test fun officialPearlAndPlusUseTheirOwnCheckoutAndLicense() = runBlocking {
@@ -46,6 +46,16 @@ class MyTvSuperSourceTest {
             assertTrue(MyTvSuperSource.playlist(entry.page).contains(entry.name))
             assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout(), entry.network) }
         }
+    }
+    @Test fun freeCatalogHasTypedGroupsAndNewsNetworkFromOfficialDirectory() {
+        val channels = com.tvatlas.core.playlist.M3uParser.parse(MyTvSuperSource.playlist(MyTvSuperSource.FREE_PAGE), "official")
+        assertEquals(31, channels.size)
+        assertFalse(channels.any { it.group == "香港" })
+        assertEquals("香港 · 新闻", channels.first { it.name == "无线新闻台" }.group)
+        assertEquals("C", MyTvSuperSource.channel("https://www.mytvsuper.com/tc/live/83/")!!.network)
+        assertTrue(channels.any { it.group == "香港 · 影视" })
+        assertTrue(channels.any { it.group == "香港 · 体育" })
+        assertNull(MyTvSuperSource.channel("https://www.mytvsuper.com/tc/live/85/"))
     }
     @Test fun rejectedRegionCannotUseToken() {
         assertThrows(IOException::class.java) { MyTvSuperSource.parseSession(session.replace("true", "false")) }

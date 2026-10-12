@@ -22,6 +22,17 @@ class RegionDefaultsTest {
         assertFalse(isHongKongLabel("SHK server"))
         assertTrue(hk.copy(group = "其他", tvgId = "Jade.hk").isHongKong())
     }
+    @Test fun legacyBareHongKongAndGenreAliasesNormalizeWithoutChangingRoutes() {
+        val manual = RouteTarget.proxy("hk1")
+        val original = hk.copy(group = "香港", manualRoute = manual)
+        assertEquals("香港 · 综合", original.normalizeHongKongGroup().group)
+        assertEquals("香港 · 新闻", original.copy(name = "无线新闻台").normalizeHongKongGroup().group)
+        assertEquals("香港 · 影视", original.copy(group = "香港电影").normalizeHongKongGroup().group)
+        assertEquals(manual, original.normalizeHongKongGroup().manualRoute)
+        assertEquals(original.id, original.normalizeHongKongGroup().id)
+        val other = original.copy(group = "台湾 · 新闻")
+        assertEquals(other, other.normalizeHongKongGroup())
+    }
     @Test fun onlyEnabledHongKongNodesAndOldDirectHistoryCannotOverride() {
         val resolver = DefaultRouteResolver(RuleConfig(defaultRoute = RouteTarget.DIRECT), nodes)
         val plan = resolver.channelPlan(hk, SuccessfulRoute("s", RouteTarget.DIRECT, 1))

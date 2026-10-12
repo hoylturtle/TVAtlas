@@ -21,8 +21,13 @@ object ViuTvSource {
     const val PAGE = "https://viu.tv/ch/99"
     const val API = "https://api.viu.now.com/p8/3/getLiveURL"
     const val LICENSE = "https://fwp.nowe.com/wrapperWV"
-    const val PLAYLIST = "#EXTM3U\n#EXTINF:-1 tvg-id=\"ViuTV.hk\" group-title=\"香港\",ViuTV\n$PAGE\n"
-    fun recognizes(value: String): Boolean = value.trimEnd('/') == PAGE
+    const val PLAYLIST = "#EXTM3U\n#EXTINF:-1 tvg-id=\"ViuTV.hk\" group-title=\"香港 · 综合\",ViuTV\n$PAGE\n"
+    const val SIX_PAGE = "https://viu.tv/ch/96"
+    fun recognizes(value: String): Boolean = value.trimEnd('/') in listOf(PAGE, SIX_PAGE)
+    fun playlist(value: String): String {
+        require(recognizes(value))
+        return if (value.trimEnd('/') == SIX_PAGE) "#EXTM3U\n#EXTINF:-1 tvg-id=\"ViuTVsix.hk\" group-title=\"香港 · 综合\",ViuTVsix\n$SIX_PAGE\n" else PLAYLIST
+    }
     fun parseCheckout(text: String): MyTvSuperSource.Playback {
         val root = Json.parseToJsonElement(text).jsonObject
         if ((root["responseCode"] as? JsonPrimitive)?.contentOrNull == "GEO_CHECK_FAIL")
@@ -37,17 +42,19 @@ object ViuTvSource {
         return MyTvSuperSource.Playback(url.toString(), token, LICENSE,
             drmRequired = token.isNotBlank(), mimeType = if (token.isNotBlank()) MimeTypes.APPLICATION_MPD else MimeTypes.APPLICATION_M3U8)
     }
-    suspend fun resolve(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): MyTvSuperSource.Playback = withContext(Dispatchers.IO) {
+    suspend fun resolve(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null, page: String = PAGE): MyTvSuperSource.Playback = withContext(Dispatchers.IO) {
+        require(recognizes(page)) { "不支持的 ViuTV 官方频道" }
+        val channelNumber = if (page.trimEnd('/') == SIX_PAGE) "096" else "099"
         val uid = UUID.randomUUID().toString().replace("-", "").take(18)
         val body = buildJsonObject {
             put("callerReferenceNo", SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(Date()))
-            put("channelno", "099"); put("contentId", "099"); put("contentType", "Channel")
+            put("channelno", channelNumber); put("contentId", channelNumber); put("contentType", "Channel")
             put("mode", "prod"); put("PIN", "password"); put("cookie", uid); put("deviceId", uid)
             put("deviceType", "ANDRIOD_WEB"); put("format", "HLS")
         }.toString().toRequestBody("text/plain".toMediaType())
         val client = base.newBuilder().followRedirects(false).followSslRedirects(false).callTimeout(20, TimeUnit.SECONDS).build()
         log?.event("INFO", "VIUTV_CHECKOUT", "start host=api.viu.now.com")
-        client.newCall(Request.Builder().url(API).header("Origin", "https://viu.tv").header("Referer", PAGE).post(body).build()).execute().use {
+        client.newCall(Request.Builder().url(API).header("Origin", "https://viu.tv").header("Referer", page).post(body).build()).execute().use {
             log?.event("INFO", "VIUTV_CHECKOUT", "status=${it.code}")
             if (!it.isSuccessful) throw IOException("ViuTV 播放配置请求失败（HTTP ${it.code}）")
             val input = it.body?.byteStream() ?: throw IOException("ViuTV 返回空响应")
