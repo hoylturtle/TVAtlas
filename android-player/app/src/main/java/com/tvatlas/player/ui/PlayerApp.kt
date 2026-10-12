@@ -313,68 +313,6 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
     }
 }
 
-@Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
-    update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
-    onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.DIRECT, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}) {
-    val clipboard = LocalClipboardManager.current
-    var linkCopied by remember(update.release?.downloadUrl) { mutableStateOf(false) }
-    var repositoryCopied by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("设置", style = MaterialTheme.typography.headlineMedium)
-        ListItem(headlineContent = { Text("播放诊断") }, supportingContent = { Text("显示脱敏地址、路由、命中规则和错误类型") },
-            trailingContent = { Switch(modifier = Modifier.tvFocusOutline(), checked = diagnostics, onCheckedChange = onDiagnostics) })
-        TvButton(onClick = onLogs) { Text("调试日志") }
-        Text("应用更新", style = MaterialTheme.typography.titleLarge)
-        Text("当前版本：${BuildConfig.VERSION_NAME}")
-        TvButton(onClick = onCheckUpdate, enabled = !update.checking && !update.downloading) { Text(if (update.checking) "正在检查更新…" else "检查更新") }
-        update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Text("更新网络", style = MaterialTheme.typography.titleMedium)
-        UpdateNetworkPicker(profiles, updateRoute, !update.checking && !update.downloading, onUpdateRoute)
-        Text("检查更新可使用已导入的代理节点。打开仓库由浏览器处理，请确保浏览器也能访问 GitHub。", style = MaterialTheme.typography.bodySmall)
-        TvOutlinedButton(onClick = onRepository) { Text("打开 GitHub 仓库") }
-        TvTextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }) {
-            Text(if (repositoryCopied) "仓库链接已复制" else "复制仓库链接")
-        }
-        update.release?.let { release ->
-            if (release.versionCode > BuildConfig.VERSION_CODE) {
-                Text("发现新版本：${release.versionName}", style = MaterialTheme.typography.titleMedium)
-                if (release.notes.isNotBlank()) Text(release.notes)
-                if (release.minSdk > android.os.Build.VERSION.SDK_INT) Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级")
-                else {
-                    TvButton(onClick = onDownload, enabled = !update.downloading) { Text(if (update.downloading) "下载中 ${update.downloadProgress}%" else "下载新版 APK") }
-                    if (update.downloading) LinearProgressIndicator(progress = { update.downloadProgress / 100f })
-                    if (update.apkReady) TvButton(onClick = onInstall) { Text("安装更新") }
-                    Text("APP 通过选定的更新网络下载 APK，核对校验值和签名后，点击安装更新并按系统提示确认。无需 GitHub 登录，覆盖安装保留配置。", style = MaterialTheme.typography.bodySmall)
-                }
-                TvTextButton(onClick = { clipboard.setText(AnnotatedString(release.downloadUrl)); linkCopied = true }) {
-                    Text(if (linkCopied) "下载链接已复制" else "复制下载链接")
-                }
-            } else Text("已是最新版本")
-        }
-        Text("遥控器操作", style = MaterialTheme.typography.titleLarge)
-        Text("频道列表：方向键选择，OK 播放，长按 OK 查看线路。\n播放器：上下换台，长按 OK 查看线路；返回退出全屏。")
-        Text("配置与隐私", style = MaterialTheme.typography.titleLarge)
-        Text("代理凭证使用 Android Keystore 加密保存在本机。导出的规则不包含用户名或密码。播放历史仅保存在本机。")
-        Text("TVAtlas Player · 开发版 ${BuildConfig.VERSION_NAME} · Mihomo v1.19.32", color = MaterialTheme.colorScheme.secondary)
-        Text("Mihomo © MetaCubeX / Clash contributors · GPL-3.0。许可证与对应源码随安装包提供；内核按许可证提供，无担保。", style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable internal fun UpdateNetworkPicker(profiles: List<ProxyProfile>, selected: RouteTarget,
-    enabled: Boolean, onSelect: (RouteTarget) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        TvOutlinedButton(onClick = { expanded = true }, enabled = enabled) { Text(routeLabel(selected, profiles)) }
-        DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
-            profiles.filter { it.enabled }.forEach { profile ->
-                DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
-            }
-        }
-    }
-}
-
 @Composable internal fun PlaylistDialog(busy: Boolean, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var url by rememberSaveable { mutableStateOf("") }

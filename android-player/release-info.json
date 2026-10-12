@@ -1,8 +1,8 @@
 {
-  "versionCode": 20,
-  "versionName": "0.1.19",
+  "versionCode": 21,
+  "versionName": "0.1.20",
   "minSdk": 23,
-  "notes": "手机代理页拆分订阅、节点和高级规则；订阅下载支持自动重试与指定代理网络，显示明确错误并保留旧节点；日志区分本次启动与历史。",
+  "notes": "设置页重整为应用更新、诊断与日志、帮助与关于三组卡片；更新网络与状态集中显示，安装包就绪后直接提供安装；手机与电视帮助按设备区分，隐私与开源说明默认收起。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.19-beta.1"
+  "releaseTag": "v0.1.20-beta.1"
 }
