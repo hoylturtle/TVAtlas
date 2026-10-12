@@ -71,6 +71,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         val subscriptionRoute by model.subscriptionRoute.collectAsStateWithLifecycle()
         val subscriptionFeedback by model.subscriptionFeedback.collectAsStateWithLifecycle()
         val updatingSubscription by model.updatingSubscription.collectAsStateWithLifecycle()
+        val playlistFeedback by model.playlistFeedback.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val config = LocalConfiguration.current
@@ -149,7 +150,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                             }
                         }
                     }
-                    1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, { model.addPlaylist("翡翠台官方（实验）", com.tvatlas.player.source.MyTvSuperSource.PAGE) })
+                    1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback)
                     2 -> RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
@@ -290,26 +291,6 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         }
         TvTextButton(onClick = onFullscreen, modifier = Modifier.weight(1f)) { Text("全屏 / 频道", maxLines = 1) }
         TvTextButton(onClick = onStop, enabled = canStop, modifier = Modifier.weight(1f)) { Text("停止", maxLines = 1) }
-    }
-}
-
-@Composable private fun PlaylistPage(library: Library, busy: Boolean, onAdd: () -> Unit, onRefresh: (Playlist) -> Unit, onOfficial: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("播放列表", style = MaterialTheme.typography.headlineMedium)
-            Text("同名频道自动合并；更新保留路由和播放记忆。", Modifier.padding(vertical = 12.dp))
-            TvButton(onClick = onAdd, enabled = !busy) { Text("添加播放列表") }
-            TvOutlinedButton(onClick = onOfficial, enabled = !busy && library.playlists.none { com.tvatlas.player.source.MyTvSuperSource.recognizes(it.url) }) { Text("添加官方翡翠台（实验）") }
-            Text("官方源需要支持 Widevine 的设备和服务允许的地区；添加后在频道线路设置中选择节点。Android 兼容性待实测。", style = MaterialTheme.typography.bodySmall)
-        }
-        items(library.playlists, key = { it.id }) { p ->
-            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(p.name, style = MaterialTheme.typography.titleLarge)
-                Text(redactedUrl(p.url), style = MaterialTheme.typography.bodySmall)
-                Text("最近更新：${date(p.lastUpdatedAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TvOutlinedButton(onClick = { onRefresh(p) }, enabled = !busy) { Text("刷新") }
-            } }
-        }
     }
 }
 

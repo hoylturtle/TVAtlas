@@ -158,6 +158,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun dismissMessage() { _message.value = null }
+    private val _playlistFeedback = MutableStateFlow<String?>(null)
+    val playlistFeedback = _playlistFeedback.asStateFlow()
+    fun refreshBuiltIn() = action {
+        _playlistFeedback.value = "正在刷新 TVAtlas 频道订阅…"
+        val result = repository.refreshBuiltIn()
+        _playlistFeedback.value = result
+        _message.value = result
+    }
     fun refresh(playlist: Playlist) = action("播放列表已更新") { debugLog.event("INFO", "PLAYLIST", "refresh ${playlist.name}"); repository.refresh(playlist) }
     fun addPlaylist(name: String, url: String) = action("播放列表已添加") {
         require(name.isNotBlank()) { "请输入播放列表名称" }

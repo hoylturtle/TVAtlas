@@ -7,6 +7,7 @@ import com.tvatlas.core.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
@@ -90,6 +91,20 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             dao.savePlaylist(PlaylistRow(playlist.id, playlist.name, playlist.url, playlist.enabled,
                 playlist.refreshIntervalHours, System.currentTimeMillis()))
         }
+    }
+
+    suspend fun refreshBuiltIn(): String {
+        val playlists = library.first().playlists.filter { DefaultPlaylists.contains(it) && it.enabled }
+        if (playlists.isEmpty()) return "内置订阅已停用，没有需要刷新的频道源"
+        var updated = 0
+        val failed = mutableListOf<String>()
+        for (playlist in playlists) {
+            try { refresh(playlist); updated++ }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { failed.add(playlist.name); log?.error("PLAYLIST_BUNDLE", error) }
+        }
+        return if (failed.isEmpty()) "TVAtlas 频道订阅已更新，线路设置与播放记忆已保留"
+            else "已更新 $updated 个来源；${failed.joinToString("、")}更新失败，已保留原频道"
     }
 
     suspend fun saveProxy(profile: ProxyProfile) {
