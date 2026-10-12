@@ -8,6 +8,7 @@ import com.tvatlas.player.source.MyTvSuperSource
 import com.tvatlas.player.storage.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -64,4 +65,28 @@ class DefaultPlaylistsTest {
             assertEquals("saved-stream-route", db.dao().stream(stream.id)!!.manualRoute)
         } finally { db.close() }
     }
+    @Test fun unifiedRefreshKeepsManualRoutesAndHistoryWhenRemoteSourceFails() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.inMemoryDatabaseBuilder(context, PlayerDatabase::class.java).build()
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(503).message("unavailable").body("".toResponseBody()).build()
+        }.build()
+        try {
+            val repo = PlayerRepository(db, client)
+            repo.initializeDefaults()
+            val official = DefaultPlaylists.entries.first()
+            val stream = db.dao().sourceStreams(official.id).single()
+            repo.setStreamRoute(stream.channelId, stream.id, RouteTarget.DIRECT)
+            repo.recordSuccess(stream.channelId, RouteAttempt(stream.id, stream.url, RouteTarget.DIRECT, "fixture"))
+            val previous = db.dao().history(stream.channelId)
+            val message = repo.refreshBuiltIn()
+            assertTrue(message.contains("更新失败"))
+            assertNotNull(db.dao().stream(stream.id))
+            assertEquals(previous, db.dao().history(stream.channelId))
+            assertTrue(db.dao().stream(stream.id)!!.manualRoute!!.contains("DIRECT"))
+            assertNull(db.dao().playlist(DefaultPlaylists.entries.last().id)!!.lastUpdatedAt)
+        } finally { db.close() }
+    }
+
 }
