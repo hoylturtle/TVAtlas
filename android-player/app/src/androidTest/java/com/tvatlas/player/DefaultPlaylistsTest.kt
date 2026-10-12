@@ -77,7 +77,7 @@ class DefaultPlaylistsTest {
             repo.initializeDefaults()
             val official = DefaultPlaylists.entries.first()
             val stream = db.dao().sourceStreams(official.id).single()
-            repo.setStreamRoute(stream.channelId, stream.id, RouteTarget.DIRECT)
+            repo.setStreamRoute(stream.id, RouteTarget.DIRECT)
             repo.recordSuccess(stream.channelId, RouteAttempt(stream.id, stream.url, RouteTarget.DIRECT, "fixture"))
             val previous = db.dao().history(stream.channelId)
             val message = repo.refreshBuiltIn()
