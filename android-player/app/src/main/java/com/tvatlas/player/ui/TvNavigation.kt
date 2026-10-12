@@ -28,7 +28,7 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("TVAtlas", Modifier.padding(vertical = 20.dp), fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium)
-        listOf("直播", "播放列表", "路由", "设置").forEachIndexed { index, label ->
+        listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
             TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).tvFocusOutline(),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)) {

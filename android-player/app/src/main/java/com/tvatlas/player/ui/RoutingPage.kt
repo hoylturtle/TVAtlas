@@ -50,19 +50,6 @@ import com.tvatlas.player.storage.*
             item {
                 TvButton(onClick = onSubscribe, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("添加代理订阅") }
             }
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("订阅下载网络", style = MaterialTheme.typography.titleMedium)
-                        SubscriptionNetworkPicker(library.profiles, subscriptionRoute, !busy, onSubscriptionRoute)
-                        Text("自动：先直连，失败后尝试已有节点，优先香港。此设置只影响订阅下载。",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (updatingId != null) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在下载并校验节点…", style = MaterialTheme.typography.bodySmall) }
-                        if (feedback?.id == null && feedback != null) Text(feedback.message,
-                            color = if (feedback.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
             if (subscriptions.isEmpty()) item { Text("还没有代理订阅\n添加 Clash / Mihomo YAML 订阅后，节点会显示在“节点”页。", style = MaterialTheme.typography.bodyMedium) }
             items(subscriptions, key = { "subscription:${it.id}" }) { sub ->
                 var menu by remember { mutableStateOf(false) }
@@ -80,6 +67,7 @@ import com.tvatlas.player.storage.*
                         val enabled = library.profiles.count { it.subscriptionId == sub.id && it.enabled }
                         Text("${sub.nodeCount} 个节点 · $enabled 个已启用", style = MaterialTheme.typography.bodyMedium)
                         Text("上次成功更新：${date(sub.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (updatingId == sub.id) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在下载并校验节点…", style = MaterialTheme.typography.bodySmall) }
                         if (feedback?.id == sub.id) Text(feedback.message,
                             color = if (feedback.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -88,6 +76,19 @@ import com.tvatlas.player.storage.*
                             }
                             TvTextButton(onClick = { nodeSubscription = sub.id; section = 1; query = ""; hongKongOnly = false }, modifier = Modifier.weight(1f)) { Text("查看节点") }
                         }
+                    }
+                }
+            }
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("订阅下载网络", style = MaterialTheme.typography.titleMedium)
+                        SubscriptionNetworkPicker(library.profiles, subscriptionRoute, !busy, onSubscriptionRoute)
+                        Text("自动：先直连，失败后尝试已有节点，优先香港。此设置只影响订阅下载。",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (updatingId != null) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在下载并校验节点…", style = MaterialTheme.typography.bodySmall) }
+                        if (feedback?.id == null && feedback != null) Text(feedback.message,
+                            color = if (feedback.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -105,7 +106,7 @@ import com.tvatlas.player.storage.*
                     Text("${shownNodes.size} 个节点", Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodyMedium)
                     TvTextButton(onClick = { hongKongOnly = !hongKongOnly }) { Text(if (hongKongOnly) "显示全部节点" else "只看香港节点") }
                 }
-                Text("连接失败会切换到同地区其他节点。手动线路与自定义规则优先。", style = MaterialTheme.typography.bodySmall)
+                Text("手动节点为首选，失败后切换同地区备用节点。通用测速成功不代表所有直播地址都可用。", style = MaterialTheme.typography.bodySmall)
             }
             if (shownNodes.isEmpty()) item { Text("没有符合条件的节点") }
             items(shownNodes, key = { it.id }) { p ->
@@ -113,7 +114,7 @@ import com.tvatlas.player.storage.*
                     ListItem(headlineContent = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                         supportingContent = { Column { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${if (p.enabled) "已启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)
                             val sample = nodeHealth[p.id]
-                            Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "不可达"; else -> "延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
+                            Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期测速 / 连接失败"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
                         } },
                         trailingContent = {
                             if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)

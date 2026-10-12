@@ -1,5 +1,9 @@
 package com.tvatlas.player.source
 
+import com.tvatlas.core.player.*
+
+import com.tvatlas.player.network.readCancellable
+
 import okio.ByteString.Companion.toByteString
 import androidx.media3.common.MimeTypes
 import kotlinx.coroutines.Dispatchers
@@ -31,14 +35,14 @@ object ViuTvSource {
     fun parseCheckout(text: String): MyTvSuperSource.Playback {
         val root = Json.parseToJsonElement(text).jsonObject
         if ((root["responseCode"] as? JsonPrimitive)?.contentOrNull == "GEO_CHECK_FAIL")
-            throw IOException("ViuTV 官方服务未接受当前地区，请检查所选节点")
+            throw SourceResolutionException("ViuTV 官方服务未接受当前地区，请检查所选节点", PlaybackFailure(FailureKind.HTTP, 403))
         val url = ((root["asset"] as? JsonArray)?.firstOrNull() as? JsonPrimitive)?.contentOrNull?.toHttpUrlOrNull()
-            ?: throw IOException("ViuTV 官方未返回播放地址")
+            ?: throw SourceResolutionException("ViuTV 官方未返回播放地址", PlaybackFailure(FailureKind.MANIFEST))
         if (url.scheme != "https" || url.username.isNotEmpty() || url.password.isNotEmpty() || url.fragment != null ||
             !(url.host.endsWith(".now.com") || url.host.endsWith(".viu.tv") || url.host.endsWith(".nowe.com") || url.host.endsWith(".akamaized.net")))
-            throw IOException("ViuTV 官方播放地址校验失败")
+            throw SourceResolutionException("ViuTV 官方播放地址校验失败", PlaybackFailure(FailureKind.MANIFEST))
         val token = (root["drmToken"] as? JsonPrimitive)?.contentOrNull.orEmpty()
-        if (token.length > 16384 || token.any { it == '\r' || it == '\n' }) throw IOException("ViuTV 授权凭据无效")
+        if (token.length > 16384 || token.any { it == '\r' || it == '\n' }) throw SourceResolutionException("ViuTV 授权凭据无效", PlaybackFailure(FailureKind.MANIFEST))
         return MyTvSuperSource.Playback(url.toString(), token, LICENSE,
             drmRequired = token.isNotBlank(), mimeType = if (token.isNotBlank()) MimeTypes.APPLICATION_MPD else MimeTypes.APPLICATION_M3U8)
     }
@@ -54,9 +58,9 @@ object ViuTvSource {
         }.toString().toRequestBody("text/plain".toMediaType())
         val client = base.newBuilder().followRedirects(false).followSslRedirects(false).callTimeout(20, TimeUnit.SECONDS).build()
         log?.event("INFO", "VIUTV_CHECKOUT", "start host=api.viu.now.com")
-        client.newCall(Request.Builder().url(API).header("Origin", "https://viu.tv").header("Referer", page).post(body).build()).execute().use {
+        client.newCall(Request.Builder().url(API).header("Origin", "https://viu.tv").header("Referer", page).post(body).build()).readCancellable {
             log?.event("INFO", "VIUTV_CHECKOUT", "status=${it.code}")
-            if (!it.isSuccessful) throw IOException("ViuTV 播放配置请求失败（HTTP ${it.code}）")
+            if (!it.isSuccessful) throw SourceResolutionException("ViuTV 播放配置请求失败（HTTP ${it.code}）", PlaybackFailure(FailureKind.HTTP, it.code))
             val input = it.body?.byteStream() ?: throw IOException("ViuTV 返回空响应")
             val bytes = input.readBytesLimited()
             parseCheckout(bytes.toString(Charsets.UTF_8))

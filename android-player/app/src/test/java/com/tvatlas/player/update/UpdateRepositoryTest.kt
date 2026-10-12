@@ -86,4 +86,16 @@ class UpdateRepositoryTest {
             catch (error: UpdateException) { assertTrue(error.message!!.contains("稍后重试")) }
         }
     }
+    @Test fun laterAssetOutageDoesNotDiscardAlreadyVerifiedUpdateOrClaimCompleteCheck() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("[${release(server)},${release(server, "0.1.12")}]"))
+            server.enqueue(MockResponse().setBody(manifest()))
+            server.enqueue(MockResponse().setResponseCode(503))
+            val result = repository(server).latest()
+            assertEquals(14, result.versionCode)
+            assertFalse(result.checkComplete)
+            assertTrue(result.apkSha256.matches(Regex("[a-f0-9]{64}")))
+        }
+    }
+
 }

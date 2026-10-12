@@ -38,4 +38,32 @@ class RegionalRoutingTest {
         assertEquals("1", DefaultRouteResolver(config, nodes).resolve(StreamContext(ch, stream)).attempts.single().target.profile)
         assertTrue(DefaultRouteResolver(RuleConfig(), nodes.take(1)).channelPlan(ch, null).attempts.isEmpty())
     }
+    @Test fun manualNodeIsFirstThenSameRegionAndChildRequestsKeepFallback() {
+        val second = nodes[0].copy(id = "hk2", name = "香港 2")
+        val ch = channel("香港").copy(manualRoute = RouteTarget.proxy("0"))
+        val resolver = DefaultRouteResolver(RuleConfig(), nodes + second)
+        val plan = resolver.channelPlan(ch, SuccessfulRoute("s", RouteTarget.proxy("hk2"), 1))
+        assertEquals(listOf("0", "hk2"), plan.attempts.map { it.target.profile })
+        val failover = FailoverSession(plan)
+        failover.start()
+        val fallback = failover.fail(PlaybackFailure(FailureKind.NETWORK))!!
+        assertEquals(RouteTarget.proxy("hk2"), resolver.requestTarget(StreamContext(ch, stream), "https://cdn.test/segment", fallback.target))
+        assertTrue(fallback.matchedRule.contains("同地区保底"))
+    }
+    @Test fun removedManualNodeUsesRegionFallbackAndProvisioningHasBoundedIndependentRoutes() {
+        val resolver = DefaultRouteResolver(RuleConfig(), nodes)
+        val ch = channel("香港").copy(manualRoute = RouteTarget.proxy("removed"))
+        assertEquals("0", resolver.channelPlan(ch, null).attempts.single().target.profile)
+        assertEquals(listOf(RouteTarget.proxy("0"), RouteTarget.DIRECT), resolver.provisioningTargets(StreamContext(ch, stream), RouteTarget.proxy("0")))
+        assertEquals(listOf(RouteTarget.DIRECT), resolver.channelPlan(ch.copy(manualRoute = RouteTarget.DIRECT), null).attempts.map { it.target })
+    }
+
+    @Test fun oneUnreachableCdnDoesNotDiscardOtherSourceOnSameNode() {
+        val other = stream.copy(id = "other", url = "https://other-cdn.test/live")
+        val ch = channel("香港").copy(streams = listOf(stream, other))
+        val failover = FailoverSession(DefaultRouteResolver(RuleConfig(), nodes).channelPlan(ch, null))
+        assertEquals("s", failover.start()!!.streamId)
+        assertEquals("other", failover.fail(PlaybackFailure(FailureKind.NETWORK))!!.streamId)
+    }
+
 }

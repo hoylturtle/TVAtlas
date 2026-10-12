@@ -2,9 +2,9 @@ package com.tvatlas.core.player
 
 import com.tvatlas.core.model.*
 
-enum class FailureKind { NETWORK, HTTP, MANIFEST, SEGMENT, DECODER }
+enum class FailureKind { NETWORK, HTTP, MANIFEST, SEGMENT, DECODER, DRM }
 data class PlaybackFailure(val kind: FailureKind, val httpStatus: Int? = null) {
-    val skipStream: Boolean get() = httpStatus in listOf(404, 410) || kind in listOf(FailureKind.MANIFEST, FailureKind.DECODER)
+    val skipStream: Boolean get() = httpStatus in listOf(404, 410) || kind in listOf(FailureKind.MANIFEST, FailureKind.DECODER, FailureKind.DRM)
 }
 class FailoverSession(plan: RoutePlan) {
     private val remaining = plan.attempts.toMutableList()
@@ -20,7 +20,8 @@ class FailoverSession(plan: RoutePlan) {
     fun fail(failure: PlaybackFailure): RouteAttempt? {
         if (stopped) return null
         if (failure.kind == FailureKind.NETWORK && current?.target?.type == RouteType.PROXY)
-            remaining.removeAll { it.target == current?.target }
+            // A single CDN can fail while the same node still reaches another source.
+            remaining.removeAll { it.target == current?.target && it.streamId == current?.streamId }
         if (failure.skipStream) remaining.removeAll { it.streamId == current?.streamId }
         return next()
     }

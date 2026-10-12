@@ -17,6 +17,7 @@ import com.tvatlas.core.subscription.SubscriptionException
 import com.tvatlas.player.storage.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.withLock
 import java.io.ByteArrayOutputStream
 
 data class SubscriptionFeedback(val id: String?, val message: String, val error: Boolean = false)
@@ -50,7 +51,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _updatingSubscription = MutableStateFlow<String?>(null)
     val updatingSubscription = _updatingSubscription.asStateFlow()
     fun setSubscriptionRoute(route: RouteTarget) = action { settings.subscriptionRoute(route) }
-    val updateRoute = settings.updateRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.DIRECT)
+    val updateRoute = settings.updateRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.AUTO)
     private val latency = NodeLatencyTester(pool::client)
     val nodeHealth = latency.health
     val nodeTesting = latency.testing
@@ -84,8 +85,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _update.value = UpdateState(checking = true)
         updateJob = viewModelScope.launch {
             try {
-                val client = updateClient(false)
-                val release = UpdateRepository(client).latestAsync()
+                val release = withUpdateNetwork(false) { client -> UpdateRepository(client).latestAsync() }
                 _update.value = UpdateState(checked = true, release = release)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
@@ -100,15 +100,30 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: Exception) { _message.value = "没有可用的浏览器，请复制仓库链接到其他设备打开" }
     }
-    private suspend fun updateClient(download: Boolean): okhttp3.OkHttpClient = withContext(Dispatchers.IO) {
-        val target = settings.updateRoute.first()
-        val profiles = library.value.profiles
-        core.update(profiles); pool.update(profiles)
-        debugLog.event("INFO", "UPDATE_ROUTE", "route=${target.type} proxy=${pool.label(target)} download=$download")
-        pool.client(target).newBuilder().followRedirects(true).followSslRedirects(false)
-            .connectTimeout(if (download) 10 else 5, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(if (download) 30 else 8, java.util.concurrent.TimeUnit.SECONDS)
-            .callTimeout(if (download) 300 else 8, java.util.concurrent.TimeUnit.SECONDS).build()
+    fun cancelUpdate() {
+        updateJob?.cancel(); downloadJob?.cancel()
+        _update.update { it.copy(checking = false, downloading = false, error = "操作已取消") }
+    }
+    private suspend fun <T> withUpdateNetwork(download: Boolean, work: suspend (okhttp3.OkHttpClient) -> T): T {
+        val selected = settings.updateRoute.first()
+        val profiles = repository.library.first().profiles
+        withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
+        var last: Exception? = null
+        for ((index, target) in subscriptionTargets(selected, profiles).withIndex()) {
+            currentCoroutineContext().ensureActive()
+            try {
+                debugLog.event("INFO", "UPDATE_ROUTE", "attempt=${index + 1} route=${target.type} proxy=${pool.label(target)} download=$download")
+                val client = withContext(Dispatchers.IO) {
+                    pool.client(target).newBuilder().followRedirects(true).followSslRedirects(false)
+                        .connectTimeout(if (download) 10 else 5, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(if (download) 30 else 8, java.util.concurrent.TimeUnit.SECONDS)
+                        .callTimeout(if (download) 300 else 8, java.util.concurrent.TimeUnit.SECONDS).build()
+                }
+                return work(client)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { debugLog.error("UPDATE_ROUTE", error); last = error }
+        }
+        throw last ?: UpdateException("没有可用的更新网络")
     }
     fun openUpdateDownload() {
         val release = _update.value.release ?: return
@@ -118,8 +133,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         downloadJob = viewModelScope.launch {
             val file = java.io.File(getApplication<Application>().cacheDir, "updates/TVAtlas-Player-v${release.versionName}-release.apk")
             try {
-                ApkDownloader(updateClient(true)).download(release, file) { progress ->
-                    _update.update { it.copy(downloadProgress = progress) }
+                withUpdateNetwork(true) { client ->
+                    _update.update { it.copy(downloadProgress = 0) }
+                    ApkDownloader(client).download(release, file) { progress ->
+                        _update.update { it.copy(downloadProgress = progress) }
+                    }
                 }
                 withContext(Dispatchers.IO) { verifyDownloadedApk(getApplication<Application>(), file, release) }
                 downloadedApk = file
@@ -196,18 +214,24 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         debugLog.event("INFO", "PROXY", "available=" + routes.joinToString { "${it.id}:${it.name}:${it.type}" })
         playJob?.cancel(); playback.stop(false)
         playJob = viewModelScope.launch {
-            val current = library.value
-            withContext(Dispatchers.IO) { core.update(current.profiles); pool.update(current.profiles) }
-            val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(channel, null, streamId)
-            val ids = initial.attempts.mapNotNull { it.target.profile }.toSet()
-            if (ids.isNotEmpty()) {
-                playback.preparing(channel)
-                debugLog.event("INFO", "NODE_TEST", "automatic region=${channel.playbackRegion()?.label} candidates=${ids.size}")
-                latency.measure(current.profiles.filter { it.id in ids }, staleOnly = true)
-            }
-            playback.play(channel, DefaultRouteResolver(current.rules, current.profiles, latency.health.value), streamId)
+            try {
+                // Wait for queued route edits and read a fresh database snapshot before resolving.
+                val current = operations.withLock { repository.library.first() }
+                val fresh = current.channels.firstOrNull { it.id == channel.id } ?: channel
+                withContext(Dispatchers.IO) { core.update(current.profiles); pool.update(current.profiles) }
+                val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(fresh, null, streamId)
+                val ids = initial.attempts.mapNotNull { it.target.profile }.toSet()
+                if (ids.isNotEmpty()) {
+                    playback.preparing(fresh)
+                    debugLog.event("INFO", "NODE_TEST", "automatic region=${fresh.playbackRegion()?.label} candidates=${ids.size}")
+                    latency.measure(current.profiles.filter { it.id in ids }, staleOnly = true)
+                }
+                playback.play(fresh, DefaultRouteResolver(current.rules, current.profiles, latency.health.value), streamId)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { debugLog.error("PLAY_PREPARATION", error); playback.preparationFailed(channel) }
         }
     }
+
     fun stopPlayback(showMessage: Boolean = true) { playJob?.cancel(); playback.stop(showMessage) }
     private suspend fun synchronizeSubscriptionClients() = withContext(Dispatchers.IO) {
         // Read the committed database snapshot rather than a possibly stale StateFlow value.
@@ -252,6 +276,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         require(profile.type == ProxyType.MIHOMO)
         repository.saveProxy(profile.copy(enabled = !profile.enabled, subscriptionId = profile.subscriptionId))
     }
+    fun resetChannelRoutes(channelId: String) = action("已恢复自动路由，重新播放后生效") { repository.resetChannelRoutes(channelId) }
     fun setRoute(channelId: String, streamId: String?, target: RouteTarget?) = action("路由已保存，重新播放后生效") {
         if (streamId == null) repository.setChannelRoute(channelId, target) else repository.setStreamRoute(streamId, target)
     }

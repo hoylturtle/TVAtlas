@@ -16,6 +16,20 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
             .mapNotNull { id -> if (id == "DIRECT") RouteTarget.DIRECT
                 else profiles.firstOrNull { it.id == id && it.enabled }?.let { RouteTarget.proxy(id) } }.distinct()
     }
+    private fun preferredProxy(route: RouteTarget, channel: Channel): List<RouteTarget> {
+        val primary = profiles.firstOrNull { it.id == route.profile }
+        val region = primary?.let { playbackRegion(it.name) } ?: channel.playbackRegion()?.takeUnless { it == PlaybackRegion.MAINLAND }
+        val backups = region?.let { orderedRegionNodes(profiles, it, health, now).map { p -> RouteTarget.proxy(p.id) } }.orEmpty()
+        return (expand(route) + backups).distinct()
+    }
+    /** Google device provisioning has no channel region entitlement or user license headers. */
+    fun provisioningTargets(context: StreamContext, primary: RouteTarget): List<RouteTarget> {
+        val region = primary.profile?.let { id -> profiles.firstOrNull { it.id == id }?.let { playbackRegion(it.name) } }
+            ?: context.channel.playbackRegion()?.takeUnless { it == PlaybackRegion.MAINLAND }
+        val backup = region?.let { orderedRegionNodes(profiles, it, health, now) }.orEmpty()
+            .map { RouteTarget.proxy(it.id) }.firstOrNull { it != primary }
+        return listOfNotNull(primary, RouteTarget.DIRECT, backup).distinct()
+    }
     override fun resolve(context: StreamContext): RoutePlan {
         val rule = rules.firstOrNull { it.match.matches(context) }
         val manual = context.stream.manualRoute ?: context.channel.manualRoute
@@ -38,13 +52,15 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
             manual?.type == RouteType.AUTO -> "手动 AUTO"
             else -> "defaultRoute"
         }
-        return RoutePlan(expand(selected).map { RouteAttempt(context.stream.id, context.stream.url, it, reason) })
+        val targets = if (manual?.type == RouteType.PROXY) preferredProxy(selected, context.channel) else expand(selected)
+        return RoutePlan(targets.map { target -> RouteAttempt(context.stream.id, context.stream.url, target,
+            if (manual?.type == RouteType.PROXY && target.profile != manual.profile) "$reason · 同地区保底" else reason) })
     }
     fun channelPlan(channel: Channel, history: SuccessfulRoute?, onlyStreamId: String? = null): RoutePlan {
         val attempts = channel.streams.filter { onlyStreamId == null || it.id == onlyStreamId }
             .flatMap { resolve(StreamContext(channel, it)).attempts }.distinctBy { it.streamId to it.target }
         val preferred = history?.let { h -> attempts.firstOrNull { it.streamId == h.streamId && it.target == h.target } }
-        if (attempts.any { it.matchedRule.startsWith("地区自动路由：") }) {
+        if (attempts.any { it.matchedRule.startsWith("地区自动路由：") || it.matchedRule.contains("手动设置") }) {
             // Retain preferred source without letting old successful nodes outrank current latency results.
             val streamId = preferred?.streamId
             return RoutePlan(if (streamId != null) attempts.filter { it.streamId == streamId } + attempts.filter { it.streamId != streamId } else attempts)
@@ -54,7 +70,7 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
     fun requestTarget(context: StreamContext, requestUrl: String, sessionTarget: RouteTarget): RouteTarget {
         // Forced manual routes also cover HLS children and redirects.
         val manual = context.stream.manualRoute ?: context.channel.manualRoute
-        if (manual != null && manual.type != RouteType.AUTO) return manual
+        if (manual != null && manual.type != RouteType.AUTO) return sessionTarget
         val request = context.copy(stream = context.stream.copy(url = requestUrl))
         val rule = rules.firstOrNull { it.match.isRequestRule() && it.match.matches(request) } ?: return sessionTarget
         // AUTO at a child URL must not restart the parent's failover cycle.

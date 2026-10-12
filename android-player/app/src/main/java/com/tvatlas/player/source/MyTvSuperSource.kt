@@ -1,5 +1,7 @@
 package com.tvatlas.player.source
 
+import com.tvatlas.core.player.*
+
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.*
 import okhttp3.*
@@ -90,7 +92,7 @@ object MyTvSuperSource {
     fun parseSession(text: String): String {
         val root = Json.parseToJsonElement(text).jsonObject
         if (root["supported_country"]?.jsonPrimitive?.booleanOrNull != true)
-            throw IOException("官方服务未接受当前地区，请检查所选节点")
+            throw SourceResolutionException("官方服务未接受当前地区，请检查所选节点", PlaybackFailure(FailureKind.HTTP, 403))
         val token = root["token"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: (root["user"] as? JsonObject)?.get("token")?.jsonPrimitive?.contentOrNull
         if (token.isNullOrBlank() || token.length > 16384 || token.any { it == '\r' || it == '\n' })
@@ -103,13 +105,13 @@ object MyTvSuperSource {
             root["protocol"]?.jsonPrimitive?.contentOrNull != "dash" ||
             root["drm"]?.jsonPrimitive?.contentOrNull != "cenc_m" ||
             root["video_stage"]?.jsonPrimitive?.contentOrNull != "free")
-            throw IOException("官方播放配置不受支持（仅接入免费 TVB DASH）")
+            throw SourceResolutionException("官方播放配置不受支持（仅接入免费 TVB DASH）", PlaybackFailure(FailureKind.MANIFEST))
         val profiles = root["profiles"]?.jsonArray?.map { it.jsonObject }.orEmpty()
         val profile = profiles.firstOrNull { it["quality"]?.jsonPrimitive?.contentOrNull == "auto" }
             ?: profiles.firstOrNull { it["quality"]?.jsonPrimitive?.contentOrNull == "high" }
-            ?: throw IOException("官方未返回播放配置")
+            ?: throw SourceResolutionException("官方未返回播放配置", PlaybackFailure(FailureKind.MANIFEST))
         val url = profile["streaming_path"]?.jsonPrimitive?.contentOrNull?.toHttpUrlOrNull()
-            ?: throw IOException("官方未返回播放地址")
+            ?: throw SourceResolutionException("官方未返回播放地址", PlaybackFailure(FailureKind.MANIFEST))
         // Checkout can return the entry host or a direct session host on the same official CDN.
         val trustedHost = url.host == "edgeware.tvb.com" || url.host.endsWith(".edgeware.tvb.com")
         val reason = when {
@@ -123,7 +125,7 @@ object MyTvSuperSource {
         }
         log?.event(if (reason == null) "INFO" else "WARN", "CHECKOUT_URL",
             "host=${url.host} accepted=${reason == null} reason=${reason ?: "none"}")
-        if (reason != null) throw IOException("官方播放地址校验失败（$reason），请导出日志")
+        if (reason != null) throw SourceResolutionException("官方播放地址校验失败（$reason），请导出日志", PlaybackFailure(FailureKind.MANIFEST))
         return url.toString()
     }
     fun licenseClient(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): OkHttpClient = base.newBuilder()
@@ -209,13 +211,13 @@ object MyTvSuperSource {
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 log?.event(if (call.isCanceled()) "INFO" else "ERROR", "HTTP", "$stage cancelled=${call.isCanceled()} exception=${e.javaClass.simpleName} elapsedMs=${(System.nanoTime() - started) / 1000000}")
-                if (continuation.isActive) continuation.resumeWithException(IOException("$stage 连接失败，请检查网络和节点"))
+                if (continuation.isActive) continuation.resumeWithException(SourceResolutionException("$stage 连接失败，请检查网络和节点", PlaybackFailure(FailureKind.NETWORK), e))
             }
             override fun onResponse(call: Call, response: Response) {
                 log?.event("INFO", "HTTP", "$stage status=${response.code} elapsedMs=${(System.nanoTime() - started) / 1000000}")
                 val result = runCatching {
                     response.use {
-                        if (!it.isSuccessful) throw IOException("$stage 请求失败（HTTP ${it.code}）")
+                        if (!it.isSuccessful) throw SourceResolutionException("$stage 请求失败（HTTP ${it.code}）", PlaybackFailure(FailureKind.HTTP, it.code))
                         val body = it.body ?: throw IOException("官方返回空响应")
                         val bytes = body.byteStream().use { stream ->
                             val out = java.io.ByteArrayOutputStream()

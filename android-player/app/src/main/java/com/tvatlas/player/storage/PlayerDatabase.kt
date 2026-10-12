@@ -69,6 +69,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     @Query("DELETE FROM streams WHERE id IN (:ids)") suspend fun deleteStreams(ids: List<String>)
     @Query("DELETE FROM history WHERE streamId NOT IN (SELECT id FROM streams)") suspend fun pruneHistory()
     @Query("DELETE FROM failures WHERE streamId NOT IN (SELECT id FROM streams)") suspend fun pruneFailures()
+    @Query("UPDATE streams SET manualRoute = NULL WHERE channelId = :id") suspend fun resetStreamRoutes(id: String)
     @Query("UPDATE channels SET manualRoute = :route WHERE id = :id") suspend fun channelRoute(id: String, route: String?)
     @Query("UPDATE streams SET manualRoute = :route WHERE id = :id") suspend fun streamRoute(id: String, route: String?)
     @Query("UPDATE streams SET lastSuccessAt = :at WHERE id = :id") suspend fun success(id: String, at: Long)

@@ -24,7 +24,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.DIRECT, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -49,6 +49,7 @@ import com.tvatlas.player.update.*
                     update.apkReady -> "安装包已校验，可以安装"
                     update.error != null -> update.error
                     release != null && release.versionCode > BuildConfig.VERSION_CODE -> "发现新版本：${release.versionName}"
+                    update.checked && release != null && !release.checkComplete -> "部分更新信息未完成，请重试检查"
                     update.checked && release != null -> "已是最新版本"
                     else -> "尚未检查更新"
                 }
@@ -57,9 +58,10 @@ import com.tvatlas.player.update.*
                 HorizontalDivider()
                 Text("更新网络", style = MaterialTheme.typography.labelLarge)
                 UpdateNetworkPicker(profiles, updateRoute, !networkBusy, onUpdateRoute)
-                Text("检查和下载使用此网络。直连失败时，可选已导入的香港节点。",
+                Text("自动模式先直连，失败后尝试已有节点。手动选择时仅使用所选网络。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (release != null && release.versionCode > BuildConfig.VERSION_CODE) {
+                    if (!release.checkComplete) Text("此安装包已校验发布信息；部分其他版本暂不可达。", style = MaterialTheme.typography.bodySmall)
                     if (release.notes.isNotBlank()) Text(release.notes, style = MaterialTheme.typography.bodySmall)
                     if (release.minSdk > Build.VERSION.SDK_INT) {
                         Text("新版要求 Android API ${release.minSdk} 或以上，当前设备暂不能升级", color = MaterialTheme.colorScheme.error)
@@ -77,9 +79,12 @@ import com.tvatlas.player.update.*
                         Text(if (linkCopied) "下载链接已复制" else "复制下载链接")
                     }
                 }
-                TvOutlinedButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (update.checking) "检查中…" else "检查更新")
-                }
+                if (release == null || release.versionCode <= BuildConfig.VERSION_CODE) {
+                    TvButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (update.checking) "检查中…" else "检查更新")
+                    }
+                } else TvOutlinedButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) { Text("检查更新") }
+                if (networkBusy) TvTextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text(if (update.downloading) "取消下载" else "取消检查") }
             }
             SettingsCard {
                 Text("诊断与日志", style = MaterialTheme.typography.titleMedium)
@@ -136,9 +141,10 @@ import com.tvatlas.player.update.*
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
         TvOutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Text(routeLabel(selected, profiles), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(if (selected.type == RouteType.AUTO) "自动（失败后回退）" else routeLabel(selected, profiles), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded, { expanded = false }) {
+            DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("自动（失败后回退）") }, onClick = { expanded = false; onSelect(RouteTarget.AUTO) })
             DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
             profiles.filter { it.enabled }.forEach { profile ->
                 DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })

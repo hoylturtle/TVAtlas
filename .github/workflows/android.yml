@@ -108,7 +108,11 @@ jobs:
             adb pull /sdcard/Pictures/TVAtlas/tv-layout.png app/build/reports/androidTests/tv-layout.png
             adb pull /sdcard/Pictures/TVAtlas/phone-proxy-layout.png app/build/reports/androidTests/phone-proxy-layout.png
             adb pull /sdcard/Pictures/TVAtlas/phone-settings-layout.png app/build/reports/androidTests/phone-settings-layout.png
+            adb pull /sdcard/Pictures/TVAtlas/phone-recovery-layout.png app/build/reports/androidTests/phone-recovery-layout.png
             python3 scripts/verify_upgrade_install.py
+      - name: Export synthetic UI fixtures for audit
+        if: startsWith(github.ref, 'refs/heads/codex/tvatlas-player-fallback-audit')
+        run: python3 scripts/audit_screenshots.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

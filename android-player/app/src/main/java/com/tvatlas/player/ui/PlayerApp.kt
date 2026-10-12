@@ -33,6 +33,8 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -161,7 +163,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
                         subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() }, nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
-                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate)
+                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate)
                 }
                 }
             }
@@ -181,7 +183,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         }
         if (detail != null) ChannelDialog(detail, library.profiles, library.playlists, status, { detailId = null },
             { streamId, target -> model.setRoute(detail.id, streamId, target) },
-            { streamId -> model.play(detail, streamId); detailId = null })
+            { streamId -> model.play(detail, streamId); detailId = null }, { model.resetChannelRoutes(detail.id) }, busy)
     }
 }
 
@@ -207,7 +209,8 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
                     item(key = "group:$group") {
                         TvTextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
-                            modifier = Modifier.fillMaxWidth().then(if (tv) Modifier.tvFocusOutline() else Modifier)
+                            modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (group in expanded || query.isNotBlank()) "已展开" else "已收起" }
+                                .then(if (tv) Modifier.tvFocusOutline() else Modifier)
                                 .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
                                 .then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
                             Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
@@ -257,14 +260,14 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 })
         }, controls = {
         if (tv && pictureFocused) Text("↑↓ 换台   确认 / ← 频道菜单   长按确认 线路设置", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
-        VideoControls(status.message, status.attempt?.let { attempt ->
+        val displayedAttempt = status.attempt ?: status.lastAttempt
+        VideoControls(status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
-        } ?: "线路", status.attempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
+        } ?: "线路", displayedAttempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
             status.channelId != null, player != null, onDetails, onFullscreen, model::stopPlayback)
 
-        if (player == null && status.error != null) Text("失败详情：${status.error}",
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp),
-            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        if (player == null && status.error != null) PlaybackRecoveryCard(status.error,
+            onRetry = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it) } }, onChooseRoute = onDetails)
         val diagnosticAttempt = status.attempt ?: status.lastAttempt
         if (diagnostics && diagnosticAttempt != null) Text("${redactedUrl(diagnosticAttempt.streamUrl)}\n${routeLabel(diagnosticAttempt.target, library.profiles)} · ${diagnosticAttempt.matchedRule}" +
             (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
@@ -357,14 +360,15 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
 }
 
 @Composable internal fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, playlists: List<Playlist>, status: PlaybackStatus, onDismiss: () -> Unit,
-    onRoute: (String?, RouteTarget?) -> Unit, onPlay: (String?) -> Unit) {
+    onRoute: (String?, RouteTarget?) -> Unit, onPlay: (String?) -> Unit,
+    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false) {
     var selectedStreamId by remember(channel.id) {
-        mutableStateOf(status.attempt?.takeIf { status.channelId == channel.id }?.streamId)
+        mutableStateOf((status.attempt ?: status.lastAttempt)?.takeIf { status.channelId == channel.id }?.streamId)
     }
     val selectedStream = channel.streams.firstOrNull { it.id == selectedStreamId }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(channel.name) }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("线路", style = MaterialTheme.typography.labelLarge)
+            Text("播放源", style = MaterialTheme.typography.labelLarge)
             var lineMenu by remember { mutableStateOf(false) }
             Box {
                 TvOutlinedButton(onClick = { lineMenu = true }, enabled = channel.streams.isNotEmpty()) {
@@ -378,20 +382,27 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 }
             }
             Text("频道代理", style = MaterialTheme.typography.labelLarge)
-            RoutePicker(profiles, channel.manualRoute) { onRoute(null, it) }
+            RoutePicker(profiles, channel.manualRoute, enabled = !busy) { onRoute(null, it) }
             selectedStream?.let { stream ->
-                Text("当前线路代理", style = MaterialTheme.typography.labelLarge)
-                RoutePicker(profiles, stream.manualRoute) { onRoute(stream.id, it) }
+                Text("当前播放源代理", style = MaterialTheme.typography.labelLarge)
+                RoutePicker(profiles, stream.manualRoute, enabled = !busy) { onRoute(stream.id, it) }
             }
+            val effective = selectedStream?.manualRoute ?: channel.manualRoute
+            Text(if (effective?.type == RouteType.PROXY) "首选节点：${routeLabel(effective, profiles)}"
+                else if (effective?.type == RouteType.DIRECT) "当前使用直连"
+                else "按当前规则与频道地区自动选择节点", style = MaterialTheme.typography.bodySmall)
+            Text("播放源代理优先于频道代理。手动节点为首选，失败后尝试同地区备用节点。", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TvOutlinedButton(onClick = { onResetRoutes(); selectedStreamId = null }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("恢复自动路由") }
         }
-    }, confirmButton = { TvTextButton(onClick = { onPlay(selectedStream?.id) }, enabled = channel.streams.isNotEmpty()) { Text("播放") } },
+    }, confirmButton = { TvTextButton(onClick = { onPlay(selectedStream?.id) }, enabled = !busy && channel.streams.isNotEmpty()) { Text("播放") } },
         dismissButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
 }
 
-@Composable internal fun RoutePicker(profiles: List<ProxyProfile>, selected: RouteTarget?, onRoute: (RouteTarget?) -> Unit) {
+@Composable internal fun RoutePicker(profiles: List<ProxyProfile>, selected: RouteTarget?, enabled: Boolean = true, onRoute: (RouteTarget?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        TvOutlinedButton(onClick = { open = true }) { Text(selected?.let { routeLabel(it, profiles) } ?: "跟随规则") }
+        TvOutlinedButton(onClick = { open = true }, enabled = enabled) { Text(selected?.let { routeLabel(it, profiles) } ?: "跟随规则") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             val targets: List<Pair<String, RouteTarget?>> = listOf("跟随规则" to null, "自动" to RouteTarget.AUTO, "直连" to RouteTarget.DIRECT) +
                 profiles.filter { it.enabled }.map { it.name to RouteTarget.proxy(it.id) }
@@ -411,7 +422,7 @@ internal fun streamName(channel: Channel, id: String, playlists: List<Playlist>)
     val siblings = channel.streams.filter { it.sourcePlaylistId == stream.sourcePlaylistId }
     return if (siblings.size > 1) "$name ${siblings.indexOf(stream) + 1}" else name
 }
-internal fun date(timestamp: Long?): String = timestamp?.let { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it)) } ?: "暂无"
+internal fun date(timestamp: Long?): String = timestamp?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(Date(it)) } ?: "暂无"
 private fun redactedUrl(url: String): String = runCatching {
     val uri = java.net.URI(url)
     "${uri.scheme}://${uri.host}${if (uri.port > 0) ":${uri.port}" else ""}/…"

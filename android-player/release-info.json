@@ -1,9 +1,9 @@
 {
-  "versionCode": 25,
-  "versionName": "0.1.24",
+  "versionCode": 26,
+  "versionName": "0.1.25",
   "minSdk": 23,
-  "notes": "兼容 TVB 官方 Edgeware 会话 CDN 播放地址；自动播放优先官方线路，保留手动线路选择；播放地址校验记录脱敏原因，媒体连接错误记录底层异常以定位 CDN 超时或 TLS 故障。",
+  "notes": "修复手动节点同地区回退与 DRM 初始化网络保底；更新支持自动网络回退和取消；修复阻塞连接取消与路由保存竞态；清理无效频道备用地址并提供香港多线路；优化失败重试、自动路由恢复和手机/电视操作提示。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.24-beta.1",
+  "releaseTag": "v0.1.25-beta.1",
   "coreVersion": "v1.19.32"
 }

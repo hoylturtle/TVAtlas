@@ -37,6 +37,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Test playlist health and fallback selection
+        run: python scripts/test_build.py
+
       - name: Build playlist
         run: python scripts/build.py
 
@@ -63,3 +66,4 @@ jobs:
             git commit -m "Update TVAtlas playlist"
             git push
           fi
+

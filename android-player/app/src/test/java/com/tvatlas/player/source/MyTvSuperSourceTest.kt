@@ -73,6 +73,12 @@ class MyTvSuperSourceTest {
         assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout().replace("https://", "http://")) }
         assertThrows(IOException::class.java) { MyTvSuperSource.parseCheckout(checkout("edgeware-live.edgeware.tvb.com:8443")) }
     }
+    @Test fun rejectedConfigurationIsNotClassifiedAsAnUnreachableNode() {
+        val error = assertThrows(SourceResolutionException::class.java) { MyTvSuperSource.parseCheckout(checkout(stage = "paid")) }
+        assertEquals(com.tvatlas.core.player.FailureKind.MANIFEST, error.failure.kind)
+        val geo = assertThrows(SourceResolutionException::class.java) { MyTvSuperSource.parseSession(session.replace("true", "false")) }
+        assertEquals(403, geo.failure.httpStatus)
+    }
     @Test fun resolvesFreshGuestAndAuthenticatesOnlyCheckout() = runBlocking {
         val requests = mutableListOf<Request>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->

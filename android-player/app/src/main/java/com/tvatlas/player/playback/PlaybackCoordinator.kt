@@ -15,6 +15,7 @@ import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
 import androidx.media3.exoplayer.drm.FrameworkMediaDrm
 import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
 import com.tvatlas.player.source.ViuTvSource
+import com.tvatlas.player.source.SourceResolutionException
 import com.tvatlas.player.source.MyTvSuperSource
 import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.ExoPlayer
@@ -22,6 +23,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import com.tvatlas.core.model.*
 import com.tvatlas.core.player.*
 import com.tvatlas.core.routing.DefaultRouteResolver
@@ -56,10 +58,14 @@ class PlaybackCoordinator(
     private var watcher: Job? = null
     private var preparation: Job? = null
     private var generation = 0L
+    private var drmActive: java.util.concurrent.atomic.AtomicBoolean? = null
     private val renewed = mutableSetOf<RouteAttempt>()
 
     fun preparing(channel: Channel) { _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…") }
 
+    fun preparationFailed(channel: Channel) {
+        _status.value = PlaybackStatus(channel.id, "无法准备播放", error = "节点准备失败，请检查代理配置后重试")
+    }
     fun play(channel: Channel, resolver: DefaultRouteResolver, streamId: String? = null) {
         stop(false)
         renewed.clear()
@@ -84,6 +90,7 @@ class PlaybackCoordinator(
     private suspend fun attempt(channel: Channel, resolver: DefaultRouteResolver, route: RouteAttempt?, token: Long) {
         if (token != generation) return
         watcher?.cancel()
+        drmActive?.set(false); drmActive = null
         _player.value?.release(); _player.value = null
         if (route == null) {
             log?.event("ERROR", "PLAY", "all routes exhausted channel=${channel.name} detail=${_status.value.error}")
@@ -106,9 +113,11 @@ class PlaybackCoordinator(
             val reason = if (e is IOException) e.message ?: "官方源连接失败" else "官方响应格式不兼容"
             log?.event("ERROR", "SOURCE", reason)
             _status.value = _status.value.copy(error = reason)
-            onNodeFailure(route.target)
+            val failure = (e as? SourceResolutionException)?.failure ?: PlaybackFailure(
+                if (e is IOException) FailureKind.NETWORK else FailureKind.MANIFEST)
+            if (failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
             repository.recordFailure(channel.id, route, reason)
-            if (token == generation) attempt(channel, resolver, session?.fail(PlaybackFailure(FailureKind.NETWORK)), token)
+            if (token == generation) attempt(channel, resolver, session?.fail(failure), token)
             return
         } else null
         if (token != generation) return
@@ -132,13 +141,27 @@ class PlaybackCoordinator(
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
         if (source != null && source.drmRequired) {
             // Media3 can retry redirected license POSTs itself; constrain all token-bearing requests.
+            val licenseNetwork = requireNotNull(selectedClient).newBuilder()
+                .connectTimeout(4, java.util.concurrent.TimeUnit.SECONDS).readTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+                .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS).retryOnConnectionFailure(false).build()
             val callback = HttpMediaDrmCallback(source.licenseUrl, true,
-                OkHttpDataSource.Factory(if (viu) com.tvatlas.player.source.ViuTvSource.licenseClient(requireNotNull(selectedClient), source.userToken, log)
-                    else MyTvSuperSource.licenseClient(requireNotNull(selectedClient), log)))
+                OkHttpDataSource.Factory(if (viu) ViuTvSource.licenseClient(licenseNetwork, source.userToken, log)
+                    else MyTvSuperSource.licenseClient(licenseNetwork, log)))
             if (!viu) MyTvSuperSource.licenseHeaders(source.userToken).forEach { (key, value) -> callback.setKeyRequestProperty(key, value) }
             // This source uses a web guest entitlement. The official web player requests
             // SW_SECURE_CRYPTO; select the corresponding Widevine software implementation.
+            val provisioningTargets = resolver.provisioningTargets(StreamContext(channel, stream), route.target)
+            val active = java.util.concurrent.atomic.AtomicBoolean(true).also { drmActive = it }
+            val fallbackCallback = FallbackDrmCallback(callback, provisioningTargets, { target ->
+                val client = pool.client(target).newBuilder()
+                    .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+                    .callTimeout(4, java.util.concurrent.TimeUnit.SECONDS).retryOnConnectionFailure(false).build()
+                // No TVB/ViuTV key-request headers are attached to Google device provisioning.
+                HttpMediaDrmCallback("", false, OkHttpDataSource.Factory(MyTvSuperSource.licenseClient(client, log)))
+            }, log, active::get)
             val manager = DefaultDrmSessionManager.Builder()
+                .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(0))
                 .setUuidAndExoMediaDrmProvider(C.WIDEVINE_UUID) { uuid ->
                     val drm = FrameworkMediaDrm.DEFAULT_PROVIDER.acquireExoMediaDrm(uuid)
                     if (drm is FrameworkMediaDrm) {
@@ -148,7 +171,7 @@ class PlaybackCoordinator(
                         log?.event("INFO", "DRM_CONFIG", "platform=web_android securityLevel=${level.takeIf { it in listOf("L1", "L2", "L3") } ?: "unknown"}")
                     } else log?.event("ERROR", "DRM_CONFIG", "Widevine unavailable")
                     drm
-                }.build(callback)
+                }.build(fallbackCallback)
             mediaSourceFactory.setDrmSessionManagerProvider { manager }
         }
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
@@ -161,15 +184,24 @@ class PlaybackCoordinator(
         fun fail(failure: PlaybackFailure, drmCode: Int? = null) {
             if (token != generation || instance !== _player.value || failing) return
             failing = true
-            if (drmCode == null && failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
+            if (failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
             val reason = drmCode?.let {
                 when {
+                    failure.kind == FailureKind.NETWORK && it == PlaybackException.ERROR_CODE_DRM_PROVISIONING_FAILED -> "设备初始化网络连接失败（$it）"
+                    failure.kind == FailureKind.NETWORK -> "DRM 授权网络连接失败（$it）"
                     failure.httpStatus != null -> "官方 DRM 授权请求失败（HTTP ${failure.httpStatus}，播放器代码 $it）"
                     it == PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED -> "设备不支持所需的 Widevine DRM（$it）"
                     else -> "DRM 会话失败（$it），请查看调试日志"
                 }
             }
-                ?: (failure.kind.name + (failure.httpStatus?.let { " HTTP $it" } ?: ""))
+                ?: when (failure.kind) {
+                    FailureKind.NETWORK -> "播放源网络连接失败"
+                    FailureKind.HTTP -> "播放源请求失败（HTTP ${failure.httpStatus}）"
+                    FailureKind.SEGMENT -> "视频分片下载失败"
+                    FailureKind.MANIFEST -> "播放源格式无效或不受支持"
+                    FailureKind.DECODER -> "设备无法解码当前播放源"
+                    FailureKind.DRM -> "DRM 授权或设备初始化失败"
+                }
             log?.event("ERROR", "FAILOVER", reason)
             _status.value = _status.value.copy(message = "连接暂不可用，正在尝试其他线路", error = reason)
             preparation = scope.launch {
@@ -177,7 +209,7 @@ class PlaybackCoordinator(
                 repository.recordFailure(channel.id, route, reason)
                 if (token == generation) {
                     val refresh = official && failure.httpStatus in listOf(401, 403) && renewed.add(route)
-                    log?.event("INFO", "FAILOVER", "refreshSession=$refresh")
+                    log?.event("INFO", "FAILOVER", "refreshSession=$refresh kind=${failure.kind} drmCode=$drmCode")
                     attempt(channel, resolver, if (refresh) route else session?.fail(failure), token)
                 }
             }
@@ -205,18 +237,9 @@ class PlaybackCoordinator(
             override fun onPlayerError(error: PlaybackException) {
                 log?.event("ERROR", "PLAYER", "code=${error.errorCode} name=${error.errorCodeName}")
                 log?.error("PLAYER", error)
-                val http = generateSequence<Throwable>(error) { it.cause }.filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
-                val kind = when {
-                    error.errorCode in 4000..4999 -> FailureKind.DECODER
-                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> FailureKind.MANIFEST
-                    http != null -> FailureKind.HTTP
-                    lastLoadType == C.DATA_TYPE_MEDIA && SystemClock.elapsedRealtime() - loadErrorAt < 30000 -> FailureKind.SEGMENT
-                    else -> FailureKind.NETWORK
-                }
-                fail(PlaybackFailure(kind, http), error.errorCode.takeIf { it in 6000..6999 })
+                val failure = PlaybackErrorClassifier.classify(error,
+                    lastLoadType == C.DATA_TYPE_MEDIA && SystemClock.elapsedRealtime() - loadErrorAt < 30000)
+                fail(failure, error.errorCode.takeIf { it in 6000..6999 })
             }
         })
         val item = if (source == null) MediaItem.fromUri(route.streamUrl) else MediaItem.Builder()
@@ -255,6 +278,7 @@ class PlaybackCoordinator(
     fun stop(showMessage: Boolean = true) {
         log?.event("INFO", "PLAY", "stop showMessage=$showMessage")
         generation++
+        drmActive?.set(false); drmActive = null
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
         if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, lastAttempt = null, error = null)
