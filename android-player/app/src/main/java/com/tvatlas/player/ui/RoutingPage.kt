@@ -114,7 +114,7 @@ import com.tvatlas.player.storage.*
                     ListItem(headlineContent = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                         supportingContent = { Column { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${if (p.enabled) "已启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)
                             val sample = nodeHealth[p.id]
-                            Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "通用测速未通过"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
+                            Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期测速 / 连接失败"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
                         } },
                         trailingContent = {
                             if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)

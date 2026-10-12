@@ -58,4 +58,12 @@ class RegionalRoutingTest {
         assertEquals(listOf(RouteTarget.DIRECT), resolver.channelPlan(ch.copy(manualRoute = RouteTarget.DIRECT), null).attempts.map { it.target })
     }
 
+    @Test fun oneUnreachableCdnDoesNotDiscardOtherSourceOnSameNode() {
+        val other = stream.copy(id = "other", url = "https://other-cdn.test/live")
+        val ch = channel("香港").copy(streams = listOf(stream, other))
+        val failover = FailoverSession(DefaultRouteResolver(RuleConfig(), nodes).channelPlan(ch, null))
+        assertEquals("s", failover.start()!!.streamId)
+        assertEquals("other", failover.fail(PlaybackFailure(FailureKind.NETWORK))!!.streamId)
+    }
+
 }

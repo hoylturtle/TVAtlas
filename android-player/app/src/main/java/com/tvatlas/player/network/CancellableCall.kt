@@ -11,5 +11,9 @@ internal suspend fun <T> Call.readCancellable(read: suspend (Response) -> T): T 
         try { awaitCancellation() } finally { call.cancel() }
     }
     try { withContext(Dispatchers.IO) { call.execute().use { response -> read(response) } } }
+    catch (error: java.io.IOException) {
+        currentCoroutineContext().ensureActive()
+        throw error
+    }
     finally { cancellation.cancel() }
 }

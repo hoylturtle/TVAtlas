@@ -20,7 +20,8 @@ class FailoverSession(plan: RoutePlan) {
     fun fail(failure: PlaybackFailure): RouteAttempt? {
         if (stopped) return null
         if (failure.kind == FailureKind.NETWORK && current?.target?.type == RouteType.PROXY)
-            remaining.removeAll { it.target == current?.target }
+            // A single CDN can fail while the same node still reaches another source.
+            remaining.removeAll { it.target == current?.target && it.streamId == current?.streamId }
         if (failure.skipStream) remaining.removeAll { it.streamId == current?.streamId }
         return next()
     }
