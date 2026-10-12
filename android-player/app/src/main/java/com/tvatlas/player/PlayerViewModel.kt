@@ -41,6 +41,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val subscriptions = subscriptionRepository.subscriptions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val settings = SettingsStore(application)
     val library = repository.library.stateIn(viewModelScope, SharingStarted.Eagerly, Library(emptyList(), emptyList(), emptyList(), RuleConfig()))
+    val ruleFiles = repository.ruleFiles.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    fun selectRuleFile(id: String?) = action("规则已切换，重新播放后生效") { repository.selectRuleFile(id) }
     val diagnostics = settings.diagnostics.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val subscriptionRoute = settings.subscriptionRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.AUTO)
     private val _subscriptionFeedback = MutableStateFlow<SubscriptionFeedback?>(null)
@@ -278,7 +280,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 output.toString("UTF-8")
             }
         }
-        repository.importRules(text, library.value.profiles)
+        val name = withContext(Dispatchers.IO) {
+            runCatching { getApplication<Application>().contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            } }.getOrNull()
+        }
+        repository.importRules(text, library.value.profiles, name)
     }
     fun clearLogs() { debugLog.clear() }
     fun exportLogs(uri: Uri) = action("日志已导出") {

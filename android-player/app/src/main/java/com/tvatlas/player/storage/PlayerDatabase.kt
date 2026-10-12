@@ -32,6 +32,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Entity(tableName = "failures", primaryKeys = ["channelId", "streamId", "target"]) data class FailureRow(
     val channelId: String, val streamId: String, val target: String, val reason: String, val at: Long,
 )
+@Entity(tableName = "rule_files") data class RuleFileRow(
+    @PrimaryKey val id: String, val name: String, val json: String, val importedAt: Long, val active: Boolean,
+)
 @Entity(tableName = "rules") data class RulesRow(@PrimaryKey val id: Int = 1, val json: String)
 
 @Dao interface PlayerDao {
@@ -40,6 +43,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     @Query("SELECT * FROM channels ORDER BY channelGroup, name") fun channels(): Flow<List<ChannelRow>>
     @Query("SELECT * FROM streams ORDER BY sourcePlaylistId, id") fun streams(): Flow<List<StreamRow>>
     @Query("SELECT * FROM proxies ORDER BY id") fun proxies(): Flow<List<ProxyRow>>
+    @Query("SELECT * FROM rule_files ORDER BY importedAt DESC, id") fun ruleFiles(): Flow<List<RuleFileRow>>
+    @Query("SELECT * FROM rule_files WHERE id = :id") suspend fun ruleFile(id: String): RuleFileRow?
+    @Query("UPDATE rule_files SET active = 0") suspend fun deactivateRuleFiles()
+    @Upsert suspend fun saveRuleFile(row: RuleFileRow)
     @Query("SELECT * FROM rules WHERE id = 1") fun rules(): Flow<RulesRow?>
     @Query("SELECT * FROM subscriptions ORDER BY name") fun subscriptions(): Flow<List<SubscriptionRow>>
     @Query("SELECT * FROM proxies WHERE subscriptionId = :id") suspend fun subscriptionNodes(id: String): List<ProxyRow>
@@ -69,7 +76,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 }
 
 @Database(entities = [PlaylistRow::class, ChannelRow::class, StreamRow::class, ProxyRow::class,
-    HistoryRow::class, FailureRow::class, RulesRow::class, SubscriptionRow::class], version = 2, exportSchema = true)
+    HistoryRow::class, FailureRow::class, RulesRow::class, SubscriptionRow::class, RuleFileRow::class], version = 3, exportSchema = true)
 abstract class PlayerDatabase : RoomDatabase() {
     abstract fun dao(): PlayerDao
     companion object {
@@ -79,7 +86,13 @@ abstract class PlayerDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS subscriptions (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, lastUpdatedAt INTEGER NOT NULL, nodeCount INTEGER NOT NULL)")
             }
         }
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS rule_files (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, json TEXT NOT NULL, importedAt INTEGER NOT NULL, active INTEGER NOT NULL)")
+                db.execSQL("INSERT INTO rule_files (id,name,json,importedAt,active) SELECT 'legacy','原有自定义规则',json,0,1 FROM rules WHERE id=1")
+            }
+        }
         fun open(context: Context) = Room.databaseBuilder(context, PlayerDatabase::class.java, "tvatlas.db")
-            .addMigrations(MIGRATION_1_2).build()
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }
