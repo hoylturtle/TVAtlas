@@ -1,9 +1,9 @@
 {
-  "versionCode": 32,
-  "versionName": "0.1.31",
+  "versionCode": 33,
+  "versionName": "0.1.32",
   "minSdk": 23,
-  "notes": "新增直连/代理及各节点的本地流量统计、上传下载明细和重置；紫色选中与白色边框统一；减少日志与列表重复重绘，设置和路由编辑不再等待后台下载。",
+  "notes": "新增收藏和最近观看、XMLTV 及 TVB/ViuTV 官方节目表缓存、到期自动刷新、计费网络和流量提醒、密码加密配置备份恢复；全屏单行显示 HTTPS 延迟与即时下载速度，并提供当前源的画质、音轨和字幕选择。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.31-beta.1",
+  "releaseTag": "v0.1.32-beta.1",
   "coreVersion": "v1.19.32"
 }

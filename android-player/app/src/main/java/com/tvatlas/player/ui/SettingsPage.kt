@@ -24,7 +24,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -87,6 +87,7 @@ import com.tvatlas.player.update.*
                 if (networkBusy) TvTextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text(if (update.downloading) "取消下载" else "取消检查") }
             }
             trafficContent()
+            extrasContent()
             SettingsCard {
                 Text("诊断与日志", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
