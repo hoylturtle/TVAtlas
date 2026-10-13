@@ -1,9 +1,9 @@
 {
-  "versionCode": 29,
-  "versionName": "0.1.28",
+  "versionCode": 30,
+  "versionName": "0.1.29",
   "minSdk": 23,
-  "notes": "竖屏直播页面分为独立的播放区和频道区，播放失败与长诊断信息不会挤占频道列表；错误详情在独立弹窗滚动查看，保留重播、线路切换和横屏全屏。",
+  "notes": "更新记录列表、元数据和下载的 HTTP 阶段、域名与状态；HTTP/2 返回 400 时以 HTTP/1.1 重试，选定代理不可用时回退其他启用节点；Release 附件支持官方资产 API 备用访问，继续校验大小、SHA-256 和固定签名。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.28-beta.1",
+  "releaseTag": "v0.1.29-beta.1",
   "coreVersion": "v1.19.32"
 }

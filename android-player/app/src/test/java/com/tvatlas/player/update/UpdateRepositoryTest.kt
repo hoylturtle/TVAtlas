@@ -98,4 +98,33 @@ class UpdateRepositoryTest {
         }
     }
 
+    @Test fun browserMetadata400UsesPublicAssetApiAndRetainsAllValidation() {
+        MockWebServer().use { server ->
+            val entry = release(server).replace("\"name\":\"release-info.json\"", "\"id\":101,\"name\":\"release-info.json\"")
+                .replace("\"name\":\"TVAtlas-Player", "\"id\":202,\"name\":\"TVAtlas-Player")
+            server.enqueue(MockResponse().setBody("[$entry]"))
+            server.enqueue(MockResponse().setResponseCode(400))
+            server.enqueue(MockResponse().setBody(manifest()))
+            val verified = repository(server).latest()
+            assertEquals(14, verified.versionCode)
+            assertEquals(server.url("/api/releases/assets/202").toString(), verified.assetApiUrl)
+            server.takeRequest(); server.takeRequest()
+            val fallback = server.takeRequest()
+            assertEquals("/api/releases/assets/101", fallback.path)
+            assertEquals("application/octet-stream", fallback.getHeader("Accept"))
+            assertNull(fallback.getHeader("Authorization"))
+        }
+    }
+    @Test fun list400ReportsItsStageAndHost() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(400))
+            try { repository(server).latest(); fail("Expected rejection") }
+            catch (error: UpdateException) {
+                assertEquals(400, error.httpStatus)
+                assertTrue(error.message!!.contains("更新列表"))
+                assertTrue(error.message!!.contains("localhost"))
+            }
+        }
+    }
+
 }
