@@ -1,9 +1,9 @@
 {
-  "versionCode": 30,
-  "versionName": "0.1.29",
+  "versionCode": 31,
+  "versionName": "0.1.30",
   "minSdk": 23,
-  "notes": "更新记录列表、元数据和下载的 HTTP 阶段、域名与状态；HTTP/2 返回 400 时以 HTTP/1.1 重试，选定代理不可用时回退其他启用节点；Release 附件支持官方资产 API 备用访问，继续校验大小、SHA-256 和固定签名。",
+  "notes": "全屏操作栏改为底部单行、72% 透明黑色背景，仅显示线路和直连或地区代理；隐藏地址与多行诊断，保留线路切换、退出全屏和停止/重新播放。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.29-beta.1",
+  "releaseTag": "v0.1.30-beta.1",
   "coreVersion": "v1.19.32"
 }

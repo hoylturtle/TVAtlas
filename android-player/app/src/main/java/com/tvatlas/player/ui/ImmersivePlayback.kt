@@ -118,7 +118,7 @@ private fun Context.activity(): Activity? = when (this) {
                 }
             }.focusable().clickable { visible = !shown }, contentAlignment = Alignment.Center) { picture() }
         if (shown) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+            .background(Color.Black.copy(alpha = 0.28f))
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .onPreviewKeyEvent { event ->
                 if (tv && event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp && playing) {

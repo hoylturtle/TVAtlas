@@ -45,10 +45,13 @@ class ImmersivePlaybackTest {
         compose.setContent { MaterialTheme(colorScheme = colors) {
             ImmersivePlaybackLayout(true, false, Modifier.size(640.dp, 360.dp),
                 picture = { Box(Modifier.fillMaxSize().testTag("picture")) },
-                controls = { VideoControls("正在播放", "线路", "香港", true, true, {}, {}, {}, fullscreenLabel = "退出全屏") })
+                controls = { VideoControls("正在播放", "线路", "香港", true, true, {}, {}, {}, fullscreenLabel = "退出全屏", immersive = true, fullscreenRoute = "香港代理") })
         } }
         compose.onNodeWithTag("picture", useUnmergedTree = true).assertWidthIsEqualTo(640.dp).assertHeightIsEqualTo(360.dp)
         compose.onNodeWithText("退出全屏").assertIsDisplayed()
+        compose.onNodeWithText("线路 | 香港代理").assertIsDisplayed()
+        compose.onNodeWithTag("playback-controls").assertHeightIsEqualTo(48.dp)
+        compose.onNodeWithText("正在播放").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(5100)
         compose.onNodeWithTag("playback-controls").assertDoesNotExist()
         capture("fullscreen-layout.png")
@@ -68,7 +71,7 @@ class ImmersivePlaybackTest {
             ImmersivePlaybackLayout(playing, false, Modifier.size(640.dp, 360.dp),
                 picture = { Text(if (playing) "画面" else "已停止播放", color = Color.White) },
                 controls = { VideoControls(if (playing) "正在播放" else "已停止播放", "线路", "香港", true, playing,
-                    {}, {}, { playing = false }, canReplay = !playing, onReplay = { replays++; playing = true }, fullscreenLabel = "退出全屏") })
+                    {}, {}, { playing = false }, canReplay = !playing, onReplay = { replays++; playing = true }, fullscreenLabel = "退出全屏", immersive = true, fullscreenRoute = "香港代理") })
         } }
         compose.onNodeWithText("停止").performClick()
         compose.mainClock.advanceTimeBy(10000)
@@ -89,20 +92,20 @@ class ImmersivePlaybackTest {
                 ImmersivePlaybackLayout(playing, true, Modifier.size(640.dp, 360.dp),
                     picture = { Box(Modifier.fillMaxSize().testTag("picture")) },
                     controls = { VideoControls("翡翠台", "线路", "香港", true, playing, {}, {}, { playing = false },
-                        canReplay = !playing, onReplay = { replays++; playing = true }, fullscreenLabel = "退出全屏") })
+                        canReplay = !playing, onReplay = { replays++; playing = true }, fullscreenLabel = "退出全屏", immersive = true, fullscreenRoute = "香港代理") })
             }
         } }
         compose.mainClock.advanceTimeBy(5100)
         compose.onNodeWithTag("playback-controls").assertDoesNotExist()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("线路").assertIsFocused()
+        compose.onNodeWithText("线路 | 香港代理").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag("playback-controls").assertDoesNotExist()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("线路").assertIsFocused()
+        compose.onNodeWithText("线路 | 香港代理").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight); pressKey(Key.DirectionRight); pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("重新播放").assertIsDisplayed()
