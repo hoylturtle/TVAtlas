@@ -24,7 +24,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -86,6 +86,7 @@ import com.tvatlas.player.update.*
                 } else TvOutlinedButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) { Text("检查更新") }
                 if (networkBusy) TvTextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text(if (update.downloading) "取消下载" else "取消检查") }
             }
+            trafficContent()
             SettingsCard {
                 Text("诊断与日志", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,7 +94,7 @@ import com.tvatlas.player.update.*
                         Text("播放诊断", style = MaterialTheme.typography.bodyLarge)
                         Text("在播放器显示线路和错误详情", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = diagnostics, onCheckedChange = onDiagnostics, modifier = Modifier.tvFocusOutline())
+                    Switch(checked = diagnostics, onCheckedChange = onDiagnostics, modifier = Modifier.selectionOutline(diagnostics))
                 }
                 HorizontalDivider()
                 TvOutlinedButton(onClick = onLogs, modifier = Modifier.fillMaxWidth()) { Text("调试日志") }
@@ -144,10 +145,10 @@ import com.tvatlas.player.update.*
             Text(if (selected.type == RouteType.AUTO) "自动（失败后回退）" else routeLabel(selected, profiles), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("自动（失败后回退）") }, onClick = { expanded = false; onSelect(RouteTarget.AUTO) })
-            DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
+            DropdownMenuItem(modifier = Modifier.selectionOutline(selected == RouteTarget.AUTO), text = { Text("自动（失败后回退）") }, onClick = { expanded = false; onSelect(RouteTarget.AUTO) })
+            DropdownMenuItem(modifier = Modifier.selectionOutline(selected == RouteTarget.DIRECT), text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) })
             profiles.filter { it.enabled }.forEach { profile ->
-                DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
+                DropdownMenuItem(modifier = Modifier.selectionOutline(selected == RouteTarget.proxy(profile.id)), text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) })
             }
         }
     }

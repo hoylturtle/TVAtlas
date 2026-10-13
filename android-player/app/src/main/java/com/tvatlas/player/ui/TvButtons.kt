@@ -43,7 +43,7 @@ internal val LocalTvMode = staticCompositionLocalOf<Boolean?> { null }
         .onFocusChanged { focused = it.hasFocus }.border(if (focused) 3.dp else 0.dp,
             if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp)) else Modifier),
         enabled = enabled, shape = RoundedCornerShape(12.dp),
-        colors = if (tv && focused) ButtonDefaults.buttonColors(containerColor = Color(0xFFFFE082), contentColor = Color(0xFF171A21))
+        colors = if (tv && focused) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
             else ButtonDefaults.buttonColors(), content = content)
 }
 

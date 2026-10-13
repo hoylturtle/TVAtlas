@@ -5,6 +5,8 @@ import com.tvatlas.player.storage.CredentialVault
 import okhttp3.Credentials
 import okhttp3.Dns
 import okhttp3.OkHttpClient
+import com.tvatlas.player.traffic.TrafficStore
+import com.tvatlas.player.traffic.TrafficInterceptor
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -14,14 +16,17 @@ import java.util.concurrent.TimeUnit
 class ProxyClientPool(
     private val readCredentials: (String) -> com.tvatlas.player.storage.Credentials?,
     private val coreEndpoint: (String) -> CoreEndpoint,
+    private val traffic: TrafficStore? = null,
 ) {
     constructor(readCredentials: (String) -> com.tvatlas.player.storage.Credentials?) : this(readCredentials, { throw IOException("Subscription core unavailable") })
     constructor(vault: CredentialVault) : this(vault::get)
-    constructor(vault: CredentialVault, core: MihomoRuntime) : this(vault::get, core::endpoint)
+    constructor(vault: CredentialVault, core: MihomoRuntime, traffic: TrafficStore? = null) : this(vault::get, core::endpoint, traffic)
     private var profiles = emptyList<ProxyProfile>()
     private val clients = mutableMapOf<String, OkHttpClient>()
-    val direct: OkHttpClient = builder().proxy(Proxy.NO_PROXY).build()
-    private fun builder() = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS)
+    val direct: OkHttpClient = builder("DIRECT", "直连", false).proxy(Proxy.NO_PROXY).build()
+    private fun builder(id: String, name: String, proxy: Boolean) = OkHttpClient.Builder().apply {
+        traffic?.let { addNetworkInterceptor(TrafficInterceptor(it, id, name, proxy)) }
+    }.connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
 
@@ -45,7 +50,7 @@ class ProxyClientPool(
         val cacheKey = if (endpoint != null) "${p.id}:${endpoint.port}:${endpoint.credentials.password.hashCode()}" else p.id
         synchronized(this) { clients[cacheKey] }?.let { return it }
         val credentials = endpoint?.credentials ?: try { readCredentials(p.id) } catch (_: Exception) { throw IOException("Proxy credentials unavailable") }
-        val client = builder().apply {
+        val client = builder("PROXY:${original.id}", original.name, true).apply {
             when (p.type) {
                 ProxyType.HTTP -> {
                     proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(p.host, p.port)))

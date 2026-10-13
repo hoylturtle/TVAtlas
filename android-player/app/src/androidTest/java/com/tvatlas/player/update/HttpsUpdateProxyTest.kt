@@ -65,7 +65,9 @@ class HttpsUpdateProxyTest {
         }
         val vault = CredentialVault(context)
         val core = MihomoRuntime(context, vault)
-        val pool = ProxyClientPool(vault, core)
+        val trafficFile = File(context.cacheDir, "https-traffic-fixture.json").apply { delete() }
+        val traffic = com.tvatlas.player.traffic.TrafficStore(trafficFile)
+        val pool = ProxyClientPool(vault, core, traffic)
         val parsed = ClashSubscription.parse("proxies:\n  - {name: HTTPS fixture, type: http, server: 127.0.0.1, port: ${proxy.localPort}}", "https-update-fixture")
         val node = parsed.nodes.single()
         val logFile = File(context.cacheDir, "https-update-fixture.log").apply { delete() }
@@ -106,6 +108,11 @@ class HttpsUpdateProxyTest {
                 .followRedirects(true).build()
             ApkDownloader(downloadClient, log, "$api/releases/assets/").download(release, destination)
             assertEquals(body, destination.readText())
+            traffic.flush()
+            val usage = kotlinx.serialization.json.Json.decodeFromString<com.tvatlas.player.traffic.TrafficSnapshot>(trafficFile.readText())
+            assertEquals(0L, usage.direct)
+            assertTrue(usage.proxy >= body.toByteArray().size.toLong())
+            assertEquals("PROXY:${node.profile.id}", usage.entries.single().id)
             assertEquals(6, origin.requestCount)
             assertTrue(targets.contains("api.github.com:${origin.port}"))
             assertTrue(targets.contains("github.com:${origin.port}"))
@@ -127,6 +134,7 @@ class HttpsUpdateProxyTest {
             pool.close(); core.close(); vault.putSecret("node:${node.profile.id}", null)
             proxy.close(); sockets.forEach { runCatching { it.close() } }; workers.shutdownNow()
             origin.shutdown(); log.close(); logFile.delete()
+            traffic.shutdown(); trafficFile.delete()
         }
     }
 }

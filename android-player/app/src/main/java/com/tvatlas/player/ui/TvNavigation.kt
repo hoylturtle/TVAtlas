@@ -18,9 +18,18 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
     onFocusChanged { focused = it.hasFocus }
         .border(if (focused) 3.dp else 0.dp,
-            if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
-        .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+            if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
+        .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f) else Color.Transparent,
             RoundedCornerShape(12.dp))
+}
+
+
+/** Selected and focused choices share a purple fill and a white outline on touch and TV. */
+internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    onFocusChanged { focused = it.hasFocus }
+        .background(if (selected || focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
+        .border(if (selected || focused) 2.dp else 0.dp, if (selected || focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
 }
 
 @Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
@@ -29,9 +38,9 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
         Text("TVAtlas", Modifier.padding(vertical = 20.dp), fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium)
         listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
-            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).tvFocusOutline(),
+            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).selectionOutline(selected == index),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)) {
+                    MaterialTheme.colorScheme.primary else Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)) {
                 Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)
             }
         }

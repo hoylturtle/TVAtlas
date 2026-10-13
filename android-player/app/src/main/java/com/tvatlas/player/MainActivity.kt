@@ -16,6 +16,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStop() {
         if (!isChangingConfigurations) model.stopPlayback()
+        model.traffic.checkpoint()
         super.onStop()
     }
 }
