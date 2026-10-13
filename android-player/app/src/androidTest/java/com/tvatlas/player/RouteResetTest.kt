@@ -18,7 +18,7 @@ class RouteResetTest {
         try {
             val forced = RuleCodec.json.encodeToString(RouteTarget.proxy("hk1"))
             db.dao().savePlaylist(PlaylistRow("p", "fixture", "https://fixture.test/list"))
-            db.dao().saveChannel(ChannelRow("c", "翡翠台", "香港 · 综合", null, null, forced))
+            db.dao().saveChannel(ChannelRow("c", "测试频道", "大陆", null, null, forced))
             db.dao().saveStreams(listOf(StreamRow("s1", "c", "https://fixture.test/1", "p", forced),
                 StreamRow("s2", "c", "https://fixture.test/2", "p", forced)))
             val repository = PlayerRepository(db, OkHttpClient())

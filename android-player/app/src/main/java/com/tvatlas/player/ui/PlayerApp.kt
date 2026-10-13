@@ -71,6 +71,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         val options by model.options.collectAsStateWithLifecycle()
         val recent by model.recent.collectAsStateWithLifecycle()
         val pendingPlay by model.pendingPlay.collectAsStateWithLifecycle()
+        val pendingDownload by model.pendingDownload.collectAsStateWithLifecycle()
         val busy by model.busy.collectAsStateWithLifecycle()
         val message by model.message.collectAsStateWithLifecycle()
         val update by model.update.collectAsStateWithLifecycle()
@@ -91,12 +92,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         val wide = tv || (config.screenWidthDp >= 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
         val landscape = !tv && config.screenWidthDp < 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        var exitPrompt by remember { mutableStateOf(false) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
         var landscapeChannels by rememberSaveable { mutableStateOf(false) }
         var detailId by rememberSaveable { mutableStateOf<String?>(null) }
         var addPlaylist by rememberSaveable { mutableStateOf(false) }
+        var editPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
+        var deletePlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
         var addProxy by rememberSaveable { mutableStateOf(false) }
         var addSubscription by rememberSaveable { mutableStateOf(false) }
         var removeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
@@ -110,7 +114,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         val immersive = tab == 0 && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
         val theater = tab == 0 && wide
         BackHandler(immersive) { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
-        BackHandler(theater && channelPanelOpen && status.channelId != null) { channelPanelOpen = false }
+        BackHandler(tab == 0 && !immersive && !exitPrompt) { exitPrompt = true }
         BackHandler(!immersive && tab != 0) { tab = 0 }
         PlaybackOrientation(immersive, tv)
         PlaybackSystemBars(immersive)
@@ -167,7 +171,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                                 channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) })
                         }
                     }
-                    1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback)
+                    1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
+                        { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id })
                     2 -> RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
@@ -179,8 +184,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                 }
             }
         }
-        if (pendingPlay != null) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为计费网络") },
-            text = { Text("直播可能消耗较多流量。继续后，本次运行允许在计费网络播放。") },
+        if (exitPrompt) ExitConfirmation({ exitPrompt = false }) { model.stopPlayback(); (context as? android.app.Activity)?.finish() }
+        if (pendingPlay != null || pendingDownload) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为移动数据网络") },
+            text = { Text(if (pendingDownload) "下载 APK 会消耗移动数据。确认继续？" else "直播可能消耗较多移动数据。继续后，本次运行允许使用移动数据。") },
             confirmButton = { TvTextButton(onClick = model::approveMetered) { Text("继续播放") } },
             dismissButton = { TvTextButton(onClick = model::dismissMetered) { Text("取消") } })
         if (logsOpen) {
@@ -188,6 +194,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
             DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
         }
         if (addPlaylist) PlaylistDialog(busy, { addPlaylist = false }) { name, url -> model.addPlaylist(name, url); addPlaylist = false }
+        val editPlaylist = library.playlists.firstOrNull { it.id == editPlaylistId }
+        if (editPlaylist != null) PlaylistDialog(busy, { editPlaylistId = null }, editPlaylist) { name, url ->
+            model.editPlaylist(editPlaylist, name, url); editPlaylistId = null
+        }
+        if (deletePlaylistId != null) AlertDialog(onDismissRequest = { deletePlaylistId = null }, title = { Text("删除频道源？") },
+            text = { Text("仅移除此来源的线路，共享频道的其他来源会保留。") },
+            confirmButton = { TvTextButton(onClick = { model.deletePlaylist(deletePlaylistId!!); deletePlaylistId = null }) { Text("删除") } },
+            dismissButton = { TvTextButton(onClick = { deletePlaylistId = null }) { Text("取消") } })
         if (addSubscription) SubscriptionDialog(busy, { addSubscription = false }) { name, url ->
             model.addSubscription(name, url); addSubscription = false
         }
@@ -213,6 +227,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
+    var collapsed by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
@@ -220,11 +235,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
-                TvTextButton(onClick = { mode = index }, modifier = Modifier.weight(1f).selectionOutline(mode == index),
+                TvTextButton(onClick = { mode = index; collapsed = emptyList() }, modifier = Modifier.weight(1f).selectionOutline(mode == index),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(label) }
             }
         }
-        Text("${library.channels.size} 个频道", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.labelLarge)
         if (library.channels.isEmpty()) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("从你的播放列表开始", style = MaterialTheme.typography.titleLarge)
@@ -237,31 +251,37 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                     (mode == 0 || mode == 1 && it.id in favorites || mode == 2 && it.id in recent) }
                 if (mode == 2) items.sortedBy { recent.indexOf(it.id) } else items.hongKongFirst()
             }
+            Text("${filtered.size} 个频道" + if (filtered.size != library.channels.size) " / 共 ${library.channels.size} 个" else "", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
             if (filtered.isEmpty()) Text(if (mode == 1) "尚无收藏频道" else if (mode == 2) "尚无成功观看记录" else "没有匹配频道", style = MaterialTheme.typography.bodySmall)
-            val grouped = remember(filtered) { filtered.groupBy { it.group.ifBlank { "未分组" } } }
+            val grouped = remember(filtered) { filtered.groupBy { it.browseGroup() } }
             LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 grouped.forEach { (group, channels) ->
                     item(key = "group:$group") {
-                        TvTextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
-                            modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (group in expanded || query.isNotBlank()) "已展开" else "已收起" }
+                        val actualExpanded = query.isNotBlank() || if (mode != 0) group !in collapsed else group in expanded
+                        TvTextButton(onClick = { if (query.isBlank()) {
+                            if (mode != 0) collapsed = if (group in collapsed) collapsed - group else collapsed + group
+                            else expanded = if (group in expanded) expanded - group else expanded + group
+                        } },
+                            modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (actualExpanded) "已展开" else "已收起" }
                                 .then(if (tv) Modifier.tvFocusOutline() else Modifier)
                                 .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
-                                .then(if (tv && group == filtered.firstOrNull()?.group?.ifBlank { "未分组" }) Modifier.focusRequester(firstFocus) else Modifier)) {
-                            Text("${if (group in expanded || query.isNotBlank()) "⌄" else "›"}  $group", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
+                                .then(if (tv && group == filtered.firstOrNull()?.browseGroup()) Modifier.focusRequester(firstFocus) else Modifier)) {
+                            Text("${if (actualExpanded) "⌄" else "›"}  $group", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
                             Text("${channels.size}")
                         }
                     }
-                    if (group in expanded || query.isNotBlank() || mode != 0) items(channels, key = { it.id }) { channel ->
+                    if (query.isNotBlank() || if (mode != 0) group !in collapsed else group in expanded) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
+                            leadingContent = if (status.channelId == channel.id) ({ Text("▶", Modifier.semantics { contentDescription = "正在播放" }) }) else null,
                             supportingContent = { programme(channel) },
                             trailingContent = { TvTextButton(onClick = { onFavorite(channel) }) {
                                 Text(if (channel.id in favorites) "★" else "☆", color = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
-                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 supportingColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
                             modifier = Modifier.onFocusChanged { focused = it.isFocused }
-                                .border(3.dp, if (focused || status.channelId == channel.id) Color.White else Color.Transparent)
+                                .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
                                         event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress) { onDetails(channel); true } else false
@@ -381,9 +401,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     }
 }
 
-@Composable internal fun PlaylistDialog(busy: Boolean, onDismiss: () -> Unit, onSave: (String, String) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var url by rememberSaveable { mutableStateOf("") }
+@Composable internal fun PlaylistDialog(busy: Boolean, onDismiss: () -> Unit, initial: Playlist? = null, onSave: (String, String) -> Unit) {
+    var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
+    var url by rememberSaveable(initial?.id) { mutableStateOf(initial?.url.orEmpty()) }
     var scan by remember { mutableStateOf(false) }
     var received by remember { mutableStateOf(false) }
     if (scan) {
@@ -393,7 +413,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         }
         return
     }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("添加播放列表") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial == null) "添加播放列表" else "编辑频道源") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("名称") }, singleLine = true)
             OutlinedTextField(url, { url = it }, label = { Text("HTTP(S) M3U 地址") }, singleLine = true,

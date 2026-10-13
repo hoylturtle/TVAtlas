@@ -76,4 +76,13 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
         // AUTO at a child URL must not restart the parent's failover cycle.
         return if (rule.route.type == RouteType.AUTO) sessionTarget else rule.route
     }
+    /** Fixed request rules are preferred nodes; failures use same-region backups, never restart AUTO. */
+    fun requestTargets(context: StreamContext, requestUrl: String, sessionTarget: RouteTarget): List<RouteTarget> {
+        val manual = context.stream.manualRoute ?: context.channel.manualRoute
+        if (manual != null && manual.type != RouteType.AUTO) return listOf(sessionTarget)
+        val request = context.copy(stream = context.stream.copy(url = requestUrl))
+        val rule = rules.firstOrNull { it.match.isRequestRule() && it.match.matches(request) }
+        return if (rule?.route?.type == RouteType.PROXY) preferredProxy(rule.route, context.channel)
+            else listOf(requestTarget(context, requestUrl, sessionTarget))
+    }
 }

@@ -54,7 +54,7 @@ class MyTvSuperSourceTest {
         assertEquals("香港 · 新闻", channels.first { it.name == "无线新闻台" }.group)
         assertEquals("C", MyTvSuperSource.channel("https://www.mytvsuper.com/tc/live/83/")!!.network)
         assertTrue(channels.any { it.group == "香港 · 影视" })
-        assertTrue(channels.any { it.group == "香港 · 体育" })
+        assertEquals(setOf("香港 · 综合", "香港 · 新闻", "香港 · 影视"), channels.map { it.group }.toSet())
         assertNull(MyTvSuperSource.channel("https://www.mytvsuper.com/tc/live/85/"))
     }
     @Test fun rejectedRegionCannotUseToken() {

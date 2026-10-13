@@ -1,9 +1,9 @@
 {
-  "versionCode": 33,
-  "versionName": "0.1.32",
+  "versionCode": 34,
+  "versionName": "0.1.33",
   "minSdk": 23,
-  "notes": "新增收藏和最近观看、XMLTV 及 TVB/ViuTV 官方节目表缓存、到期自动刷新、计费网络和流量提醒、密码加密配置备份恢复；全屏单行显示 HTTPS 延迟与即时下载速度，并提供当前源的画质、音轨和字幕选择。",
+  "notes": "手机网络范围支持仅 Wi-Fi、仅移动网络或两者；移动数据播放/下载提醒及切网保护。主页返回确认退出。香港仅官方线路，综合/新闻/影视三组；其他地区合并浏览分类。修复订阅更新恢复播放、请求级节点回退、节目单缓存和来源切换、频道/线路身份；新增频道源编辑停用删除，区分电视焦点和播放状态。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.32-beta.1",
+  "releaseTag": "v0.1.33-beta.1",
   "coreVersion": "v1.19.32"
 }

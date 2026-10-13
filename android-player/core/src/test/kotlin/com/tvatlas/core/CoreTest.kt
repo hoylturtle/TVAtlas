@@ -24,7 +24,7 @@ class CoreTest {
         assertEquals("香港 · 综合", channels[0].group)
         assertEquals("jade", channels[0].tvgId)
         assertEquals(2, channels[0].streams.size)
-        assertEquals(channels[0].id, M3uParser.parse("#EXTINF:-1,翡翠台\nhttps://x/new", "home")[0].id)
+        assertEquals(channels[0].id, M3uParser.parse("#EXTINF:-1 tvg-id=\"jade\" group-title=\"香港\",翡翠台\nhttps://x/new", "home")[0].id)
     }
     @Test fun malformedAndUnsupportedEntriesCannotLeakMetadata() {
         val c = M3uParser.parse("#EXTINF:-1,wrong\nudp://x\nhttps://x/stray\n#EXTINF:-1,correct\nhttps://x/a", "p")
