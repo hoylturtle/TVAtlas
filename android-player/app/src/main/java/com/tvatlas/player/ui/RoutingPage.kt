@@ -30,10 +30,10 @@ import com.tvatlas.player.storage.*
     var query by rememberSaveable { mutableStateOf("") }
     var hongKongOnly by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(section) { if (section == 3) onCoreInfo() }
-    val shownNodes = library.profiles.filter { (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
+    val shownNodes = remember(library.profiles, nodeSubscription, hongKongOnly, query, nodeHealth) { library.profiles.filter { (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
         (!hongKongOnly || isHongKongLabel(it.name)) && it.name.contains(query, true) }.sortedWith(compareBy<ProxyProfile>(
         { val sample = nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
-        { nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE }))
+        { nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("代理与订阅", style = MaterialTheme.typography.headlineSmall)
@@ -42,7 +42,8 @@ import com.tvatlas.player.storage.*
             TabRow(selectedTabIndex = section) {
                 listOf("订阅", "节点", "规则", "内核").forEachIndexed { index, title ->
                     Tab(selected = section == index, onClick = { section = index; nodeSubscription = null },
-                        modifier = Modifier.tvFocusOutline(), text = { Text(title) })
+                        selectedContentColor = MaterialTheme.colorScheme.onPrimary, unselectedContentColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.selectionOutline(section == index), text = { Text(title) })
                 }
             }
         }
@@ -117,7 +118,7 @@ import com.tvatlas.player.storage.*
                             Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期测速 / 连接失败"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
                         } },
                         trailingContent = {
-                            if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.tvFocusOutline(), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
+                            if (p.type == ProxyType.MIHOMO) Switch(modifier = Modifier.selectionOutline(p.enabled), checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
                             else TvTextButton(onClick = { onEdit(p) }, enabled = !busy) { Text("编辑") }
                         })
                 }
@@ -132,7 +133,7 @@ import com.tvatlas.player.storage.*
                         Text("大陆：直连\n港澳 → 香港 · 台湾 → 台湾\n日本 → 日本 · 韩国 → 韩国\n同地区低延迟优先，连接失败切换其他节点。", style = MaterialTheme.typography.bodyMedium)
                         Text("自定义文件未匹配时，内置规则保底生效。手动线路优先。", style = MaterialTheme.typography.bodySmall)
                         Row {
-                            RadioButton(selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = Modifier.tvFocusOutline())
+                            RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary), selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = Modifier.selectionOutline(ruleFiles.none { it.active }))
                             TvTextButton(onClick = { onSelectRule(null) }, enabled = !busy) { Text("仅使用内置规则") }
                         }
                     }
@@ -147,7 +148,7 @@ import com.tvatlas.player.storage.*
             items(ruleFiles, key = { "rulefile:${it.id}" }) { file ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp)) {
-                        RadioButton(selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = Modifier.tvFocusOutline())
+                        RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary), selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = Modifier.selectionOutline(file.active))
                         Column(Modifier.weight(1f)) {
                             Text(file.name, style = MaterialTheme.typography.titleMedium)
                             Text(if (file.active) "当前生效" else "未启用", style = MaterialTheme.typography.bodySmall)
@@ -175,10 +176,10 @@ import com.tvatlas.player.storage.*
             Text(if (selected.type == RouteType.AUTO) "自动选择下载网络" else routeLabel(selected, profiles), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(text = { Text("自动选择下载网络") }, onClick = { expanded = false; onSelect(RouteTarget.AUTO) }, modifier = Modifier.tvFocusOutline())
-            DropdownMenuItem(text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) }, modifier = Modifier.tvFocusOutline())
+            DropdownMenuItem(text = { Text("自动选择下载网络") }, onClick = { expanded = false; onSelect(RouteTarget.AUTO) }, modifier = Modifier.selectionOutline(selected == RouteTarget.AUTO))
+            DropdownMenuItem(text = { Text("直连") }, onClick = { expanded = false; onSelect(RouteTarget.DIRECT) }, modifier = Modifier.selectionOutline(selected == RouteTarget.DIRECT))
             profiles.filter { it.enabled }.forEach { profile ->
-                DropdownMenuItem(text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) }, modifier = Modifier.tvFocusOutline())
+                DropdownMenuItem(text = { Text(profile.name) }, onClick = { expanded = false; onSelect(RouteTarget.proxy(profile.id)) }, modifier = Modifier.selectionOutline(selected == RouteTarget.proxy(profile.id)))
             }
         }
     }

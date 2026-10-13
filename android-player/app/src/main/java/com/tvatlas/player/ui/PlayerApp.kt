@@ -59,8 +59,9 @@ import com.tvatlas.player.storage.SubscriptionRow
 import java.text.DateFormat
 import java.util.Date
 
-internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = Color(0xFFB8C3D8),
-    background = Color(0xFF0D0F13), surface = Color(0xFF171A21), surfaceVariant = Color(0xFF292F3A), onPrimary = Color(0xFF162A4B))
+internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = Color.White, primaryContainer = Color(0xFF7139C1), onPrimaryContainer = Color.White,
+    secondary = Color(0xFFD0B6FF), secondaryContainer = Color(0xFF7139C1), onSecondaryContainer = Color.White,
+    background = Color(0xFF0D0F13), surface = Color(0xFF171A21), surfaceVariant = Color(0xFF292F3A))
 
 @Composable fun PlayerApp(model: PlayerViewModel) {
     MaterialTheme(colorScheme = colors) {
@@ -87,7 +88,6 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         val landscape = !tv && config.screenWidthDp < 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
-        val logLines by model.debugLog.lines.collectAsStateWithLifecycle()
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
         var landscapeChannels by rememberSaveable { mutableStateOf(false) }
@@ -125,6 +125,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 if (!tv && !immersive) NavigationBar {
                     listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
+                            modifier = Modifier.border(if (tab == index) 2.dp else 0.dp, if (tab == index) Color.White else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
                     }
                 }
@@ -169,12 +170,15 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
                         subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() }, nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
-                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate)
+                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate, trafficContent = { TrafficStatistics(model.traffic) })
                 }
                 }
             }
         }
-        if (logsOpen) DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
+        if (logsOpen) {
+            val logLines by model.debugLog.lines.collectAsStateWithLifecycle()
+            DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
+        }
         if (addPlaylist) PlaylistDialog(busy, { addPlaylist = false }) { name, url -> model.addPlaylist(name, url); addPlaylist = false }
         if (addSubscription) SubscriptionDialog(busy, { addSubscription = false }) { name, url ->
             model.addSubscription(name, url); addSubscription = false
@@ -210,9 +214,10 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 TvButton(onClick = onAdd) { Text("添加播放列表") }
             }
         } else {
-            val filtered = library.channels.filter { it.name.contains(query, true) || it.group.contains(query, true) }.hongKongFirst()
+            val filtered = remember(library.channels, query) { library.channels.filter { it.name.contains(query, true) || it.group.contains(query, true) }.hongKongFirst() }
+            val grouped = remember(filtered) { filtered.groupBy { it.group.ifBlank { "未分组" } } }
             LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                filtered.groupBy { it.group.ifBlank { "未分组" } }.forEach { (group, channels) ->
+                grouped.forEach { (group, channels) ->
                     item(key = "group:$group") {
                         TvTextButton(onClick = { expanded = if (group in expanded) expanded - group else expanded + group },
                             modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (group in expanded || query.isNotBlank()) "已展开" else "已收起" }
@@ -226,10 +231,10 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                     if (group in expanded || query.isNotBlank()) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
-                            trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.primary) },
-                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent, headlineColor = if (focused) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
+                            trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.onPrimary) },
+                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
                             modifier = Modifier.onFocusChanged { focused = it.isFocused }
-                                .border(3.dp, if (focused) Color.White else Color.Transparent)
+                                .border(3.dp, if (focused || status.channelId == channel.id) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
                                         event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress) { onDetails(channel); true } else false
@@ -418,9 +423,9 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                     Text(selectedStream?.let { streamName(channel, it.id, playlists) } ?: "自动选线")
                 }
                 DropdownMenu(expanded = lineMenu, onDismissRequest = { lineMenu = false }) {
-                    DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
+                    DropdownMenuItem(modifier = Modifier.selectionOutline(selectedStreamId == null), text = { Text("自动选线") }, onClick = { selectedStreamId = null; lineMenu = false })
                     channel.streams.forEach { stream ->
-                        DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
+                        DropdownMenuItem(modifier = Modifier.selectionOutline(selectedStreamId == stream.id), text = { Text(streamName(channel, stream.id, playlists)) }, onClick = { selectedStreamId = stream.id; lineMenu = false })
                     }
                 }
             }
@@ -449,7 +454,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             val targets: List<Pair<String, RouteTarget?>> = listOf("跟随规则" to null, "自动" to RouteTarget.AUTO, "直连" to RouteTarget.DIRECT) +
                 profiles.filter { it.enabled }.map { it.name to RouteTarget.proxy(it.id) }
-            targets.forEach { (label, target) -> DropdownMenuItem(modifier = Modifier.tvFocusOutline(), text = { Text(label) }, onClick = { onRoute(target); open = false }) }
+            targets.forEach { (label, target) -> DropdownMenuItem(modifier = Modifier.selectionOutline(selected == target), text = { Text(label) }, onClick = { onRoute(target); open = false }) }
         }
     }
 }

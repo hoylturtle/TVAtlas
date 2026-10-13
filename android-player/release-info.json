@@ -1,9 +1,9 @@
 {
-  "versionCode": 31,
-  "versionName": "0.1.30",
+  "versionCode": 32,
+  "versionName": "0.1.31",
   "minSdk": 23,
-  "notes": "全屏操作栏改为底部单行、72% 透明黑色背景，仅显示线路和直连或地区代理；隐藏地址与多行诊断，保留线路切换、退出全屏和停止/重新播放。",
+  "notes": "新增直连/代理及各节点的本地流量统计、上传下载明细和重置；紫色选中与白色边框统一；减少日志与列表重复重绘，设置和路由编辑不再等待后台下载。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.30-beta.1",
+  "releaseTag": "v0.1.31-beta.1",
   "coreVersion": "v1.19.32"
 }

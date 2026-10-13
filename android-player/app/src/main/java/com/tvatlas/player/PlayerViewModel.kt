@@ -29,7 +29,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val database = PlayerDatabase.open(application)
     private val vault = CredentialVault(application)
     private val core = MihomoRuntime(application, vault)
-    private val pool = ProxyClientPool(vault, core)
+    val traffic = com.tvatlas.player.traffic.TrafficStore(java.io.File(application.noBackupFilesDir, "traffic/usage.json"))
+    private val pool = ProxyClientPool(vault, core, traffic)
     private val playlistClient = pool.direct.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
     private val repository = PlayerRepository(database, playlistClient, debugLog)
@@ -43,14 +44,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val settings = SettingsStore(application)
     val library = repository.library.stateIn(viewModelScope, SharingStarted.Eagerly, Library(emptyList(), emptyList(), emptyList(), RuleConfig()))
     val ruleFiles = repository.ruleFiles.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    fun selectRuleFile(id: String?) = action("规则已切换，重新播放后生效") { repository.selectRuleFile(id) }
+    fun selectRuleFile(id: String?) = routeAction("规则已切换，重新播放后生效") { repository.selectRuleFile(id) }
     val diagnostics = settings.diagnostics.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val subscriptionRoute = settings.subscriptionRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.AUTO)
     private val _subscriptionFeedback = MutableStateFlow<SubscriptionFeedback?>(null)
     val subscriptionFeedback = _subscriptionFeedback.asStateFlow()
     private val _updatingSubscription = MutableStateFlow<String?>(null)
     val updatingSubscription = _updatingSubscription.asStateFlow()
-    fun setSubscriptionRoute(route: RouteTarget) = action { settings.subscriptionRoute(route) }
+    fun setSubscriptionRoute(route: RouteTarget) = preferenceAction { settings.subscriptionRoute(route) }
     val updateRoute = settings.updateRoute.stateIn(viewModelScope, SharingStarted.Eagerly, RouteTarget.AUTO)
     private val latency = NodeLatencyTester(pool::client)
     val nodeHealth = latency.health
@@ -68,6 +69,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _busy = MutableStateFlow(false)
     val busy = _busy.asStateFlow()
     private val operations = kotlinx.coroutines.sync.Mutex()
+    private val routeChanges = kotlinx.coroutines.sync.Mutex()
     private var playJob: Job? = null
     private val _update = MutableStateFlow(UpdateState())
     val update = _update.asStateFlow()
@@ -94,7 +96,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
-    fun setUpdateRoute(route: RouteTarget) = action { settings.updateRoute(route) }
+    fun setUpdateRoute(route: RouteTarget) = preferenceAction { settings.updateRoute(route) }
     fun openRepository() {
         try {
             getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -159,13 +161,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     init {
-        action { repository.initializeDefaults() }
+        viewModelScope.launch { repository.initializeDefaults() }
         viewModelScope.launch {
             var previousProfiles = emptyList<ProxyProfile>()
             library.collect { state ->
                 if (previousProfiles != state.profiles) { latency.invalidate(); previousProfiles = state.profiles }
                 withContext(Dispatchers.IO) { core.update(state.profiles); pool.update(state.profiles) }
             }
+        }
+    }
+    /** Short route edits are serialized separately from network downloads. Playback waits only for these edits. */
+    private fun routeAction(success: String? = null, work: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { routeChanges.withLock { work() }; if (success != null) _message.value = success }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { debugLog.error("SETTINGS", error); _message.value = "设置未保存，请重试" }
+        }
+    }
+    /** Local settings must not queue behind slow subscription/playlist network operations. */
+    private fun preferenceAction(work: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { work() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { debugLog.error("SETTINGS", error); _message.value = "设置未保存，请重试" }
         }
     }
     private fun action(success: String? = null, work: suspend () -> Unit) {
@@ -204,7 +222,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         playJob = viewModelScope.launch {
             try {
                 // Wait for queued route edits and read a fresh database snapshot before resolving.
-                val current = operations.withLock { repository.library.first() }
+                val current = routeChanges.withLock { repository.library.first() }
                 val fresh = current.channels.firstOrNull { it.id == channel.id } ?: channel
                 withContext(Dispatchers.IO) { core.update(current.profiles); pool.update(current.profiles) }
                 val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(fresh, null, streamId)
@@ -260,15 +278,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteSubscription(id: String) = action("订阅及其节点已移除") {
         subscriptionRepository.remove(id); synchronizeSubscriptionClients()
     }
-    fun enableNode(profile: ProxyProfile) = action {
+    fun enableNode(profile: ProxyProfile) = routeAction {
         require(profile.type == ProxyType.MIHOMO)
-        repository.saveProxy(profile.copy(enabled = !profile.enabled, subscriptionId = profile.subscriptionId))
+        val current = repository.library.first().profiles.firstOrNull { it.id == profile.id } ?: return@routeAction
+        repository.saveProxy(current.copy(enabled = !current.enabled))
     }
-    fun resetChannelRoutes(channelId: String) = action("已恢复自动路由，重新播放后生效") { repository.resetChannelRoutes(channelId) }
-    fun setRoute(channelId: String, streamId: String?, target: RouteTarget?) = action("路由已保存，重新播放后生效") {
+    fun resetChannelRoutes(channelId: String) = routeAction("已恢复自动路由，重新播放后生效") { repository.resetChannelRoutes(channelId) }
+    fun setRoute(channelId: String, streamId: String?, target: RouteTarget?) = routeAction("路由已保存，重新播放后生效") {
         if (streamId == null) repository.setChannelRoute(channelId, target) else repository.setStreamRoute(streamId, target)
     }
-    fun saveProxy(profile: ProxyProfile, credentials: Credentials?, replaceCredentials: Boolean) = action("代理已保存") {
+    fun saveProxy(profile: ProxyProfile, credentials: Credentials?, replaceCredentials: Boolean) = routeAction("代理已保存") {
         RuleCodec.validateProxy(profile)
         if (credentials != null) {
             require(credentials.username.isNotBlank() && credentials.password.isNotBlank()) { "用户名和密码需同时填写" }
@@ -278,7 +297,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (replaceCredentials) withContext(Dispatchers.IO) { vault.put(profile.id, credentials) }
         repository.saveProxy(profile)
-        pool.update(library.value.profiles, credentialsChanged = true)
+        withContext(Dispatchers.IO) { pool.update(repository.library.first().profiles, credentialsChanged = true) }
     }
     fun importRules(uri: Uri) = action("规则导入成功") {
         val text = withContext(Dispatchers.IO) {
@@ -318,10 +337,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             stream.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
         }
     }
-    fun showDiagnostics(value: Boolean) = action { settings.diagnostics(value) }
+    fun showDiagnostics(value: Boolean) = preferenceAction { settings.diagnostics(value) }
     override fun onCleared() {
         updateJob?.cancel()
         downloadJob?.cancel()
-        stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close()
+        stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close(); traffic.close()
     }
 }
