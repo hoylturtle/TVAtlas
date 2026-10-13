@@ -4,6 +4,7 @@ package com.tvatlas.player.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -32,6 +34,25 @@ private fun Context.activity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.activity()
     else -> null
+}
+
+/** Force either landscape side even with auto-rotate disabled; restore the caller's policy on exit. */
+@Composable internal fun PlaybackOrientation(immersive: Boolean, tv: Boolean) {
+    val activity = LocalContext.current.activity()
+    var previous by rememberSaveable { mutableStateOf<Int?>(null) }
+    val locked = immersive && !tv
+    DisposableEffect(activity, locked) {
+        if (locked && activity != null) {
+            if (previous == null) previous = activity.requestedOrientation
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+        onDispose {
+            if (locked && activity != null) {
+                previous?.let { activity.requestedOrientation = it }
+                previous = null
+            }
+        }
+    }
 }
 
 /** Scope system UI changes to the playback screen, including return from a dialog/background. */

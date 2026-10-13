@@ -1,9 +1,9 @@
 {
-  "versionCode": 27,
-  "versionName": "0.1.26",
+  "versionCode": 28,
+  "versionName": "0.1.27",
   "minSdk": 23,
-  "notes": "修复停止后缺少重新播放按钮；全屏隐藏系统栏，操作按钮改为自动收起的画面浮层，触屏或遥控器可唤出；退出全屏恢复频道界面，重播保留所选线路。",
+  "notes": "手机和平板进入全屏强制横屏，可朝两侧横屏播放；退出或返回频道后恢复原来的屏幕方向设置。保留沉浸全屏、停止重播及线路回退。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.26-beta.1",
+  "releaseTag": "v0.1.27-beta.1",
   "coreVersion": "v1.19.32"
 }
