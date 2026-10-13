@@ -31,9 +31,9 @@ class UserFeaturesTest {
         compose.onNodeWithText("收藏", substring = false).performClick()
         compose.onNodeWithText("1 个频道 / 共 2 个").assertIsDisplayed()
         compose.onNodeWithText("Alpha").assertIsDisplayed()
-        compose.onNodeWithText("⌄  香港 · 综合").performClick()
+        compose.onNodeWithText("⌄  香港").performClick()
         compose.onNodeWithText("Alpha").assertDoesNotExist()
-        compose.onNodeWithText("›  香港 · 综合").performClick()
+        compose.onNodeWithText("›  香港").performClick()
         compose.onNodeWithText("Alpha").assertIsDisplayed()
     }
     @Test fun favoriteAndRecentFiltersPreserveChannelSelection() {
@@ -44,7 +44,8 @@ class UserFeaturesTest {
             ChannelList(library, PlaybackStatus(), false, Modifier.size(360.dp, 640.dp), {}, {}, {}, favorites,
                 listOf("Beta", "Alpha"), { channel -> favorites = if (channel.id in favorites) favorites - channel.id else favorites + channel.id })
         } }
-        compose.onNodeWithText("香港", substring = true).performClick()
+        compose.onNodeWithText("›  香港").performClick()
+        compose.onNodeWithText("›  其他").performClick()
         compose.onNodeWithContentDescription("收藏 Alpha").performClick()
         compose.onNodeWithText("收藏", substring = false).performClick()
         compose.onNodeWithText("Alpha").assertIsDisplayed()
