@@ -23,6 +23,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalTestApi::class)
 class ImmersivePlaybackTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
