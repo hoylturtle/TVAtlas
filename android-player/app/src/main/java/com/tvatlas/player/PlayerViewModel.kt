@@ -212,7 +212,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         debugLog.event("INFO", "PLAY", "requested channel=${channel.name} line=${streamId?.let { "selected" } ?: "automatic"}")
         val routes = library.value.profiles.filter { it.enabled }
         debugLog.event("INFO", "PROXY", "available=" + routes.joinToString { "${it.id}:${it.name}:${it.type}" })
-        playJob?.cancel(); playback.stop(false)
+        playJob?.cancel(); playback.stop(false); playback.preparing(channel, streamId)
         playJob = viewModelScope.launch {
             try {
                 // Wait for queued route edits and read a fresh database snapshot before resolving.
@@ -222,13 +222,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(fresh, null, streamId)
                 val ids = initial.attempts.mapNotNull { it.target.profile }.toSet()
                 if (ids.isNotEmpty()) {
-                    playback.preparing(fresh)
+                    playback.preparing(fresh, streamId)
                     debugLog.event("INFO", "NODE_TEST", "automatic region=${fresh.playbackRegion()?.label} candidates=${ids.size}")
                     latency.measure(current.profiles.filter { it.id in ids }, staleOnly = true)
                 }
                 playback.play(fresh, DefaultRouteResolver(current.rules, current.profiles, latency.health.value), streamId)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { debugLog.error("PLAY_PREPARATION", error); playback.preparationFailed(channel) }
+            catch (error: Exception) { debugLog.error("PLAY_PREPARATION", error); playback.preparationFailed(channel, streamId) }
         }
     }
 

@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicLong
 data class PlaybackStatus(
     val channelId: String? = null, val message: String = "添加播放列表后，选择频道开始观看",
     val attempt: RouteAttempt? = null, val lastAttempt: RouteAttempt? = null, val error: String? = null, val successAt: Long? = null,
+    val loading: Boolean = false, val selectedStreamId: String? = null,
 )
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -61,16 +62,18 @@ class PlaybackCoordinator(
     private var drmActive: java.util.concurrent.atomic.AtomicBoolean? = null
     private val renewed = mutableSetOf<RouteAttempt>()
 
-    fun preparing(channel: Channel) { _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…") }
+    fun preparing(channel: Channel, streamId: String? = null) {
+        _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…", loading = true, selectedStreamId = streamId)
+    }
 
-    fun preparationFailed(channel: Channel) {
-        _status.value = PlaybackStatus(channel.id, "无法准备播放", error = "节点准备失败，请检查代理配置后重试")
+    fun preparationFailed(channel: Channel, streamId: String? = null) {
+        _status.value = PlaybackStatus(channel.id, "无法准备播放", error = "节点准备失败，请检查代理配置后重试", selectedStreamId = streamId)
     }
     fun play(channel: Channel, resolver: DefaultRouteResolver, streamId: String? = null) {
         stop(false)
         renewed.clear()
         val token = generation
-        _status.value = PlaybackStatus(channel.id, "正在连接 ${channel.name}")
+        _status.value = PlaybackStatus(channel.id, "正在连接 ${channel.name}", loading = true, selectedStreamId = streamId)
         preparation = scope.launch {
             val history = repository.preferred(channel.id)
             if (token != generation) return@launch
@@ -94,14 +97,14 @@ class PlaybackCoordinator(
         _player.value?.release(); _player.value = null
         if (route == null) {
             log?.event("ERROR", "PLAY", "all routes exhausted channel=${channel.name} detail=${_status.value.error}")
-            _status.value = _status.value.copy(message = "${channel.name} 的可用线路均未成功，请检查播放源或路由设置", attempt = null)
+            _status.value = _status.value.copy(message = "${channel.name} 的可用线路均未成功，请检查播放源或路由设置", attempt = null, loading = false)
             return
         }
         val stream = channel.streams.first { it.id == route.streamId }
         val viu = com.tvatlas.player.source.ViuTvSource.recognizes(stream.url)
         val official = MyTvSuperSource.recognizes(stream.url) || viu
         log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} proxy=${pool.label(route.target)} rule=${route.matchedRule} official=$official")
-        _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null,
+        _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null, loading = true,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
             if (viu) com.tvatlas.player.source.ViuTvSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
@@ -176,7 +179,7 @@ class PlaybackCoordinator(
         }
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
         _player.value = instance
-        _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null)
+        _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null, loading = false)
         log?.event("INFO", "PLAYER", "ExoPlayer created; DASH/DRM=${source != null}")
         var lastLoadType = C.DATA_TYPE_UNKNOWN
         var loadErrorAt = 0L
@@ -281,6 +284,6 @@ class PlaybackCoordinator(
         drmActive?.set(false); drmActive = null
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
-        if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, lastAttempt = null, error = null)
+        if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, error = null, loading = false, successAt = null)
     }
 }

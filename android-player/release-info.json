@@ -1,9 +1,9 @@
 {
-  "versionCode": 26,
-  "versionName": "0.1.25",
+  "versionCode": 27,
+  "versionName": "0.1.26",
   "minSdk": 23,
-  "notes": "修复手动节点同地区回退与 DRM 初始化网络保底；更新支持自动网络回退和取消；修复阻塞连接取消与路由保存竞态；清理无效频道备用地址并提供香港多线路；优化失败重试、自动路由恢复和手机/电视操作提示。",
+  "notes": "修复停止后缺少重新播放按钮；全屏隐藏系统栏，操作按钮改为自动收起的画面浮层，触屏或遥控器可唤出；退出全屏恢复频道界面，重播保留所选线路。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.25-beta.1",
+  "releaseTag": "v0.1.26-beta.1",
   "coreVersion": "v1.19.32"
 }
