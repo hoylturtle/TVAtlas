@@ -46,10 +46,17 @@ private fun Context.activity(): Activity? = when (this) {
             else controller?.show(WindowInsetsCompat.Type.systemBars())
         }
         apply()
+        val decor = activity?.window?.decorView
+        val reapply = Runnable { apply() }
+        decor?.post(reapply)
+        val focusObserver = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused -> if (focused) apply() }
+        decor?.viewTreeObserver?.addOnWindowFocusChangeListener(focusObserver)
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) apply() }
         owner.lifecycle.addObserver(observer)
         onDispose {
             owner.lifecycle.removeObserver(observer)
+            decor?.removeCallbacks(reapply)
+            decor?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusObserver)
             controller?.show(WindowInsetsCompat.Type.systemBars())
         }
     }

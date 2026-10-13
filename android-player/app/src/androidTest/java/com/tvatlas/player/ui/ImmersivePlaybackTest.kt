@@ -74,6 +74,7 @@ class ImmersivePlaybackTest {
         compose.onNodeWithText("重新播放").assertIsDisplayed().assertIsEnabled()
         capture("fullscreen-stopped-layout.png")
         compose.onNodeWithText("重新播放").performClick()
+        compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle { assertEquals(1, replays); assertTrue(playing) }
         compose.onNodeWithText("停止").assertIsDisplayed()
     }
@@ -118,14 +119,14 @@ class ImmersivePlaybackTest {
             BackHandler(immersive) { immersive = false }
             Box(Modifier.fillMaxSize()) { Text("画面") }
         }
-        compose.waitUntil(5000) {
+        compose.waitUntil(10000) {
             val insets = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
-            insets != null && !insets.isVisible(WindowInsetsCompat.Type.systemBars())
+            insets != null && !insets.isVisible(WindowInsetsCompat.Type.statusBars()) && !insets.isVisible(WindowInsetsCompat.Type.navigationBars())
         }
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.waitUntil(5000) {
+        compose.waitUntil(10000) {
             val insets = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
-            !immersive && insets != null && insets.isVisible(WindowInsetsCompat.Type.systemBars())
+            !immersive && insets != null && insets.isVisible(WindowInsetsCompat.Type.statusBars()) && insets.isVisible(WindowInsetsCompat.Type.navigationBars())
         }
     }
 

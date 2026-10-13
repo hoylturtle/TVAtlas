@@ -112,6 +112,21 @@ jobs:
             adb pull /sdcard/Pictures/TVAtlas/fullscreen-layout.png app/build/reports/androidTests/fullscreen-layout.png
             adb pull /sdcard/Pictures/TVAtlas/fullscreen-stopped-layout.png app/build/reports/androidTests/fullscreen-stopped-layout.png
             python3 scripts/verify_upgrade_install.py
+      - name: Show native test failure details
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in Path('app/build/outputs/androidTest-results').rglob('*.xml'):
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  for failure in case.findall('failure') + case.findall('error'):
+                      print(case.get('classname'), case.get('name'), failure.text)
+          PY
       - name: Export synthetic UI fixtures for audit
         if: startsWith(github.ref, 'refs/heads/codex/tvatlas-player-fallback-audit')
         run: python3 scripts/audit_screenshots.py
