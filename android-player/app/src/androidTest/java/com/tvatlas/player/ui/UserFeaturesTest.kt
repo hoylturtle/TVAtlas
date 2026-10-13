@@ -22,6 +22,20 @@ import org.junit.Test
 @OptIn(ExperimentalTestApi::class)
 class UserFeaturesTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+    @Test fun favoriteCountAndGroupExpansionDescribeVisibleChannels() {
+        val channels = listOf("Alpha", "Beta").map { name -> Channel(name, name, "香港", streams = listOf(Stream(name, "https://example.com/$name", "p"))) }
+        val library = Library(emptyList(), channels, emptyList(), RuleConfig())
+        compose.setContent { MaterialTheme(colorScheme = colors) {
+            ChannelList(library, PlaybackStatus(), false, Modifier.size(360.dp, 640.dp), {}, {}, {}, setOf("Alpha"))
+        } }
+        compose.onNodeWithText("收藏", substring = false).performClick()
+        compose.onNodeWithText("1 个频道 / 共 2 个").assertIsDisplayed()
+        compose.onNodeWithText("Alpha").assertIsDisplayed()
+        compose.onNodeWithText("⌄  香港 · 综合").performClick()
+        compose.onNodeWithText("Alpha").assertDoesNotExist()
+        compose.onNodeWithText("›  香港 · 综合").performClick()
+        compose.onNodeWithText("Alpha").assertIsDisplayed()
+    }
     @Test fun favoriteAndRecentFiltersPreserveChannelSelection() {
         val channels = listOf("Alpha", "Beta").map { name -> Channel(name, name, "香港", streams = listOf(Stream(name, "https://example.com/$name", "p"))) }
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())

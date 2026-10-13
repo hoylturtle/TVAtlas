@@ -31,6 +31,6 @@ fun Channel.browseGroup(): String = if (isHongKong()) normalizeHongKongGroup().g
     PlaybackRegion.TAIWAN -> "台湾频道"
     PlaybackRegion.JAPAN -> "日本频道"
     PlaybackRegion.KOREA -> "韩国频道"
-    PlaybackRegion.HONG_KONG -> "香港 · 综合"
+    PlaybackRegion.HONG_KONG -> "澳门频道"
     null -> "其他频道"
 }

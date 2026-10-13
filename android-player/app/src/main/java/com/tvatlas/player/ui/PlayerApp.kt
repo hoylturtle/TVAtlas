@@ -227,6 +227,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
+    var collapsed by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
@@ -234,7 +235,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
-                TvTextButton(onClick = { mode = index }, modifier = Modifier.weight(1f).selectionOutline(mode == index),
+                TvTextButton(onClick = { mode = index; collapsed = emptyList() }, modifier = Modifier.weight(1f).selectionOutline(mode == index),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(label) }
             }
         }
@@ -256,8 +257,11 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
             LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 grouped.forEach { (group, channels) ->
                     item(key = "group:$group") {
-                        val actualExpanded = group in expanded || query.isNotBlank() || mode != 0
-                        TvTextButton(onClick = { if (mode == 0 && query.isBlank()) expanded = if (group in expanded) expanded - group else expanded + group },
+                        val actualExpanded = query.isNotBlank() || if (mode != 0) group !in collapsed else group in expanded
+                        TvTextButton(onClick = { if (query.isBlank()) {
+                            if (mode != 0) collapsed = if (group in collapsed) collapsed - group else collapsed + group
+                            else expanded = if (group in expanded) expanded - group else expanded + group
+                        } },
                             modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (actualExpanded) "已展开" else "已收起" }
                                 .then(if (tv) Modifier.tvFocusOutline() else Modifier)
                                 .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
@@ -266,7 +270,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                             Text("${channels.size}")
                         }
                     }
-                    if (group in expanded || query.isNotBlank() || mode != 0) items(channels, key = { it.id }) { channel ->
+                    if (query.isNotBlank() || if (mode != 0) group !in collapsed else group in expanded) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
                             leadingContent = if (status.channelId == channel.id) ({ Text("▶", Modifier.semantics { contentDescription = "正在播放" }) }) else null,

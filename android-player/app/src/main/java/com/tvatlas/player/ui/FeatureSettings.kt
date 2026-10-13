@@ -62,8 +62,7 @@ import com.tvatlas.player.storage.NetworkAccess
             } }
         }
         Text("手机和平板按此范围使用网络；电视不限制 Wi-Fi 或有线网络。VPN 按有效网络识别。", style = MaterialTheme.typography.bodySmall)
-        PreferenceSwitch("手机移动数据播放／下载前提醒", options.warnMetered) { enabled -> model.editOptions { it.copy(warnMetered = enabled) } }
-        PreferenceSwitch("仅非计费网络下载 APK", options.wifiUpdates) { enabled -> model.editOptions { it.copy(wifiUpdates = enabled) } }
+        PreferenceSwitch("手机移动数据播放／APK 下载前提醒", options.warnMetered) { enabled -> model.editOptions { it.copy(warnMetered = enabled) } }
         TvOutlinedButton(onClick = { quotaEdit = true }, modifier = Modifier.fillMaxWidth()) {
             Text(if (options.limitMiB == 0L) "流量提醒：未设置" else "累计 ${options.limitMiB} MiB 时提醒")
         }

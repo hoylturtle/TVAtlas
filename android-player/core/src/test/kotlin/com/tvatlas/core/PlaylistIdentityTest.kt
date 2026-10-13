@@ -28,5 +28,6 @@ class PlaylistIdentityTest {
         assertEquals(setOf("香港 · 综合", "香港 · 新闻", "香港 · 影视"), channels.map { it.browseGroup() }.toSet())
         assertEquals("大陆频道", channels.first().copy(group = "中国大陆 · 体育").browseGroup())
         assertEquals("台湾频道", channels.first().copy(group = "台湾 · 电影").browseGroup())
+        assertEquals("澳门频道", channels.first().copy(group = "澳门 · 综合").browseGroup())
     }
 }

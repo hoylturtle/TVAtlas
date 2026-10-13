@@ -126,7 +126,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun openUpdateDownload() {
         val release = _update.value.release ?: return
         if (!allowCurrentNetwork(options.value)) { _message.value = networkPolicyMessage(); return }
-        if (!television && options.value.wifiUpdates && isMetered()) { _message.value = "当前为计费网络，请连接 Wi-Fi 或关闭仅非计费网络下载设置"; return }
         if (needsConsent()) { _pendingDownload.value = true; return }
         if (_update.value.downloading || release.versionCode <= BuildConfig.VERSION_CODE || release.minSdk > android.os.Build.VERSION.SDK_INT) return
         downloadedApk = null
@@ -231,7 +230,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 if (allowCurrentNetwork(options.value)) status.channelId?.let { _pendingPlay.value = it to status.selectedStreamId }
                 else _message.value = networkPolicyMessage()
             }
-            if (_update.value.downloading && (!allowCurrentNetwork(options.value) || (!television && options.value.wifiUpdates && isMetered()) || needsConsent())) {
+            if (_update.value.downloading && (!allowCurrentNetwork(options.value) || needsConsent())) {
                 cancelUpdate()
                 _update.update { it.copy(error = "网络已切换，下载已停止；请确认网络设置后重新下载") }
                 debugLog.event("INFO", "UPDATE_DOWNLOAD", "cancelled by network policy")
