@@ -277,7 +277,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
             fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
             fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
                 RouteType.DIRECT -> "直连"
-                RouteType.PROXY -> library.profiles.firstOrNull { it.id == attempt.target.profile }?.let { playbackRegion(it.name)?.label }?.let { "$it代理" } ?: "代理"
+                RouteType.PROXY -> library.profiles.firstOrNull { it.id == attempt.target.profile }?.let { playbackRegion(it.name)?.label }?.let { "${it}代理" } ?: "代理"
                 RouteType.AUTO -> "自动代理"
             } }.orEmpty())
 
