@@ -18,6 +18,14 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
     private val mutex = Mutex()
     private val _health = MutableStateFlow<Map<String, NodeHealth>>(emptyMap())
     val health = _health.asStateFlow()
+    private val _direct = MutableStateFlow<NodeHealth?>(null)
+    val direct = _direct.asStateFlow()
+    private val directMutex = Mutex()
+    suspend fun measureDirect() {
+        if (_direct.value?.fresh(System.currentTimeMillis()) == true || !directMutex.tryLock()) return
+        try { _direct.value = withContext(Dispatchers.IO) { NodeHealth(probe(RouteTarget.DIRECT), System.currentTimeMillis()) } }
+        finally { directMutex.unlock() }
+    }
     private val _testing = MutableStateFlow(false)
     val testing = _testing.asStateFlow()
     private var generation = 0L

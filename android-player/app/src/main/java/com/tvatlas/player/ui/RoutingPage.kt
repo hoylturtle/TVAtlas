@@ -85,7 +85,7 @@ import com.tvatlas.player.storage.*
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("订阅下载网络", style = MaterialTheme.typography.titleMedium)
                         SubscriptionNetworkPicker(library.profiles, subscriptionRoute, !busy, onSubscriptionRoute)
-                        Text("自动：先直连，失败后尝试已有节点，优先香港。此设置只影响订阅下载。",
+                        Text("自动：先直连，失败后尝试已有节点，优先香港。用于节点订阅、频道源和节目单刷新，不改变播放线路。",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (updatingId != null) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在下载并校验节点…", style = MaterialTheme.typography.bodySmall) }
                         if (feedback?.id == null && feedback != null) Text(feedback.message,

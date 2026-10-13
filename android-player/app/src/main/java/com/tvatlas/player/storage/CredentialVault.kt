@@ -11,7 +11,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import java.nio.ByteBuffer
 
-data class Credentials(val username: String, val password: String)
+@kotlinx.serialization.Serializable data class Credentials(val username: String, val password: String)
 
 /** Both username and password remain in non-backed-up app storage, encrypted by a device-local key. */
 class CredentialVault(context: Context) {
@@ -45,6 +45,10 @@ class CredentialVault(context: Context) {
         val username = ByteArray(data.int).also { data.get(it) }.toString(Charsets.UTF_8)
         val password = ByteArray(data.remaining()).also { data.get(it) }.toString(Charsets.UTF_8)
         return Credentials(username, password)
+    }
+    @Synchronized fun snapshot(): Map<String, Credentials> = preferences.all.keys.associateWith { requireNotNull(get(it)) }
+    @Synchronized fun replace(values: Map<String, Credentials>) {
+        check(preferences.edit().clear().commit()); values.forEach { (id, value) -> put(id, value) }
     }
     fun putSecret(id: String, value: String?) = put(id, value?.let { Credentials("secret", it) })
     fun secret(id: String): String? = get(id)?.password

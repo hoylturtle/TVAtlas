@@ -6,38 +6,67 @@ import kotlinx.coroutines.flow.Flow
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+@kotlinx.serialization.Serializable
 @Entity(tableName = "playlists") data class PlaylistRow(
     @PrimaryKey val id: String, val name: String, val url: String,
     val enabled: Boolean = true, val refreshIntervalHours: Int = 24, val lastUpdatedAt: Long? = null,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "channels") data class ChannelRow(
     @PrimaryKey val id: String, val name: String, val channelGroup: String,
     val logo: String?, val tvgId: String?, val manualRoute: String? = null,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "streams", indices = [Index("channelId"), Index("sourcePlaylistId")]) data class StreamRow(
     @PrimaryKey val id: String, val channelId: String, val url: String, val sourcePlaylistId: String,
     val manualRoute: String? = null, val lastSuccessAt: Long? = null,
     val lastFailureAt: Long? = null, val failureCount: Int = 0,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "proxies") data class ProxyRow(
     @PrimaryKey val id: String, val name: String, val type: String, val host: String,
     val port: Int, val enabled: Boolean, val subscriptionId: String? = null,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "subscriptions") data class SubscriptionRow(
     @PrimaryKey val id: String, val name: String, val lastUpdatedAt: Long, val nodeCount: Int,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "history") data class HistoryRow(
     @PrimaryKey val channelId: String, val streamId: String, val target: String, val at: Long,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "failures", primaryKeys = ["channelId", "streamId", "target"]) data class FailureRow(
     val channelId: String, val streamId: String, val target: String, val reason: String, val at: Long,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "rule_files") data class RuleFileRow(
     @PrimaryKey val id: String, val name: String, val json: String, val importedAt: Long, val active: Boolean,
 )
+@kotlinx.serialization.Serializable
 @Entity(tableName = "rules") data class RulesRow(@PrimaryKey val id: Int = 1, val json: String)
 
 @Dao interface PlayerDao {
+    @Query("SELECT * FROM rules") suspend fun rulesSnapshot(): List<RulesRow>
+    @Query("DELETE FROM rules") suspend fun clearRules()
+    @Query("SELECT * FROM rule_files") suspend fun rulefilesSnapshot(): List<RuleFileRow>
+    @Query("DELETE FROM rule_files") suspend fun clearRulefiles()
+    @Query("SELECT * FROM failures") suspend fun failuresSnapshot(): List<FailureRow>
+    @Query("DELETE FROM failures") suspend fun clearFailures()
+    @Query("SELECT * FROM history") suspend fun historySnapshot(): List<HistoryRow>
+    @Query("DELETE FROM history") suspend fun clearHistory()
+    @Query("SELECT * FROM subscriptions") suspend fun subscriptionsSnapshot(): List<SubscriptionRow>
+    @Query("DELETE FROM subscriptions") suspend fun clearSubscriptions()
+    @Query("SELECT * FROM proxies") suspend fun proxiesSnapshot(): List<ProxyRow>
+    @Query("DELETE FROM proxies") suspend fun clearProxies()
+    @Query("SELECT * FROM streams") suspend fun streamsSnapshot(): List<StreamRow>
+    @Query("DELETE FROM streams") suspend fun clearStreams()
+    @Query("SELECT * FROM channels") suspend fun channelsSnapshot(): List<ChannelRow>
+    @Query("DELETE FROM channels") suspend fun clearChannels()
+    @Query("SELECT * FROM playlists") suspend fun playlistsSnapshot(): List<PlaylistRow>
+    @Query("DELETE FROM playlists") suspend fun clearPlaylists()
+    @Query("SELECT * FROM history ORDER BY at DESC LIMIT 100") fun recent(): Flow<List<HistoryRow>>
+
     @Query("SELECT * FROM playlists WHERE id = :id") suspend fun playlist(id: String): PlaylistRow?
     @Query("SELECT * FROM playlists ORDER BY name") fun playlists(): Flow<List<PlaylistRow>>
     @Query("SELECT * FROM channels ORDER BY channelGroup, name") fun channels(): Flow<List<ChannelRow>>

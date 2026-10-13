@@ -53,6 +53,8 @@ class PlaybackCoordinator(
 ) {
     private val _player = MutableStateFlow<ExoPlayer?>(null)
     val player = _player.asStateFlow()
+    private val _speed = MutableStateFlow(0L)
+    val speed = _speed.asStateFlow()
     private val _status = MutableStateFlow(PlaybackStatus())
     val status = _status.asStateFlow()
     private var session: FailoverSession? = null
@@ -63,6 +65,7 @@ class PlaybackCoordinator(
     private val renewed = mutableSetOf<RouteAttempt>()
 
     fun preparing(channel: Channel, streamId: String? = null) {
+        _speed.value = 0L
         _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…", loading = true, selectedStreamId = streamId)
     }
 
@@ -95,6 +98,7 @@ class PlaybackCoordinator(
         watcher?.cancel()
         drmActive?.set(false); drmActive = null
         _player.value?.release(); _player.value = null
+        _speed.value = 0L
         if (route == null) {
             log?.event("ERROR", "PLAY", "all routes exhausted channel=${channel.name} detail=${_status.value.error}")
             _status.value = _status.value.copy(message = "${channel.name} 的可用线路均未成功，请检查播放源或路由设置", attempt = null, loading = false)
@@ -126,6 +130,8 @@ class PlaybackCoordinator(
         if (token != generation) return
         val mediaRequests = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val mediaBytes = AtomicLong(0)
+        val downloadBytes = AtomicLong(0)
+        _speed.value = 0L
         // Official session, media and DRM must use the same concrete route, without domain-rule overrides.
         val selectedClient = if (official) withContext(Dispatchers.IO) { pool.client(route.target) } else null
         val mediaCalls: okhttp3.Call.Factory = if (selectedClient != null) selectedClient.newBuilder()
@@ -138,7 +144,10 @@ class PlaybackCoordinator(
                 override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
                 override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
                 override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
-                    if (isNetwork && dataSpec.uri.toString() in mediaRequests) mediaBytes.addAndGet(bytesTransferred.toLong())
+                    if (isNetwork) {
+                        downloadBytes.addAndGet(bytesTransferred.toLong())
+                        if (dataSpec.uri.toString() in mediaRequests) mediaBytes.addAndGet(bytesTransferred.toLong())
+                    }
                 }
             })
         val mediaSourceFactory = DefaultMediaSourceFactory(factory)
@@ -258,9 +267,15 @@ class PlaybackCoordinator(
             val gate = SuccessGate()
             var waitingSince = SystemClock.elapsedRealtime()
             var previousPosition = 0L
+            var sampleAt = SystemClock.elapsedRealtime()
+            var sampleBytes = 0L
             while (isActive && token == generation && instance === _player.value && !failing) {
                 delay(500)
                 val now = SystemClock.elapsedRealtime()
+                if (now - sampleAt >= 1000) {
+                    val bytes = downloadBytes.get(); _speed.value = ((bytes - sampleBytes).coerceAtLeast(0) * 1000 / (now - sampleAt))
+                    sampleBytes = bytes; sampleAt = now
+                }
                 val progressing = instance.isPlaying && instance.currentPosition != previousPosition
                 previousPosition = instance.currentPosition
                 if (progressing || !instance.playWhenReady) waitingSince = now
@@ -281,9 +296,11 @@ class PlaybackCoordinator(
     fun stop(showMessage: Boolean = true) {
         log?.event("INFO", "PLAY", "stop showMessage=$showMessage")
         generation++
+        _speed.value = 0L
         drmActive?.set(false); drmActive = null
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
+        _speed.value = 0L
         if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, error = null, loading = false, successAt = null)
     }
 }

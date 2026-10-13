@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +68,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     MaterialTheme(colorScheme = colors) {
         val library by model.library.collectAsStateWithLifecycle()
         val status by model.playback.status.collectAsStateWithLifecycle()
+        val options by model.options.collectAsStateWithLifecycle()
+        val recent by model.recent.collectAsStateWithLifecycle()
+        val pendingPlay by model.pendingPlay.collectAsStateWithLifecycle()
         val busy by model.busy.collectAsStateWithLifecycle()
         val message by model.message.collectAsStateWithLifecycle()
         val update by model.update.collectAsStateWithLifecycle()
@@ -157,10 +161,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                         when {
                             immersive -> video(Modifier.fillMaxSize())
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
-                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }) },
+                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) },
                                 picture = { video(Modifier.fillMaxSize()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
-                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }) })
+                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) })
                         }
                     }
                     1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback)
@@ -170,11 +174,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
                         subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() }, nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile)
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
-                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate, trafficContent = { TrafficStatistics(model.traffic) })
+                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate, trafficContent = { TrafficStatistics(model.traffic) }, extrasContent = { FeatureSettings(model) })
                 }
                 }
             }
         }
+        if (pendingPlay != null) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为计费网络") },
+            text = { Text("直播可能消耗较多流量。继续后，本次运行允许在计费网络播放。") },
+            confirmButton = { TvTextButton(onClick = model::approveMetered) { Text("继续播放") } },
+            dismissButton = { TvTextButton(onClick = model::dismissMetered) { Text("取消") } })
         if (logsOpen) {
             val logLines by model.debugLog.lines.collectAsStateWithLifecycle()
             DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
@@ -193,19 +201,29 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         }
         if (detail != null) ChannelDialog(detail, library.profiles, library.playlists, status, { detailId = null },
             { streamId, target -> model.setRoute(detail.id, streamId, target) },
-            { streamId -> model.play(detail, streamId); detailId = null }, { model.resetChannelRoutes(detail.id) }, busy)
+            { streamId -> model.play(detail, streamId); detailId = null }, { model.resetChannelRoutes(detail.id) }, busy, guide = { ProgrammeInfo(model.epg, detail, true) }, favorite = {
+                TvTextButton(onClick = { model.toggleFavorite(detail) }, modifier = Modifier.fillMaxWidth().selectionOutline(detail.id in options.favorites)) { Text(if (detail.id in options.favorites) "取消收藏" else "收藏频道") } })
     }
 }
 
 @Composable internal fun ChannelList(library: Library, status: PlaybackStatus, tv: Boolean, modifier: Modifier,
-    onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit) {
+    onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit,
+    favorites: Set<String> = emptySet(), recent: List<String> = emptyList(), onFavorite: (Channel) -> Unit = {},
+    programme: @Composable (Channel) -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var mode by rememberSaveable { mutableIntStateOf(0) }
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
         if (tv) Text("确认展开分组 · 长按频道设置线路", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
+                TvTextButton(onClick = { mode = index }, modifier = Modifier.weight(1f).selectionOutline(mode == index),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(label) }
+            }
+        }
         Text("${library.channels.size} 个频道", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.labelLarge)
         if (library.channels.isEmpty()) {
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -214,7 +232,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                 TvButton(onClick = onAdd) { Text("添加播放列表") }
             }
         } else {
-            val filtered = remember(library.channels, query) { library.channels.filter { it.name.contains(query, true) || it.group.contains(query, true) }.hongKongFirst() }
+            val filtered = remember(library.channels, query, mode, favorites, recent) {
+                val items = library.channels.filter { (it.name.contains(query, true) || it.group.contains(query, true)) &&
+                    (mode == 0 || mode == 1 && it.id in favorites || mode == 2 && it.id in recent) }
+                if (mode == 2) items.sortedBy { recent.indexOf(it.id) } else items.hongKongFirst()
+            }
+            if (filtered.isEmpty()) Text(if (mode == 1) "尚无收藏频道" else if (mode == 2) "尚无成功观看记录" else "没有匹配频道", style = MaterialTheme.typography.bodySmall)
             val grouped = remember(filtered) { filtered.groupBy { it.group.ifBlank { "未分组" } } }
             LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 grouped.forEach { (group, channels) ->
@@ -228,11 +251,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                             Text("${channels.size}")
                         }
                     }
-                    if (group in expanded || query.isNotBlank()) items(channels, key = { it.id }) { channel ->
+                    if (group in expanded || query.isNotBlank() || mode != 0) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
-                            trailingContent = { if (status.channelId == channel.id) Text("●", color = MaterialTheme.colorScheme.onPrimary) },
-                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface),
+                            supportingContent = { programme(channel) },
+                            trailingContent = { TvTextButton(onClick = { onFavorite(channel) }) {
+                                Text(if (channel.id in favorites) "★" else "☆", color = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
+                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                supportingColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
                             modifier = Modifier.onFocusChanged { focused = it.isFocused }
                                 .border(3.dp, if (focused || status.channelId == channel.id) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
@@ -257,6 +284,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
 @Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean, immersive: Boolean, compact: Boolean,
     onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()
+    var tracksOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(player) { if (player == null) tracksOpen = false }
     val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
     val picture: @Composable () -> Unit = {
             if (player == null) Text(if (compact && status.error != null && !status.loading) "播放未成功" else status.message, Modifier.padding(16.dp), color = Color.White, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -280,7 +309,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
             canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
             fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
-            fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
+            tail = { if (immersive) { PlaybackNetworkInfo(model, displayedAttempt); TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("画质", maxLines = 1) } } }, fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
                 RouteType.DIRECT -> "直连"
                 RouteType.PROXY -> library.profiles.firstOrNull { it.id == attempt.target.profile }?.let { playbackRegion(it.name)?.label }?.let { "${it}代理" } ?: "代理"
                 RouteType.AUTO -> "自动代理"
@@ -299,6 +329,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
         onChannel, onDetails, picture, controls)
     else PlayerPaneLayout(fillPicture, modifier, picture, controls)
+    if (tracksOpen && player != null) PlaybackTrackDialog(requireNotNull(player)) { tracksOpen = false }
 }
 
 
@@ -315,7 +346,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
 @Composable internal fun VideoControls(status: String, line: String, proxy: String,
     canDetails: Boolean, canStop: Boolean, onDetails: () -> Unit, onFullscreen: () -> Unit, onStop: () -> Unit,
     canReplay: Boolean = false, onReplay: () -> Unit = {}, fullscreenLabel: String = "全屏 / 频道",
-    immersive: Boolean = false, fullscreenRoute: String = proxy) {
+    immersive: Boolean = false, fullscreenRoute: String = proxy, tail: @Composable () -> Unit = {}) {
     if (immersive) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -325,6 +356,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                     Modifier.fillMaxWidth(), color = LocalContentColor.current, style = MaterialTheme.typography.bodySmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            tail()
             TvTextButton(onClick = onFullscreen, colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text(fullscreenLabel, color = LocalContentColor.current, maxLines = 1) }
             TvTextButton(onClick = if (canReplay) onReplay else onStop, enabled = canStop || canReplay,
                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
@@ -409,13 +441,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
 
 @Composable internal fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, playlists: List<Playlist>, status: PlaybackStatus, onDismiss: () -> Unit,
     onRoute: (String?, RouteTarget?) -> Unit, onPlay: (String?) -> Unit,
-    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false) {
+    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false, guide: @Composable () -> Unit = {}, favorite: @Composable () -> Unit = {}) {
     var selectedStreamId by remember(channel.id) {
         mutableStateOf((status.attempt ?: status.lastAttempt)?.takeIf { status.channelId == channel.id }?.streamId)
     }
     val selectedStream = channel.streams.firstOrNull { it.id == selectedStreamId }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(channel.name) }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            favorite()
+            guide()
             Text("播放源", style = MaterialTheme.typography.labelLarge)
             var lineMenu by remember { mutableStateOf(false) }
             Box {
