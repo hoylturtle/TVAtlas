@@ -50,8 +50,8 @@ class ImmersivePlaybackTest {
         compose.onNodeWithTag("picture", useUnmergedTree = true).assertWidthIsEqualTo(640.dp).assertHeightIsEqualTo(360.dp)
         compose.onNodeWithText("退出全屏").assertIsDisplayed()
         compose.onNodeWithText("线路 | 香港代理").assertIsDisplayed()
-        compose.runOnIdle { assertTrue(compose.onNodeWithTag("playback-controls").fetchSemanticsNode().boundsInRoot.height /
-            InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density <= 96f) }
+        assertTrue(compose.onNodeWithTag("playback-controls").fetchSemanticsNode().boundsInRoot.height /
+            InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density <= 96f)
         compose.onNodeWithText("正在播放").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(5100)
         compose.onNodeWithTag("playback-controls").assertDoesNotExist()
