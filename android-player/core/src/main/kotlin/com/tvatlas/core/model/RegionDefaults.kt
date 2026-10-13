@@ -5,7 +5,9 @@ private val hongKongLabel = Regex("(?i)(?<![a-z])(?:hk|hkg|hong[ _-]*kong)(?![a-
 fun isHongKongLabel(value: String): Boolean =
     value.contains("香港") || value.contains("🇭🇰") || hongKongLabel.containsMatchIn(value)
 
-fun Channel.isHongKong(): Boolean = isHongKongLabel(group) || tvgId?.substringBefore('@')?.endsWith(".hk", true) == true
+private val hongKongChannelNames = setOf("翡翠台", "明珠台", "TVB Plus", "翡翠台PLUS", "ViuTV", "ViuTVsix", "HOY TV", "HOY Infotainment")
+fun Channel.isHongKong(): Boolean = isHongKongLabel(group) || tvgId?.substringBefore('@')?.endsWith(".hk", true) == true ||
+    (playbackRegion() == null && name in hongKongChannelNames)
 
 /** Stable sort keeps the playlist order within each region. */
 fun List<Channel>.hongKongFirst(): List<Channel> = sortedBy { if (it.isHongKong()) 0 else 1 }

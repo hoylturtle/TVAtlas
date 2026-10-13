@@ -76,6 +76,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val operations = kotlinx.coroutines.sync.Mutex()
     private val routeChanges = kotlinx.coroutines.sync.Mutex()
     private var playJob: Job? = null
+    private var playIntent = 0L
+    private var restartingConfiguration = false
     private val _update = MutableStateFlow(UpdateState())
     val update = _update.asStateFlow()
     private var updateJob: Job? = null
@@ -249,7 +251,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun needsConsent() = com.tvatlas.player.network.needsMobileConsent(television, isMobileNetwork(), options.value.warnMetered, meteredAllowed)
     private fun requireNetwork(prefs: UserOptions) { if (!allowCurrentNetwork(prefs)) throw IllegalArgumentException(networkPolicyMessage()) }
     private fun guardPlaybackNetwork(channel: Channel, stream: String?): Boolean {
-        if (_restoring.value) { _message.value = "正在恢复配置，请稍后播放"; return false }
+        if (_restoring.value || restartingConfiguration) { _message.value = "正在更新配置，请稍后播放"; return false }
         if (!allowCurrentNetwork(options.value)) { _message.value = networkPolicyMessage(); return false }
         if (needsConsent()) { _pendingPlay.value = channel.id to stream; return false }
         return true
@@ -398,6 +400,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun play(channel: Channel, streamId: String? = null) {
         if (!guardPlaybackNetwork(channel, streamId)) return
+        playIntent++
         val refreshing = autoRefreshJob; refreshing?.cancel()
         officialGuideJob?.cancel(); officialGuideJob = viewModelScope.launch { refreshOfficialGuide(channel) }
         debugLog.event("INFO", "PLAY", "requested channel=${channel.name} line=${streamId?.let { "selected" } ?: "automatic"}")
@@ -428,7 +431,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun stopPlayback(showMessage: Boolean = true) { playJob?.cancel(); playback.stop(showMessage) }
+    fun stopPlayback(showMessage: Boolean = true) { playIntent++; playJob?.cancel(); playback.stop(showMessage) }
     private suspend fun synchronizeSubscriptionClients() = withContext(Dispatchers.IO) {
         // Read the committed database snapshot rather than a possibly stale StateFlow value.
         latency.invalidate()
@@ -440,9 +443,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val status = playback.status.value
         val resume = status.channelId?.takeIf { playback.player.value != null || status.loading }
         if (resume != null) { stopPlayback(false); _message.value = "更新配置后将恢复播放" }
+        val intent = playIntent
+        restartingConfiguration = true
         try { work() }
         finally {
-            if (resume != null && !_restoring.value) {
+            restartingConfiguration = false
+            if (resume != null && !_restoring.value && playIntent == intent && currentCoroutineContext().isActive) {
                 val channel = repository.library.first().channels.firstOrNull { it.id == resume }
                 if (channel != null) play(channel, status.selectedStreamId)
                 else { playback.stop(); _message.value = "当前频道来源已移除，请选择其他频道" }
