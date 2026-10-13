@@ -134,7 +134,11 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
                             VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, wide || immersive, immersive,
-                                { if (wide) channelPanelOpen = !channelPanelOpen else if (immersive) { fullscreen = false; landscapeChannels = true } else fullscreen = true },
+                                { if (immersive) {
+                                    fullscreen = false; landscapeChannels = true; channelPanelOpen = true
+                                } else {
+                                    fullscreen = true; landscapeChannels = false; channelPanelOpen = false
+                                } },
                                 { channelPanelOpen = true; fullscreen = false; landscapeChannels = true },
                                 { detailId = status.channelId }, { offset ->
                                     if (library.channels.isNotEmpty()) {
@@ -263,7 +267,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 })
         }
     val controls: @Composable () -> Unit = {
-        if (tv && pictureFocused) Text("↑↓ 换台   确认 / ← 显示操作   长按确认 线路设置   返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+        if (tv && pictureFocused) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         val displayedAttempt = status.attempt ?: status.lastAttempt
         VideoControls(status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }

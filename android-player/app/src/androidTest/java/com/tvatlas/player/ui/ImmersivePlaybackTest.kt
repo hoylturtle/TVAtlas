@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
@@ -65,7 +66,7 @@ class ImmersivePlaybackTest {
         compose.mainClock.autoAdvance = false
         compose.setContent { MaterialTheme(colorScheme = colors) {
             ImmersivePlaybackLayout(playing, false, Modifier.size(640.dp, 360.dp),
-                picture = { Text(if (playing) "画面" else "已停止播放") },
+                picture = { Text(if (playing) "画面" else "已停止播放", color = Color.White) },
                 controls = { VideoControls(if (playing) "正在播放" else "已停止播放", "线路", "香港", true, playing,
                     {}, {}, { playing = false }, canReplay = !playing, onReplay = { replays++; playing = true }, fullscreenLabel = "退出全屏") })
         } }
