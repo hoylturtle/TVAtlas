@@ -304,6 +304,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
 @Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean, immersive: Boolean, compact: Boolean,
     onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()
+    val networkTarget by model.playback.networkTarget.collectAsStateWithLifecycle()
+    val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
     var tracksOpen by remember { mutableStateOf(false) }
     LaunchedEffect(player) { if (player == null) tracksOpen = false }
     val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
@@ -325,16 +327,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         val displayedAttempt = status.attempt ?: status.lastAttempt
         VideoControls(if (compact && status.error != null && !status.loading) "播放未成功" else status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
-        } ?: "线路", displayedAttempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
+        } ?: "线路", playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions),
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
             canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
             fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
-            tail = { if (immersive) { PlaybackNetworkInfo(model, displayedAttempt); TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
-                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("画质", maxLines = 1) } } }, fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
-                RouteType.DIRECT -> "直连"
-                RouteType.PROXY -> library.profiles.firstOrNull { it.id == attempt.target.profile }?.let { playbackRegion(it.name)?.label }?.let { "${it}代理" } ?: "代理"
-                RouteType.AUTO -> "自动代理"
-            } }.orEmpty())
+            tail = {
+                PlaybackNetworkInfo(model, networkTarget ?: displayedAttempt?.target)
+                if (immersive) TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("画质", maxLines = 1) }
+            }, fullscreenRoute = playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions))
 
         if (!immersive && !compact && player == null && !status.loading && status.error != null) PlaybackRecoveryCard(status.error,
             onRetry = replay, onChooseRoute = onDetails)
@@ -385,10 +386,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         }
         return
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (proxy.isNotBlank()) Text(proxy, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            tail()
+        }
+        if (proxy.isNotBlank()) Text(proxy, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {

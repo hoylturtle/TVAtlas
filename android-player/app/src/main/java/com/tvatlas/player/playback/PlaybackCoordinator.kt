@@ -56,6 +56,8 @@ class PlaybackCoordinator(
     val player = _player.asStateFlow()
     private val _speed = MutableStateFlow(0L)
     val speed = _speed.asStateFlow()
+    private val _networkTarget = MutableStateFlow<RouteTarget?>(null)
+    val networkTarget = _networkTarget.asStateFlow()
     private val _status = MutableStateFlow(PlaybackStatus())
     val status = _status.asStateFlow()
     private var session: FailoverSession? = null
@@ -107,6 +109,7 @@ class PlaybackCoordinator(
             _status.value = _status.value.copy(message = "${channel.name} 的可用线路均未成功，请检查播放源或路由设置", attempt = null, loading = false)
             return
         }
+        _networkTarget.value = route.target
         val stream = channel.streams.first { it.id == route.streamId }
         val viu = com.tvatlas.player.source.ViuTvSource.recognizes(stream.url)
         val official = MyTvSuperSource.recognizes(stream.url) || viu
@@ -139,13 +142,16 @@ class PlaybackCoordinator(
         val mediaRequests = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val mediaBytes = AtomicLong(0)
         val downloadBytes = AtomicLong(0)
+        val observedTarget = java.util.concurrent.atomic.AtomicReference(route.target)
         _speed.value = 0L
         // Official session, media and DRM must use the same concrete route, without domain-rule overrides.
         val selectedClient = if (official) withContext(Dispatchers.IO) { pool.client(route.target) } else null
         val mediaCalls: okhttp3.Call.Factory = if (selectedClient != null) selectedClient.newBuilder()
             .followRedirects(true).followSslRedirects(false).build()
             else RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target,
-                requestFailures.getOrPut(stream.id) { com.tvatlas.player.proxy.RequestRouteFailures() }, onNodeFailure)
+                requestFailures.getOrPut(stream.id) { com.tvatlas.player.proxy.RequestRouteFailures() }, onNodeFailure, { target, url ->
+                    if (url in mediaRequests || mediaBytes.get() == 0L) observedTarget.set(target)
+                })
         if (token != generation) return
         val factory = OkHttpDataSource.Factory(mediaCalls)
             .setTransferListener(object : TransferListener {
@@ -281,6 +287,7 @@ class PlaybackCoordinator(
             while (isActive && token == generation && instance === _player.value && !failing) {
                 delay(500)
                 val now = SystemClock.elapsedRealtime()
+                _networkTarget.value = observedTarget.get()
                 if (now - sampleAt >= 1000) {
                     val bytes = downloadBytes.get(); _speed.value = ((bytes - sampleBytes).coerceAtLeast(0) * 1000 / (now - sampleAt))
                     sampleBytes = bytes; sampleAt = now
@@ -305,6 +312,7 @@ class PlaybackCoordinator(
     fun stop(showMessage: Boolean = true) {
         log?.event("INFO", "PLAY", "stop showMessage=$showMessage")
         generation++
+        _networkTarget.value = null
         _speed.value = 0L
         drmActive?.set(false); drmActive = null
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null

@@ -15,6 +15,16 @@ import org.junit.Test
 class VideoLayoutTest {
     @get:Rule val compose = createComposeRule()
     private val longName = "🇭🇰 ②香港 | HKG [解锁] x1.0{VerPL6}".repeat(5)
+    @Test fun normalControlsExposeMetricsAndSubscriptionNodeWithoutFullscreen() {
+        compose.setContent {
+            MaterialTheme {
+                VideoControls("正在播放", "官方线路", "艾可云 · 香港 2", true, true, {}, {}, {},
+                    tail = { androidx.compose.material3.Text("延迟 25 ms · 网速 1 MB/s") })
+            }
+        }
+        compose.onNodeWithText("延迟 25 ms · 网速 1 MB/s").assertIsDisplayed()
+        compose.onNodeWithText("艾可云 · 香港 2").assertIsDisplayed()
+    }
     @Test fun portraitPictureKeeps169AndActionsRemainVisibleWithLongNames() {
         var fullscreen = false
         var stopped = false
