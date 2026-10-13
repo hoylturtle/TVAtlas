@@ -25,11 +25,13 @@ class NetworkRoutingTest {
             val stream = Stream("s", "http://origin.test/master.m3u8", "p")
             val context = StreamContext(Channel("c", "test", "香港", streams = listOf(stream)), stream)
             val resolver = DefaultRouteResolver(RuleConfig(rules = listOf(Rule("cdn", Match(domain = "cdn.test"), RouteTarget.proxy("hk1")))), nodes)
-            val calls = RoutedCallFactory(pool, resolver, context, RouteTarget.proxy("hk2"))
+            val observed = mutableListOf<RouteTarget>()
+            val calls = RoutedCallFactory(pool, resolver, context, RouteTarget.proxy("hk1"), onRouteUsed = { target, _ -> observed.add(target) })
             calls.newCall(Request.Builder().url("http://cdn.test/1.ts").build()).execute().use { assertEquals("first", it.body!!.string()) }
             calls.newCall(Request.Builder().url("http://cdn.test/2.ts").build()).execute().use { assertEquals("second", it.body!!.string()) }
             assertEquals(1, primary.requestCount)
             assertEquals(2, backup.requestCount)
+            assertEquals(listOf(RouteTarget.proxy("hk2"), RouteTarget.proxy("hk2")), observed)
         } finally { pool.close(); primary.shutdown(); backup.shutdown() }
     }
 

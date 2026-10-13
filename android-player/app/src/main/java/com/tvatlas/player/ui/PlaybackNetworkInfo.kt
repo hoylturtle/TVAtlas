@@ -7,16 +7,16 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tvatlas.core.model.RouteAttempt
+import com.tvatlas.core.model.RouteTarget
 import com.tvatlas.core.model.RouteType
 import com.tvatlas.player.PlayerViewModel
 
-@Composable internal fun PlaybackNetworkInfo(model: PlayerViewModel, attempt: RouteAttempt?) {
+@Composable internal fun PlaybackNetworkInfo(model: PlayerViewModel, target: RouteTarget?) {
     val health by model.nodeHealth.collectAsStateWithLifecycle()
     val direct by model.directHealth.collectAsStateWithLifecycle()
     val speed by model.playback.speed.collectAsStateWithLifecycle()
-    val sample = if (attempt?.target?.type == RouteType.DIRECT) direct else health[attempt?.target?.profile]
+    val sample = if (target?.type == RouteType.DIRECT) direct else health[target?.profile]
     val ms = sample?.takeIf { it.fresh(System.currentTimeMillis()) }?.delayMs?.let { "$it ms" } ?: "-- ms"
-    Text("$ms · ${trafficSize(speed)}/s", Modifier.widthIn(max = 180.dp), style = MaterialTheme.typography.bodySmall,
+    Text("延迟 $ms · 网速 ${trafficSize(speed)}/s", Modifier.widthIn(max = 260.dp), style = MaterialTheme.typography.bodySmall,
         color = androidx.compose.ui.graphics.Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }

@@ -23,6 +23,7 @@ class RoutedCallFactory(
     private val context: StreamContext, private val sessionTarget: RouteTarget,
     private val failures: RequestRouteFailures = RequestRouteFailures(),
     private val onFailure: (RouteTarget) -> Unit = {},
+    private val onRouteUsed: (RouteTarget, String) -> Unit = { _, _ -> },
 ) : Call.Factory {
     override fun newCall(request: Request): Call = RoutedCall(request)
     private inner class RoutedCall(private val original: Request) : Call {
@@ -65,8 +66,13 @@ class RoutedCallFactory(
                         }
                         val body = received.body
                         result = if (body == null) received else received.newBuilder().body(object : ResponseBody() {
+                            private val reported = AtomicBoolean(false)
                             private val input = object : ForwardingSource(body.source()) {
-                                override fun read(sink: okio.Buffer, byteCount: Long): Long = try { super.read(sink, byteCount) }
+                                override fun read(sink: okio.Buffer, byteCount: Long): Long = try {
+                                    val count = super.read(sink, byteCount)
+                                    if (count > 0 && received.isSuccessful && !cancelled.get() && reported.compareAndSet(false, true)) onRouteUsed(target, original.url.toString())
+                                    count
+                                }
                                     catch (error: IOException) { if (!cancelled.get()) { failures.record(request.url, target); onFailure(target) }; throw error }
                             }.buffer()
                             override fun contentType() = body.contentType()
