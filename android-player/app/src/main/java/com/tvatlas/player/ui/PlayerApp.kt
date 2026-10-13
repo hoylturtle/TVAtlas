@@ -314,14 +314,16 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
     if (immersive) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {
+            TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
                 Text(listOf(line, fullscreenRoute).filter { it.isNotBlank() }.joinToString(" | "),
-                    Modifier.fillMaxWidth(), color = Color.White, style = MaterialTheme.typography.bodySmall,
+                    Modifier.fillMaxWidth(), color = LocalContentColor.current, style = MaterialTheme.typography.bodySmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            TvTextButton(onClick = onFullscreen) { Text(fullscreenLabel, color = Color.White, maxLines = 1) }
-            TvTextButton(onClick = if (canReplay) onReplay else onStop, enabled = canStop || canReplay) {
-                Text(if (canReplay) "重新播放" else "停止", color = Color.White, maxLines = 1)
+            TvTextButton(onClick = onFullscreen, colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text(fullscreenLabel, color = LocalContentColor.current, maxLines = 1) }
+            TvTextButton(onClick = if (canReplay) onReplay else onStop, enabled = canStop || canReplay,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
+                Text(if (canReplay) "重新播放" else "停止", color = LocalContentColor.current, maxLines = 1)
             }
         }
         return

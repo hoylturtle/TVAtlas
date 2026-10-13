@@ -119,7 +119,7 @@ private fun Context.activity(): Activity? = when (this) {
             }.focusable().clickable { visible = !shown }, contentAlignment = Alignment.Center) { picture() }
         if (shown) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
             .background(Color.Black.copy(alpha = 0.28f))
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
             .onPreviewKeyEvent { event ->
                 if (tv && event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp && playing) {
                     visible = false; pictureFocus.requestFocus(); true
