@@ -42,7 +42,8 @@ class ChannelPresentationTest {
         val channel = Channel("c1", "新闻频道", "新闻", streams = listOf(first))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), true, Modifier, {}, {}, {}) } }
-        compose.onNodeWithText("›  其他").assertIsFocused().performKeyInput { pressKey(Key.Enter); pressKey(Key.DirectionDown) }
+        compose.onNodeWithText("›  其他").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("⌄  其他").performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithText("›  新闻").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.onNodeWithText("新闻频道").assertExists()
     }
