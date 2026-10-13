@@ -44,9 +44,10 @@ object M3uParser {
                             (tvg == null || it.tvgId == null || tvg == it.tvgId) &&
                             (region == null || it.playbackRegion() == null || region == it.playbackRegion()) }
                         val old = matching.singleOrNull()
-                        val stream = Stream(stableId("$playlistId\u0000${streamIdentity(line)}"), line, playlistId)
+                        val identity = tvg?.let { "tvg\u0000$it" } ?: region?.let { "${it.name}\u0000$name" } ?: name
+                        val owner = old?.id ?: stableId(identity)
+                        val stream = Stream(stableId("$playlistId\u0000$owner\u0000${streamIdentity(line)}"), line, playlistId)
                         if (old == null) {
-                            val identity = tvg?.let { "tvg\u0000$it" } ?: region?.let { "${it.name}\u0000$name" } ?: name
                             channels[identity] = Channel(stableId(identity), name, attrs["group-title"].orEmpty(),
                                 attrs["tvg-logo"], attrs["tvg-id"], listOf(stream))
                         } else if (old.streams.none { it.url == line }) {

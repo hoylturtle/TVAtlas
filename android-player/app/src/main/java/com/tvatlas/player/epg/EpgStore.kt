@@ -16,9 +16,13 @@ import java.util.*
 @Serializable data class OfficialSupplement(val updated: Long, val name: String, val programmes: List<Programme>)
 @Serializable data class CachedGuide(val source: String = "", val updated: Long = 0, val guide: Guide = Guide(),
     val supplements: Map<String, OfficialSupplement> = emptyMap())
-data class EpgState(val guide: Guide = Guide(), val loading: Boolean = false, val error: String? = null, val updated: Long = 0, val source: String = "", val officialIds: Set<String> = emptySet()) {
-    private val byChannel = guide.programmes.groupBy { it.channel }
-    private val names = guide.names.flatMap { (id, labels) -> labels.map { Guide.normalize(it) to id } }.toMap()
+data class GuideIndex(val channels: Map<String, List<Programme>>, val names: Map<String, String>) {
+    companion object { fun build(guide: Guide) = GuideIndex(guide.programmes.groupBy { it.channel },
+        guide.names.flatMap { (id, labels) -> labels.map { Guide.normalize(it) to id } }.toMap()) }
+}
+data class EpgState(val guide: Guide = Guide(), val loading: Boolean = false, val error: String? = null, val updated: Long = 0, val source: String = "", val officialIds: Set<String> = emptySet(), private val index: GuideIndex = GuideIndex.build(guide)) {
+    private val byChannel get() = index.channels
+    private val names get() = index.names
     fun entries(channel: Channel): List<Programme> {
         val id = channel.tvgId?.takeIf { it in byChannel } ?: byChannel.keys.firstOrNull { it.substringBefore('@') == channel.tvgId }
             ?: names[Guide.normalize(channel.name)] ?: channel.id.takeIf { it in byChannel }
