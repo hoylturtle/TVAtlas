@@ -107,6 +107,7 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         BackHandler(immersive) { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
         BackHandler(theater && channelPanelOpen && status.channelId != null) { channelPanelOpen = false }
         BackHandler(!immersive && tab != 0) { tab = 0 }
+        PlaybackOrientation(immersive, tv)
         PlaybackSystemBars(immersive)
         Scaffold(modifier = Modifier.fillMaxSize().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
