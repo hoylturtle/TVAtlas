@@ -44,8 +44,9 @@ class TvNavigationTest {
                 }
             } }
         }
-        compose.onNodeWithText("›  香港 · 综合").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
-        compose.onNodeWithText("⌄  香港 · 综合").performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithText("›  香港").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("⌄  香港").performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithText("›  TVB").assertIsFocused().performKeyInput { pressKey(Key.Enter); pressKey(Key.DirectionDown) }
         compose.onAllNodesWithText("翡翠台").filterToOne(isFocusable()).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertEquals(true, played) }
         val bitmap = compose.onNodeWithTag("tv-layout").captureToImage().asAndroidBitmap()

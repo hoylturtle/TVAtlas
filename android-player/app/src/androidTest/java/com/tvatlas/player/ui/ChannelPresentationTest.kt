@@ -22,14 +22,16 @@ class ChannelPresentationTest {
     private val profile = ProxyProfile("sub_internal_identifier", "香港节点", ProxyType.MIHOMO, "private.example", 443)
 
     @Test fun groupsStartCollapsedAndSearchShowsMatchesWithoutOpeningEveryGroup() {
-        val channels = listOf(Channel("c1", "CCTV 新闻", "新闻", streams = listOf(first)), Channel("c2", "体育频道", "体育", streams = listOf(second)))
+        val channels = listOf(Channel("c1", "CCTV 新闻", "中国大陆 · 新闻", streams = listOf(first)), Channel("c2", "体育频道", "体育", streams = listOf(second)))
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), false, Modifier, {}, {}, {}) } }
         compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
         compose.onNodeWithText("体育频道").assertDoesNotExist()
-        compose.onNodeWithText("›  其他频道").performClick()
+        compose.onNodeWithText("›  大陆").performClick()
+        compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
+        compose.onNodeWithText("›  CCTV").performClick()
         compose.onNodeWithText("CCTV 新闻").assertExists()
-        compose.onNodeWithText("⌄  其他频道").performClick()
+        compose.onNodeWithText("⌄  大陆").performClick()
         compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
         compose.onNodeWithText("搜索频道").performTextInput("体育")
         compose.onNodeWithText("体育频道").assertExists()
@@ -40,8 +42,23 @@ class ChannelPresentationTest {
         val channel = Channel("c1", "新闻频道", "新闻", streams = listOf(first))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), true, Modifier, {}, {}, {}) } }
-        compose.onNodeWithText("›  其他频道").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("›  其他").assertIsFocused().performKeyInput { pressKey(Key.Enter); pressKey(Key.DirectionDown) }
+        compose.onNodeWithText("›  新闻").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.onNodeWithText("新闻频道").assertExists()
+    }
+    @Test fun mainlandCctvAndSatelliteTypesExpandIndependently() {
+        val channels = listOf(Channel("cctv", "CCTV1", "中国大陆 · 央视", streams = listOf(first)),
+            Channel("gd", "广东卫视", "中国大陆 · 卫视", streams = listOf(second)))
+        compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), channels, emptyList(), RuleConfig()), PlaybackStatus(), false, Modifier, {}, {}, {}) } }
+        compose.onNodeWithText("›  大陆").performClick()
+        compose.onNodeWithText("›  CCTV").performClick()
+        compose.onNodeWithText("CCTV1").assertIsDisplayed()
+        compose.onNodeWithText("广东卫视").assertDoesNotExist()
+        compose.onNodeWithText("›  卫视").performClick()
+        compose.onNodeWithText("广东卫视").assertIsDisplayed()
+        compose.onNodeWithText("⌄  CCTV").performClick()
+        compose.onNodeWithText("CCTV1").assertDoesNotExist()
+        compose.onNodeWithText("广东卫视").assertIsDisplayed()
     }
     @Test fun selectedProxyShowsItsNameAndNoInternalId() {
         compose.setContent {

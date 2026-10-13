@@ -231,7 +231,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
-        if (tv) Text("确认展开分组 · 长按频道设置线路", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        if (tv) Text("确认展开地区 / 类型 · 长按频道设置线路", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
@@ -247,30 +247,42 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
             }
         } else {
             val filtered = remember(library.channels, query, mode, favorites, recent) {
-                val items = library.channels.filter { (it.name.contains(query, true) || it.group.contains(query, true)) &&
+                val items = library.channels.filter { (it.name.contains(query, true) || it.group.contains(query, true) || it.browseRegion().contains(query, true) || it.browseType().contains(query, true)) &&
                     (mode == 0 || mode == 1 && it.id in favorites || mode == 2 && it.id in recent) }
                 if (mode == 2) items.sortedBy { recent.indexOf(it.id) } else items.hongKongFirst()
             }
             Text("${filtered.size} 个频道" + if (filtered.size != library.channels.size) " / 共 ${library.channels.size} 个" else "", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
             if (filtered.isEmpty()) Text(if (mode == 1) "尚无收藏频道" else if (mode == 2) "尚无成功观看记录" else "没有匹配频道", style = MaterialTheme.typography.bodySmall)
-            val grouped = remember(filtered) { filtered.groupBy { it.browseGroup() } }
+            val grouped = remember(filtered) { filtered.groupBy { it.browseRegion() }.mapValues { (_, channels) -> channels.groupBy { it.browseType() } } }
+            fun open(key: String) = query.isNotBlank() || if (mode != 0) key !in collapsed else key in expanded
+            fun toggle(key: String) {
+                if (query.isNotBlank()) return
+                if (mode != 0) collapsed = if (key in collapsed) collapsed - key else collapsed + key
+                else expanded = if (key in expanded) expanded - key else expanded + key
+            }
             LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                grouped.forEach { (group, channels) ->
-                    item(key = "group:$group") {
-                        val actualExpanded = query.isNotBlank() || if (mode != 0) group !in collapsed else group in expanded
-                        TvTextButton(onClick = { if (query.isBlank()) {
-                            if (mode != 0) collapsed = if (group in collapsed) collapsed - group else collapsed + group
-                            else expanded = if (group in expanded) expanded - group else expanded + group
-                        } },
-                            modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (actualExpanded) "已展开" else "已收起" }
+                grouped.forEach { (region, types) ->
+                    val regionKey = "region:$region"
+                    item(key = regionKey) {
+                        TvTextButton(onClick = { toggle(regionKey) },
+                            modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (open(regionKey)) "已展开" else "已收起" }
                                 .then(if (tv) Modifier.tvFocusOutline() else Modifier)
-                                .then(if (tv) Modifier.focusProperties { canFocus = true } else Modifier)
-                                .then(if (tv && group == filtered.firstOrNull()?.browseGroup()) Modifier.focusRequester(firstFocus) else Modifier)) {
-                            Text("${if (actualExpanded) "⌄" else "›"}  $group", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
-                            Text("${channels.size}")
+                                .then(if (tv && region == grouped.keys.firstOrNull()) Modifier.focusRequester(firstFocus) else Modifier)) {
+                            Text("${if (open(regionKey)) "⌄" else "›"}  $region", Modifier.weight(1f), color = if (tv) LocalContentColor.current else MaterialTheme.colorScheme.secondary)
+                            Text("${types.values.sumOf { it.size }}")
                         }
                     }
-                    if (query.isNotBlank() || if (mode != 0) group !in collapsed else group in expanded) items(channels, key = { it.id }) { channel ->
+                    if (open(regionKey)) types.forEach { (type, channels) ->
+                        val typeKey = "type:$region:$type"
+                        item(key = typeKey) {
+                            TvTextButton(onClick = { toggle(typeKey) }, modifier = Modifier.fillMaxWidth().padding(start = 16.dp)
+                                .semantics { stateDescription = if (open(typeKey)) "已展开" else "已收起" }
+                                .then(if (tv) Modifier.tvFocusOutline() else Modifier)) {
+                                Text("${if (open(typeKey)) "⌄" else "›"}  $type", Modifier.weight(1f))
+                                Text("${channels.size}")
+                            }
+                        }
+                        if (open(typeKey)) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
                             leadingContent = if (status.channelId == channel.id) ({ Text("▶", Modifier.semantics { contentDescription = "正在播放" }) }) else null,
@@ -280,12 +292,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                                     modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
                             colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 supportingColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
-                            modifier = Modifier.onFocusChanged { focused = it.isFocused }
+                            modifier = Modifier.padding(start = 32.dp).onFocusChanged { focused = it.isFocused }
                                 .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
                                         event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress) { onDetails(channel); true } else false
                                 }.combinedClickable(onClick = { onPlay(channel) }, onLongClick = { onDetails(channel) }))
+                    }
                     }
                 }
             }

@@ -1,9 +1,9 @@
 {
-  "versionCode": 35,
-  "versionName": "0.1.34",
+  "versionCode": 36,
+  "versionName": "0.1.35",
   "minSdk": 23,
-  "notes": "普通播放和全屏状态栏显示实时下载网速、当前节点延迟；代理明确显示订阅名称和具体节点名。请求级 CDN 回退后同步显示实际下载节点。",
+  "notes": "频道列表改为地区 → 频道类型 → 频道两层可折叠菜单，例如香港 → TVB → 翡翠台、大陆 → CCTV → CCTV1、大陆 → 卫视 → 广东卫视。香港置顶，搜索自动展开，收藏和最近观看同步使用分级菜单；保留频道身份和路由设置。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.34-beta.1",
+  "releaseTag": "v0.1.35-beta.1",
   "coreVersion": "v1.19.32"
 }
