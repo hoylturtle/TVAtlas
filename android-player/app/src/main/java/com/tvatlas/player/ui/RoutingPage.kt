@@ -42,6 +42,7 @@ import com.tvatlas.player.storage.*
             TabRow(selectedTabIndex = section) {
                 listOf("订阅", "节点", "规则", "内核").forEachIndexed { index, title ->
                     Tab(selected = section == index, onClick = { section = index; nodeSubscription = null },
+                        selectedContentColor = MaterialTheme.colorScheme.onPrimary, unselectedContentColor = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.selectionOutline(section == index), text = { Text(title) })
                 }
             }
@@ -132,7 +133,7 @@ import com.tvatlas.player.storage.*
                         Text("大陆：直连\n港澳 → 香港 · 台湾 → 台湾\n日本 → 日本 · 韩国 → 韩国\n同地区低延迟优先，连接失败切换其他节点。", style = MaterialTheme.typography.bodyMedium)
                         Text("自定义文件未匹配时，内置规则保底生效。手动线路优先。", style = MaterialTheme.typography.bodySmall)
                         Row {
-                            RadioButton(selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = Modifier.selectionOutline(ruleFiles.none { it.active }))
+                            RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary), selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = Modifier.selectionOutline(ruleFiles.none { it.active }))
                             TvTextButton(onClick = { onSelectRule(null) }, enabled = !busy) { Text("仅使用内置规则") }
                         }
                     }
@@ -147,7 +148,7 @@ import com.tvatlas.player.storage.*
             items(ruleFiles, key = { "rulefile:${it.id}" }) { file ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp)) {
-                        RadioButton(selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = Modifier.selectionOutline(file.active))
+                        RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary), selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = Modifier.selectionOutline(file.active))
                         Column(Modifier.weight(1f)) {
                             Text(file.name, style = MaterialTheme.typography.titleMedium)
                             Text(if (file.active) "当前生效" else "未启用", style = MaterialTheme.typography.bodySmall)
