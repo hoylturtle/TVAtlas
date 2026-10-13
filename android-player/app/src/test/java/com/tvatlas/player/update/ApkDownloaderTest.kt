@@ -35,4 +35,22 @@ class ApkDownloaderTest {
             } finally { folder.deleteRecursively() }
         }
     }
+    @Test fun browser400UsesOfficialAssetAlternativeAndStillVerifiesBytes() = runBlocking {
+        MockWebServer().use { server ->
+            val folder = Files.createTempDirectory("update").toFile()
+            try {
+                server.enqueue(MockResponse().setResponseCode(400))
+                server.enqueue(MockResponse().setBody("signed-apk"))
+                val prefix = server.url("/api/releases/assets/").toString()
+                val info = release(server.url("/app.apk").toString(), "signed-apk").copy(assetApiUrl = prefix + "202")
+                val file = folder.resolve("app.apk")
+                ApkDownloader(OkHttpClient(), assetApiPrefix = prefix).download(info, file)
+                assertEquals("signed-apk", file.readText())
+                server.takeRequest()
+                assertEquals("/api/releases/assets/202", server.takeRequest().path)
+                assertFalse(folder.resolve("app.apk.part").exists())
+            } finally { folder.deleteRecursively() }
+        }
+    }
+
 }

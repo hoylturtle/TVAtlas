@@ -85,7 +85,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _update.value = UpdateState(checking = true)
         updateJob = viewModelScope.launch {
             try {
-                val release = withUpdateNetwork(false) { client -> UpdateRepository(client).latestAsync() }
+                val release = withUpdateNetwork(false) { client -> UpdateRepository(client, log = debugLog).latestAsync() }
                 _update.value = UpdateState(checked = true, release = release)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
@@ -108,23 +108,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val selected = settings.updateRoute.first()
         val profiles = repository.library.first().profiles
         withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
-        var last: Exception? = null
-        for ((index, target) in subscriptionTargets(selected, profiles).withIndex()) {
-            currentCoroutineContext().ensureActive()
-            try {
-                debugLog.event("INFO", "UPDATE_ROUTE", "attempt=${index + 1} route=${target.type} proxy=${pool.label(target)} download=$download")
-                val client = withContext(Dispatchers.IO) {
-                    pool.client(target).newBuilder().followRedirects(true).followSslRedirects(false)
-                        .connectTimeout(if (download) 10 else 5, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(if (download) 30 else 8, java.util.concurrent.TimeUnit.SECONDS)
-                        .callTimeout(if (download) 300 else 8, java.util.concurrent.TimeUnit.SECONDS).build()
-                }
-                return work(client)
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { debugLog.error("UPDATE_ROUTE", error); last = error }
-        }
-        throw last ?: UpdateException("没有可用的更新网络")
+        return com.tvatlas.player.update.withUpdateRoutes(
+            com.tvatlas.player.update.updateTargets(selected, profiles), download,
+            client = { pool.client(it) }, label = pool::label, log = debugLog, work = work)
     }
+
     fun openUpdateDownload() {
         val release = _update.value.release ?: return
         if (_update.value.downloading || release.versionCode <= BuildConfig.VERSION_CODE || release.minSdk > android.os.Build.VERSION.SDK_INT) return
@@ -135,7 +123,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 withUpdateNetwork(true) { client ->
                     _update.update { it.copy(downloadProgress = 0) }
-                    ApkDownloader(client).download(release, file) { progress ->
+                    ApkDownloader(client, log = debugLog).download(release, file) { progress ->
                         _update.update { it.copy(downloadProgress = progress) }
                     }
                 }

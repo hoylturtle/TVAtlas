@@ -58,7 +58,7 @@ import com.tvatlas.player.update.*
                 HorizontalDivider()
                 Text("更新网络", style = MaterialTheme.typography.labelLarge)
                 UpdateNetworkPicker(profiles, updateRoute, !networkBusy, onUpdateRoute)
-                Text("自动模式先直连，失败后尝试已有节点。手动选择时仅使用所选网络。",
+                Text("自动模式先直连，失败后尝试节点。选定节点优先使用，失败后尝试其他启用节点；选择直连时仅直连。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (release != null && release.versionCode > BuildConfig.VERSION_CODE) {
                     if (!release.checkComplete) Text("此安装包已校验发布信息；部分其他版本暂不可达。", style = MaterialTheme.typography.bodySmall)
