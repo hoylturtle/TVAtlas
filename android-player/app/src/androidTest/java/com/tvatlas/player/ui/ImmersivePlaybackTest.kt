@@ -94,6 +94,12 @@ class ImmersivePlaybackTest {
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("线路").assertIsFocused()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithTag("playback-controls").assertDoesNotExist()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText("线路").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight); pressKey(Key.DirectionRight); pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("重新播放").assertIsDisplayed()

@@ -62,7 +62,7 @@ private fun Context.activity(): Activity? = when (this) {
     picture: @Composable () -> Unit, controls: @Composable () -> Unit,
 ) {
     var visible by remember(contentKey) { mutableStateOf(true) }
-    var focusControls by remember { mutableStateOf(false) }
+    var controlsRequest by remember { mutableIntStateOf(0) }
     var controlsFocused by remember { mutableStateOf(false) }
     val pictureFocus = remember { FocusRequester() }
     val controlsFocus = remember { FocusRequester() }
@@ -70,8 +70,8 @@ private fun Context.activity(): Activity? = when (this) {
     LaunchedEffect(playing, visible, controlsFocused, contentKey) {
         if (playing && visible && !controlsFocused) { delay(5000); visible = false }
     }
-    LaunchedEffect(shown, tv, focusControls, playing) {
-        if (shown && tv && (focusControls || !playing)) controlsFocus.requestFocus()
+    LaunchedEffect(shown, tv, controlsRequest, playing) {
+        if (shown && tv && (controlsRequest > 0 || !playing)) controlsFocus.requestFocus()
         else pictureFocus.requestFocus()
     }
     Box(modifier.background(Color.Black).testTag("immersive-player")) {
@@ -80,18 +80,23 @@ private fun Context.activity(): Activity? = when (this) {
                 if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (event.nativeKeyEvent.isLongPress) onDetails()
-                        else { visible = true; focusControls = tv }
+                        else { visible = true; controlsRequest++ }
                         true
                     }
                     Key.DirectionUp -> { onChannel(-1); true }
                     Key.DirectionDown -> { onChannel(1); true }
-                    Key.DirectionLeft -> { visible = true; focusControls = tv; true }
+                    Key.DirectionLeft -> { visible = true; controlsRequest++; true }
                     else -> false
                 }
             }.focusable().clickable { visible = !shown }, contentAlignment = Alignment.Center) { picture() }
         if (shown) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
             .windowInsetsPadding(WindowInsets.safeDrawing)
+            .onPreviewKeyEvent { event ->
+                if (tv && event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp && playing) {
+                    visible = false; pictureFocus.requestFocus(); true
+                } else false
+            }
             .focusRequester(controlsFocus).onFocusChanged { controlsFocused = tv && it.hasFocus }.focusGroup()
             .testTag("playback-controls")) { controls() }
     }
