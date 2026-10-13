@@ -98,6 +98,7 @@ class PlaybackCoordinator(
         watcher?.cancel()
         drmActive?.set(false); drmActive = null
         _player.value?.release(); _player.value = null
+        _speed.value = 0L
         if (route == null) {
             log?.event("ERROR", "PLAY", "all routes exhausted channel=${channel.name} detail=${_status.value.error}")
             _status.value = _status.value.copy(message = "${channel.name} 的可用线路均未成功，请检查播放源或路由设置", attempt = null, loading = false)
@@ -299,6 +300,7 @@ class PlaybackCoordinator(
         drmActive?.set(false); drmActive = null
         preparation?.cancel(); watcher?.cancel(); session?.stop(); session = null
         _player.value?.release(); _player.value = null
+        _speed.value = 0L
         if (showMessage) _status.value = _status.value.copy(message = "已停止播放", attempt = null, error = null, loading = false, successAt = null)
     }
 }

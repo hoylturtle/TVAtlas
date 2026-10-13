@@ -19,7 +19,8 @@ import java.io.ByteArrayOutputStream
 
 data class Library(val playlists: List<Playlist>, val channels: List<Channel>, val profiles: List<ProxyProfile>, val rules: RuleConfig)
 
-class PlayerRepository(private val db: PlayerDatabase, private val directClient: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null) {
+class PlayerRepository(private val db: PlayerDatabase, private val directClient: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null,
+    private val fetch: (suspend (String) -> String)? = null) {
     private val dao = db.dao()
     private fun route(text: String?): RouteTarget? = text?.let { RuleCodec.json.decodeFromString<RouteTarget>(it) }
     private fun encoded(route: RouteTarget?) = route?.let { RuleCodec.json.encodeToString(it) }
@@ -60,7 +61,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
 
     suspend fun refresh(playlist: Playlist) = withContext(Dispatchers.IO) {
         require(httpUri(playlist.url) != null) { "请输入不含凭证的 HTTP(S) 地址" }
-        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).readCancellable { response ->
+        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else if (fetch != null) fetch.invoke(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).readCancellable { response ->
             log?.event("INFO", "PLAYLIST_HTTP", "status=${response.code} host=${response.request.url.host}")
             require(response.isSuccessful) { "播放列表请求失败（HTTP ${response.code}）" }
             val body = requireNotNull(response.body)
@@ -79,6 +80,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             require(bytes.size <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
             bytes.toString(Charsets.UTF_8)
         }
+        require(body.toByteArray(Charsets.UTF_8).size <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
         val parsed = M3uParser.parse(body, playlist.id)
         require(parsed.isNotEmpty()) { "没有有效的 HTTP(S) 频道，已保留旧列表" }
         db.withTransaction {

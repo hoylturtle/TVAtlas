@@ -36,7 +36,7 @@ import androidx.media3.exoplayer.ExoPlayer
                 groups.forEach { group ->
                     (0 until group.length).filter { group.isTrackSupported(it) }.forEach { index ->
                         val format = group.getTrackFormat(index)
-                        val label = if (type == C.TRACK_TYPE_VIDEO) "${format.height.takeIf { it > 0 } ?: 0}p" +
+                        val label = if (type == C.TRACK_TYPE_VIDEO) (format.height.takeIf { it > 0 }?.let { "${it}p" } ?: "默认画质 ${index + 1}") +
                             (format.bitrate.takeIf { it > 0 }?.let { " · ${it / 1000} kbps" } ?: "")
                             else format.label?.takeIf { it.isNotBlank() } ?: format.language?.takeIf { it.isNotBlank() } ?: "${title} ${index + 1}"
                         item {

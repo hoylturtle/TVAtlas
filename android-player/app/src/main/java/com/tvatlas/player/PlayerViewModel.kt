@@ -34,7 +34,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val pool = ProxyClientPool(vault, core, traffic)
     private val playlistClient = pool.direct.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
-    private val repository = PlayerRepository(database, playlistClient, debugLog)
+    private val repository = PlayerRepository(database, playlistClient, debugLog) { url -> resourceBytes(url, 8 * 1024 * 1024, "PLAYLIST").toString(Charsets.UTF_8) }
     private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core, debugLog) { url ->
         val profiles = library.value.profiles
         val selected = settings.subscriptionRoute.first()
@@ -172,20 +172,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var limitWarned = false
     private var autoRefreshJob: Job? = null
     private var officialGuideJob: Job? = null
-    val epg = com.tvatlas.player.epg.EpgStore(java.io.File(application.noBackupFilesDir, "epg/cache.json"), viewModelScope) { url ->
-        withUpdateNetwork(false) { base ->
+    private suspend fun resourceBytes(url: String, maximum: Int, tag: String): ByteArray {
+        val selected = settings.subscriptionRoute.first()
+        val profiles = repository.library.first().profiles
+        withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
+        return com.tvatlas.player.update.withUpdateRoutes(subscriptionTargets(selected, profiles), false,
+            client = { pool.client(it) }, label = pool::label, log = debugLog, routeTag = "${tag}_ROUTE", compatTag = "${tag}_COMPAT") { base ->
             val client = base.newBuilder().callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).readTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build()
-            client.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Android) TVAtlas-EPG")
+            client.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Android) TVAtlas-Resources")
                 .apply { if (java.net.URI(url).host == "nowplayer.now.com") header("Cookie", "LANG=zh") }.build()).readCancellable { response ->
-                if (!response.isSuccessful) throw UpdateException("节目单请求失败", response.code, response.protocol)
+                debugLog.event("INFO", "${tag}_HTTP", "host=${response.request.url.host} status=${response.code}")
+                if (!response.isSuccessful) throw UpdateException("资源请求失败", response.code, response.protocol)
                 val input = requireNotNull(response.body).byteStream().buffered()
-                val decoded = if (url.substringBefore('?').endsWith(".gz", true)) java.util.zip.GZIPInputStream(input) else input
+                input.mark(2); val first = input.read(); val second = input.read(); input.reset()
+                val decoded = if (first == 0x1f && second == 0x8b) java.util.zip.GZIPInputStream(input) else input
                 val out = ByteArrayOutputStream(); val buffer = ByteArray(8192)
                 decoded.use { while (true) { val count = it.read(buffer); if (count < 0) break
-                    require(out.size() + count <= com.tvatlas.core.epg.XmlTv.MAX_BYTES); out.write(buffer, 0, count) } }
+                    require(out.size() + count <= maximum) { "资源文件过大" }; out.write(buffer, 0, count) } }
                 out.toByteArray()
             }
         }
+    }
+    val epg = com.tvatlas.player.epg.EpgStore(java.io.File(application.noBackupFilesDir, "epg/cache.json"), viewModelScope) { url ->
+        resourceBytes(url, com.tvatlas.core.epg.XmlTv.MAX_BYTES, "EPG")
     }
     private val backup = BackupManager(database, vault, settings)
     private val officialGuideAt = mutableMapOf<String, Long>()
