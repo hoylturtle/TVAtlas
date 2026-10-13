@@ -267,23 +267,28 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 })
         }
     val controls: @Composable () -> Unit = {
-        if (tv && pictureFocused) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+        if (tv && pictureFocused && !immersive) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         val displayedAttempt = status.attempt ?: status.lastAttempt
         VideoControls(if (compact && status.error != null && !status.loading) "播放未成功" else status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
         } ?: "线路", displayedAttempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
             canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
-            fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道")
+            fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
+            fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
+                RouteType.DIRECT -> "直连"
+                RouteType.PROXY -> library.profiles.firstOrNull { it.id == attempt.target.profile }?.let { playbackRegion(it.name)?.label }?.let { "${it}代理" } ?: "代理"
+                RouteType.AUTO -> "自动代理"
+            } }.orEmpty())
 
-        if (!compact && player == null && !status.loading && status.error != null) PlaybackRecoveryCard(status.error,
+        if (!immersive && !compact && player == null && !status.loading && status.error != null) PlaybackRecoveryCard(status.error,
             onRetry = replay, onChooseRoute = onDetails)
         val diagnosticAttempt = status.attempt ?: status.lastAttempt
         val diagnosticText = diagnosticAttempt?.let { "${redactedUrl(it.streamUrl)}\n${routeLabel(it.target, library.profiles)} · ${it.matchedRule}" }.orEmpty()
         val settledError = status.error?.takeIf { !status.loading && player == null }
-        if (compact && (settledError != null || (diagnostics && diagnosticAttempt != null))) {
+        if (!immersive && compact && (settledError != null || (diagnostics && diagnosticAttempt != null))) {
             CompactPlaybackDetails(settledError, status.message + if (diagnostics && diagnosticText.isNotBlank()) "\n$diagnosticText" else "")
-        } else if (diagnostics && diagnosticAttempt != null) Text(diagnosticText +
+        } else if (!immersive && diagnostics && diagnosticAttempt != null) Text(diagnosticText +
             (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
         }
     if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
@@ -304,7 +309,25 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
 
 @Composable internal fun VideoControls(status: String, line: String, proxy: String,
     canDetails: Boolean, canStop: Boolean, onDetails: () -> Unit, onFullscreen: () -> Unit, onStop: () -> Unit,
-    canReplay: Boolean = false, onReplay: () -> Unit = {}, fullscreenLabel: String = "全屏 / 频道") {
+    canReplay: Boolean = false, onReplay: () -> Unit = {}, fullscreenLabel: String = "全屏 / 频道",
+    immersive: Boolean = false, fullscreenRoute: String = proxy) {
+    if (immersive) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
+                Text(listOf(line, fullscreenRoute).filter { it.isNotBlank() }.joinToString(" | "),
+                    Modifier.fillMaxWidth(), color = LocalContentColor.current, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            TvTextButton(onClick = onFullscreen, colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text(fullscreenLabel, color = LocalContentColor.current, maxLines = 1) }
+            TvTextButton(onClick = if (canReplay) onReplay else onStop, enabled = canStop || canReplay,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
+                Text(if (canReplay) "重新播放" else "停止", color = LocalContentColor.current, maxLines = 1)
+            }
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (proxy.isNotBlank()) Text(proxy, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,

@@ -13,3 +13,7 @@ __pycache__/
 **/signing.properties
 **/*SIGNING_BUNDLE*
 *.p12
+
+# Keep review reports and screenshots local.
+docs/audit-*/
+android-player/docs/*audit*.md
