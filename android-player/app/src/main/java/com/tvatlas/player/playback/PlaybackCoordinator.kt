@@ -50,6 +50,7 @@ class PlaybackCoordinator(
     private val pool: ProxyClientPool, private val scope: CoroutineScope,
     private val log: com.tvatlas.player.debug.DebugLog? = null,
     private val onNodeFailure: (RouteTarget) -> Unit = {},
+    private val allowStart: (Channel, String?) -> Boolean = { _, _ -> true },
 ) {
     private val _player = MutableStateFlow<ExoPlayer?>(null)
     val player = _player.asStateFlow()
@@ -63,6 +64,7 @@ class PlaybackCoordinator(
     private var generation = 0L
     private var drmActive: java.util.concurrent.atomic.AtomicBoolean? = null
     private val renewed = mutableSetOf<RouteAttempt>()
+    private val requestFailures = mutableMapOf<String, com.tvatlas.player.proxy.RequestRouteFailures>()
 
     fun preparing(channel: Channel, streamId: String? = null) {
         _speed.value = 0L
@@ -75,6 +77,7 @@ class PlaybackCoordinator(
     fun play(channel: Channel, resolver: DefaultRouteResolver, streamId: String? = null) {
         stop(false)
         renewed.clear()
+        requestFailures.clear()
         val token = generation
         _status.value = PlaybackStatus(channel.id, "正在连接 ${channel.name}", loading = true, selectedStreamId = streamId)
         preparation = scope.launch {
@@ -128,6 +131,11 @@ class PlaybackCoordinator(
             return
         } else null
         if (token != generation) return
+        if (!allowStart(channel, _status.value.selectedStreamId)) {
+            stop(false)
+            _status.value = _status.value.copy(message = "请确认网络设置后播放", loading = false, attempt = null)
+            return
+        }
         val mediaRequests = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val mediaBytes = AtomicLong(0)
         val downloadBytes = AtomicLong(0)
@@ -136,7 +144,8 @@ class PlaybackCoordinator(
         val selectedClient = if (official) withContext(Dispatchers.IO) { pool.client(route.target) } else null
         val mediaCalls: okhttp3.Call.Factory = if (selectedClient != null) selectedClient.newBuilder()
             .followRedirects(true).followSslRedirects(false).build()
-            else RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target)
+            else RoutedCallFactory(pool, resolver, StreamContext(channel, stream), route.target,
+                requestFailures.getOrPut(stream.id) { com.tvatlas.player.proxy.RequestRouteFailures() }, onNodeFailure)
         if (token != generation) return
         val factory = OkHttpDataSource.Factory(mediaCalls)
             .setTransferListener(object : TransferListener {

@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tvatlas.core.model.httpUri
 import com.tvatlas.player.PlayerViewModel
+import com.tvatlas.player.storage.NetworkAccess
 
 @Composable internal fun FeatureSettings(model: PlayerViewModel) {
     val options by model.options.collectAsStateWithLifecycle()
@@ -32,7 +33,7 @@ import com.tvatlas.player.PlayerViewModel
         if (uri != null) { importUri = uri; passwordPrompt = true }
     }
     FeatureCard("节目单") {
-        Text("默认 XMLTV + TVB、ViuTV 官方节目表补充", style = MaterialTheme.typography.bodySmall)
+        Text("XMLTV + TVB、ViuTV 官方节目表补充；地址留空可停用 XMLTV", style = MaterialTheme.typography.bodySmall)
         Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "已缓存 ${guide.guide.programmes.size} 个节目", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TvOutlinedButton(onClick = { epgEdit = true }, modifier = Modifier.weight(1f)) { Text("节目单来源") }
@@ -52,7 +53,16 @@ import com.tvatlas.player.PlayerViewModel
         }
     }
     FeatureCard("网络与流量保护") {
-        PreferenceSwitch("计费网络播放前提醒", options.warnMetered) { enabled -> model.editOptions { it.copy(warnMetered = enabled) } }
+        var networkMenu by remember { mutableStateOf(false) }
+        Box {
+            TvOutlinedButton(onClick = { networkMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("网络使用：${options.networkAccess.label}") }
+            DropdownMenu(networkMenu, { networkMenu = false }) { NetworkAccess.entries.forEach { access ->
+                DropdownMenuItem(text = { Text(access.label) }, modifier = Modifier.selectionOutline(options.networkAccess == access),
+                    onClick = { networkMenu = false; model.editOptions { it.copy(networkAccess = access) } })
+            } }
+        }
+        Text("手机和平板按此范围使用网络；电视不限制 Wi-Fi 或有线网络。VPN 按有效网络识别。", style = MaterialTheme.typography.bodySmall)
+        PreferenceSwitch("手机移动数据播放／下载前提醒", options.warnMetered) { enabled -> model.editOptions { it.copy(warnMetered = enabled) } }
         PreferenceSwitch("仅非计费网络下载 APK", options.wifiUpdates) { enabled -> model.editOptions { it.copy(wifiUpdates = enabled) } }
         TvOutlinedButton(onClick = { quotaEdit = true }, modifier = Modifier.fillMaxWidth()) {
             Text(if (options.limitMiB == 0L) "流量提醒：未设置" else "累计 ${options.limitMiB} MiB 时提醒")
@@ -72,7 +82,7 @@ import com.tvatlas.player.PlayerViewModel
             OutlinedTextField(value, { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text("HTTP(S) XML 或 XML.gz") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), singleLine = true)
         }, confirmButton = { TvTextButton(onClick = { model.saveGuideUrl(value.trim()); epgEdit = false },
-            enabled = httpUri(value.trim()) != null) { Text("保存并刷新") } }, dismissButton = { TvTextButton(onClick = { epgEdit = false }) { Text("取消") } })
+            enabled = value.isBlank() || httpUri(value.trim()) != null) { Text("保存并刷新") } }, dismissButton = { TvTextButton(onClick = { epgEdit = false }) { Text("取消") } })
     }
     if (quotaEdit) {
         var value by remember { mutableStateOf(options.limitMiB.toString()) }

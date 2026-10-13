@@ -23,13 +23,17 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
     private val directMutex = Mutex()
     suspend fun measureDirect() {
         if (_direct.value?.fresh(System.currentTimeMillis()) == true || !directMutex.tryLock()) return
-        try { _direct.value = withContext(Dispatchers.IO) { NodeHealth(probe(RouteTarget.DIRECT), System.currentTimeMillis()) } }
+        try {
+            val token = synchronized(this) { generation }
+            val sample = withContext(Dispatchers.IO) { NodeHealth(probe(RouteTarget.DIRECT), System.currentTimeMillis()) }
+            synchronized(this) { if (token == generation) _direct.value = sample }
+        }
         finally { directMutex.unlock() }
     }
     private val _testing = MutableStateFlow(false)
     val testing = _testing.asStateFlow()
     private var generation = 0L
-    @Synchronized fun invalidate() { generation++; _health.value = emptyMap() }
+    @Synchronized fun invalidate() { generation++; _health.value = emptyMap(); _direct.value = null }
     @Synchronized fun failed(target: RouteTarget) {
         target.profile?.let { _health.value = _health.value + (it to NodeHealth(null, System.currentTimeMillis())) }
     }

@@ -17,7 +17,8 @@ import com.tvatlas.core.model.*
 import com.tvatlas.player.storage.*
 
 @Composable internal fun PlaylistPage(library: Library, busy: Boolean, onAdd: () -> Unit,
-    onRefresh: (Playlist) -> Unit, onRefreshBuiltIn: () -> Unit, feedback: String? = null) {
+    onRefresh: (Playlist) -> Unit, onRefreshBuiltIn: () -> Unit, feedback: String? = null,
+    onEdit: (Playlist) -> Unit = {}, onEnable: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {}) {
     var details by remember { mutableStateOf(false) }
     val builtIn = library.playlists.filter(DefaultPlaylists::contains)
     val custom = library.playlists.filterNot(DefaultPlaylists::contains)
@@ -36,7 +37,7 @@ import com.tvatlas.player.storage.*
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("TVAtlas 频道订阅", style = MaterialTheme.typography.titleMedium)
                     Text("$count 个频道 · 内置订阅", style = MaterialTheme.typography.bodyMedium)
-                    Text("包含常规频道、TVB 官方免费频道、ViuTV 与 ViuTVsix。", style = MaterialTheme.typography.bodySmall,
+                    Text("香港仅使用 TVB、ViuTV、港台及 HOY 官方线路，分为综合、新闻、影视。", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TvTextButton(onClick = { details = true }, modifier = Modifier.fillMaxWidth()) { Text("查看内置线路详情") }
                     Text("上次完整更新：${date(updatedAt)}", style = MaterialTheme.typography.bodySmall)
@@ -57,8 +58,14 @@ import com.tvatlas.player.storage.*
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(playlist.name, style = MaterialTheme.typography.titleMedium)
+                    Text(if (playlist.enabled) "已启用" else "已停用", style = MaterialTheme.typography.bodySmall)
                     Text("最近更新：${date(playlist.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall)
                     TvOutlinedButton(onClick = { onRefresh(playlist) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("刷新") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TvTextButton(onClick = { onEdit(playlist) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("编辑") }
+                        TvTextButton(onClick = { onEnable(playlist) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (playlist.enabled) "停用" else "启用") }
+                        TvTextButton(onClick = { onDelete(playlist) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("删除") }
+                    }
                 }
             }
         }

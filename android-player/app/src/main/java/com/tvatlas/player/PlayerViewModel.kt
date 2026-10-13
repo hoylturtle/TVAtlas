@@ -36,6 +36,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
     private val repository = PlayerRepository(database, playlistClient, debugLog) { url -> resourceBytes(url, 8 * 1024 * 1024, "PLAYLIST").toString(Charsets.UTF_8) }
     private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core, debugLog) { url ->
+        requireNetwork(settings.options.first())
         val profiles = library.value.profiles
         val selected = settings.subscriptionRoute.first()
         withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
@@ -67,7 +68,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             latency.measure(profiles)
         }
     }
-    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog, latency::failed)
+    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog, latency::failed) { channel, stream -> guardPlaybackNetwork(channel, stream) }
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
@@ -96,7 +97,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
                 debugLog.error("UPDATE", error)
-                _update.value = UpdateState(error = if (error is UpdateException) error.message else "连接 GitHub 失败，请切换下方更新网络后重试，或打开仓库查看安装包")
+                _update.value = UpdateState(error = if (error is UpdateException || error is IllegalArgumentException) error.message else "连接 GitHub 失败，请切换下方更新网络后重试，或打开仓库查看安装包")
             }
         }
     }
@@ -111,6 +112,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _update.update { it.copy(checking = false, downloading = false, error = "操作已取消") }
     }
     private suspend fun <T> withUpdateNetwork(download: Boolean, work: suspend (okhttp3.OkHttpClient) -> T): T {
+        requireNetwork(settings.options.first())
         val selected = settings.updateRoute.first()
         val profiles = repository.library.first().profiles
         withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
@@ -121,7 +123,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openUpdateDownload() {
         val release = _update.value.release ?: return
-        if (options.value.wifiUpdates && isMetered()) { _message.value = "当前为计费网络，请连接 Wi-Fi 或关闭仅非计费网络下载设置"; return }
+        if (!allowCurrentNetwork(options.value)) { _message.value = networkPolicyMessage(); return }
+        if (!television && options.value.wifiUpdates && isMetered()) { _message.value = "当前为计费网络，请连接 Wi-Fi 或关闭仅非计费网络下载设置"; return }
+        if (needsConsent()) { _pendingDownload.value = true; return }
         if (_update.value.downloading || release.versionCode <= BuildConfig.VERSION_CODE || release.minSdk > android.os.Build.VERSION.SDK_INT) return
         downloadedApk = null
         _update.value = _update.value.copy(downloading = true, downloadProgress = 0, apkReady = false, error = null)
@@ -144,7 +148,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 debugLog.error("UPDATE_DOWNLOAD", error)
                 _update.update { it.copy(downloading = false, apkReady = false,
-                    error = if (error is UpdateException) error.message else "下载失败，请切换更新网络后重试") }
+                    error = if (error is UpdateException || error is IllegalArgumentException) error.message else "下载失败，请切换更新网络后重试") }
             }
         }
     }
@@ -166,13 +170,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private val connectivity = application.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+    private val television = (application.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
     private var meteredAllowed = false
+    private val _pendingDownload = MutableStateFlow(false)
+    val pendingDownload = _pendingDownload.asStateFlow()
+    private val _restoring = MutableStateFlow(false)
+    val restoring = _restoring.asStateFlow()
+    private var initializationJob: Job? = null
+    private var networkIdentity: Pair<android.net.Network?, Boolean>? = null
     private val _pendingPlay = MutableStateFlow<Pair<String, String?>?>(null)
     val pendingPlay = _pendingPlay.asStateFlow()
     private var limitWarned = false
     private var autoRefreshJob: Job? = null
     private var officialGuideJob: Job? = null
+    private var guideJob: Job? = null
     private suspend fun resourceBytes(url: String, maximum: Int, tag: String): ByteArray {
+        requireNetwork(settings.options.first())
         val selected = settings.subscriptionRoute.first()
         val profiles = repository.library.first().profiles
         withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
@@ -200,27 +213,61 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val backup = BackupManager(database, vault, settings)
     private val officialGuideAt = mutableMapOf<String, Long>()
     private val networkCallback = object : android.net.ConnectivityManager.NetworkCallback() {
-        override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
-            viewModelScope.launch {
-                if (!isMetered()) meteredAllowed = false
-                else if (options.value.warnMetered && !meteredAllowed && playback.player.value != null) {
-                    val status = playback.status.value; stopPlayback()
-                    status.channelId?.let { _pendingPlay.value = it to status.selectedStreamId }
-                }
+        override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) { networkChanged() }
+        override fun onLost(network: android.net.Network) { networkChanged() }
+        override fun onAvailable(network: android.net.Network) { networkChanged() }
+    }
+    private fun networkChanged() {
+        viewModelScope.launch {
+            val mobile = isMobileNetwork()
+            val key = connectivity.activeNetwork to mobile
+            if (key != networkIdentity) { networkIdentity = key; latency.invalidate() }
+            if (!mobile) meteredAllowed = false
+            val status = playback.status.value
+            if ((status.loading || playback.player.value != null) && (!allowCurrentNetwork(options.value) || needsConsent())) {
+                stopPlayback()
+                if (allowCurrentNetwork(options.value)) status.channelId?.let { _pendingPlay.value = it to status.selectedStreamId }
+                else _message.value = networkPolicyMessage()
+            }
+            if (_update.value.downloading && (!allowCurrentNetwork(options.value) || (!television && options.value.wifiUpdates && isMetered()) || needsConsent())) {
+                cancelUpdate()
+                _update.update { it.copy(error = "网络已切换，下载已停止；请确认网络设置后重新下载") }
+                debugLog.event("INFO", "UPDATE_DOWNLOAD", "cancelled by network policy")
             }
         }
     }
     fun isMetered(): Boolean = connectivity.activeNetwork != null && connectivity.isActiveNetworkMetered
-    fun approveMetered() { val request = _pendingPlay.value; _pendingPlay.value = null; meteredAllowed = true
-        request?.let { (id, stream) -> library.value.channels.firstOrNull { it.id == id }?.let { play(it, stream) } } }
-    fun dismissMetered() { _pendingPlay.value = null }
+    private fun isMobileNetwork(): Boolean {
+        val caps = connectivity.activeNetwork?.let(connectivity::getNetworkCapabilities) ?: return false
+        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
+            (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) && isMetered()) ||
+            (!caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) && isMetered())
+    }
+    private fun allowCurrentNetwork(prefs: UserOptions): Boolean = connectivity.activeNetwork == null ||
+        com.tvatlas.player.network.networkAllowed(prefs.networkAccess, isMobileNetwork(), television)
+    private fun networkPolicyMessage() = "当前网络不符合设置，请连接${options.value.networkAccess.label}或调整网络使用范围"
+    private fun needsConsent() = com.tvatlas.player.network.needsMobileConsent(television, isMobileNetwork(), options.value.warnMetered, meteredAllowed)
+    private fun requireNetwork(prefs: UserOptions) { if (!allowCurrentNetwork(prefs)) throw IllegalArgumentException(networkPolicyMessage()) }
+    private fun guardPlaybackNetwork(channel: Channel, stream: String?): Boolean {
+        if (_restoring.value) { _message.value = "正在恢复配置，请稍后播放"; return false }
+        if (!allowCurrentNetwork(options.value)) { _message.value = networkPolicyMessage(); return false }
+        if (needsConsent()) { _pendingPlay.value = channel.id to stream; return false }
+        return true
+    }
+    fun approveMetered() {
+        val request = _pendingPlay.value; val download = _pendingDownload.value
+        _pendingPlay.value = null; _pendingDownload.value = false; meteredAllowed = true
+        request?.let { (id, stream) -> library.value.channels.firstOrNull { it.id == id }?.let { play(it, stream) } }
+        if (download) openUpdateDownload()
+    }
+    fun dismissMetered() { _pendingPlay.value = null; _pendingDownload.value = false }
     fun editOptions(edit: (UserOptions) -> UserOptions) = preferenceAction { settings.editOptions(edit) }
     fun toggleFavorite(channel: Channel) = editOptions { it.copy(favorites = if (channel.id in it.favorites) it.favorites - channel.id else it.favorites + channel.id) }
-    fun refreshGuide() { viewModelScope.launch { epg.refresh(settings.options.first().epgUrl) } }
+    fun refreshGuide() { guideJob?.cancel(); guideJob = viewModelScope.launch { epg.refresh(settings.options.first().epgUrl) } }
     fun saveGuideUrl(url: String) = preferenceAction { settings.editOptions { it.copy(epgUrl = url) }; refreshGuide() }
     private suspend fun refreshOfficialGuide(channel: Channel) {
         val now = System.currentTimeMillis()
-        if (now - (officialGuideAt[channel.id] ?: 0) < 3600000) return
+        if (now - (officialGuideAt[channel.id] ?: 0) < 3600000 && epg.hasOfficial(channel)) return
         val official = com.tvatlas.player.source.MyTvSuperSource.channels.firstOrNull { it.tvgId == channel.tvgId || it.name == channel.name }
         val url = if (official != null) {
             val format = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Hong_Kong") }
@@ -237,13 +284,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         withContext(Dispatchers.IO) { requireNotNull(getApplication<Application>().contentResolver.openOutputStream(uri, "wt")).use { it.write(bytes) } }
     }
     fun restoreBackup(uri: Uri, password: CharArray) = action("配置已恢复") {
+        _restoring.value = true
+        try {
+        initializationJob?.cancelAndJoin(); autoRefreshJob?.cancelAndJoin(); officialGuideJob?.cancelAndJoin(); guideJob?.cancelAndJoin()
         stopPlayback()
         val bytes = withContext(Dispatchers.IO) { requireNotNull(getApplication<Application>().contentResolver.openInputStream(uri)).use { input ->
             val out = ByteArrayOutputStream(); val b = ByteArray(8192)
             while (true) { val n = input.read(b); if (n < 0) break; require(out.size() + n <= com.tvatlas.core.backup.BackupCipher.MAX_BYTES + 52); out.write(b, 0, n) }; out.toByteArray() } }
         try { routeChanges.withLock { backup.restore(bytes, password) } }
         catch (error: java.security.GeneralSecurityException) { throw IllegalArgumentException("密码错误或备份已损坏，原配置已保留") }
-        synchronizeSubscriptionClients(); epg.load(settings.options.first().epgUrl); refreshGuide()
+        synchronizeSubscriptionClients(); epg.reset(settings.options.first().epgUrl); officialGuideAt.clear(); refreshGuide()
+        } finally { password.fill('\u0000'); _restoring.value = false }
     }
     private suspend fun refreshDue() {
         val prefs = settings.options.first()
@@ -255,15 +306,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 try { repository.refresh(playlist) } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
             }
             database.dao().subscriptions().first().filter { now - it.lastUpdatedAt >= interval }.forEach { sub ->
-                try { subscriptionRepository.refresh(sub.id); synchronizeSubscriptionClients() }
+                try { subscriptionRepository.refresh(sub.id); routeChanges.withLock { synchronizeSubscriptionClients() } }
                 catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
             }
             if (epg.needsRefresh()) epg.refresh(prefs.epgUrl)
         } finally { _busy.value = false; operations.unlock() }
     }
     init {
-        viewModelScope.launch { repository.initializeDefaults(); autoRefreshJob = viewModelScope.launch { refreshDue() } }
-        viewModelScope.launch { val prefs = settings.options.first(); epg.load(prefs.epgUrl); if (!isMetered()) epg.refresh(prefs.epgUrl) }
+        initializationJob = viewModelScope.launch { repository.initializeDefaults(); autoRefreshJob = viewModelScope.launch { refreshDue() } }
+        guideJob = viewModelScope.launch { val prefs = settings.options.first(); epg.load(prefs.epgUrl); if (!isMetered()) epg.refresh(prefs.epgUrl) }
         viewModelScope.launch { while (isActive) { delay(900000); autoRefreshJob?.cancelAndJoin(); autoRefreshJob = viewModelScope.launch { refreshDue() } } }
         viewModelScope.launch {
             while (isActive) {
@@ -301,7 +352,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     /** Local settings must not queue behind slow subscription/playlist network operations. */
     private fun preferenceAction(work: suspend () -> Unit) {
         viewModelScope.launch {
-            try { work() }
+            try { routeChanges.withLock { work() }; networkChanged() }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { debugLog.error("SETTINGS", error); _message.value = "设置未保存，请重试" }
         }
@@ -330,12 +381,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _message.value = result
     }
     fun refresh(playlist: Playlist) = action("播放列表已更新") { debugLog.event("INFO", "PLAYLIST", "refresh ${playlist.name}"); repository.refresh(playlist) }
+    fun editPlaylist(playlist: Playlist, name: String, url: String) = action("频道源已保存") {
+        require(name.isNotBlank()) { "请输入频道源名称" }
+        resumeAroundChange { repository.refresh(playlist.copy(name = name.trim(), url = url.trim())) }
+    }
+    fun enablePlaylist(playlist: Playlist) = action("频道源状态已更新") {
+        resumeAroundChange { repository.enablePlaylist(playlist.id, !playlist.enabled) }
+    }
+    fun deletePlaylist(id: String) = action("频道源已删除") {
+        require(DefaultPlaylists.entries.none { it.id == id }) { "内置来源不可删除" }
+        resumeAroundChange { repository.removePlaylist(id) }
+    }
     fun addPlaylist(name: String, url: String) = action("播放列表已添加") {
         require(name.isNotBlank()) { "请输入播放列表名称" }
         repository.refresh(Playlist(stableId(url.trim()), name.trim(), url.trim()))
     }
     fun play(channel: Channel, streamId: String? = null) {
-        if (options.value.warnMetered && isMetered() && !meteredAllowed) { _pendingPlay.value = channel.id to streamId; return }
+        if (!guardPlaybackNetwork(channel, streamId)) return
         val refreshing = autoRefreshJob; refreshing?.cancel()
         officialGuideJob?.cancel(); officialGuideJob = viewModelScope.launch { refreshOfficialGuide(channel) }
         debugLog.event("INFO", "PLAY", "requested channel=${channel.name} line=${streamId?.let { "selected" } ?: "automatic"}")
@@ -349,7 +411,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 val current = routeChanges.withLock { repository.library.first() }
                 val fresh = current.channels.firstOrNull { it.id == channel.id } ?: channel
                 withContext(Dispatchers.IO) { core.update(current.profiles); pool.update(current.profiles) }
-                val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(fresh, null, streamId)
+                val selectedStream = streamId?.takeIf { id -> fresh.streams.any { it.id == id } }
+                if (streamId != null && selectedStream == null) _message.value = "线路已更新，改为自动选择"
+                if (!guardPlaybackNetwork(fresh, selectedStream)) { playback.stop(); return@launch }
+                val initial = DefaultRouteResolver(current.rules, current.profiles).channelPlan(fresh, null, selectedStream)
                 val ids = initial.attempts.mapNotNull { it.target.profile }.toSet()
                 if (initial.attempts.any { it.target.type == RouteType.DIRECT }) viewModelScope.launch { latency.measureDirect() }
                 if (ids.isNotEmpty()) {
@@ -357,7 +422,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     debugLog.event("INFO", "NODE_TEST", "automatic region=${fresh.playbackRegion()?.label} candidates=${ids.size}")
                     latency.measure(current.profiles.filter { it.id in ids }, staleOnly = true)
                 }
-                playback.play(fresh, DefaultRouteResolver(current.rules, current.profiles, latency.health.value), streamId)
+                playback.play(fresh, DefaultRouteResolver(current.rules, current.profiles, latency.health.value), selectedStream)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { debugLog.error("PLAY_PREPARATION", error); playback.preparationFailed(channel, streamId) }
         }
@@ -371,13 +436,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val profiles = repository.library.first().profiles
         core.update(profiles); pool.update(profiles, true)
     }
+    private suspend fun resumeAroundChange(work: suspend () -> Unit) {
+        val status = playback.status.value
+        val resume = status.channelId?.takeIf { playback.player.value != null || status.loading }
+        if (resume != null) { stopPlayback(false); _message.value = "更新配置后将恢复播放" }
+        try { work() }
+        finally {
+            if (resume != null && !_restoring.value) {
+                val channel = repository.library.first().channels.firstOrNull { it.id == resume }
+                if (channel != null) play(channel, status.selectedStreamId)
+                else { playback.stop(); _message.value = "当前频道来源已移除，请选择其他频道" }
+            }
+        }
+    }
+    private suspend fun coordinatedSubscriptionChange(work: suspend () -> Unit) = resumeAroundChange {
+        work(); routeChanges.withLock { synchronizeSubscriptionClients() }
+    }
     fun addSubscription(name: String, url: String) = action {
         _updatingSubscription.value = "new"
         _subscriptionFeedback.value = null
         try {
             debugLog.event("INFO", "SUBSCRIPTION", "import requested")
-            val skipped = subscriptionRepository.add(name, url)
-            synchronizeSubscriptionClients()
+            var skipped = 0
+            coordinatedSubscriptionChange { skipped = subscriptionRepository.add(name, url) }
             val message = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个不支持的节点" else ""
             _subscriptionFeedback.value = SubscriptionFeedback(null, message)
             _message.value = message
@@ -391,8 +472,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _subscriptionFeedback.value = null
         try {
             debugLog.event("INFO", "SUBSCRIPTION", "refresh requested")
-            val skipped = subscriptionRepository.refresh(id)
-            synchronizeSubscriptionClients()
+            var skipped = 0
+            coordinatedSubscriptionChange { skipped = subscriptionRepository.refresh(id) }
             val message = "订阅已更新，节点设置已保留" + if (skipped > 0) "；忽略 $skipped 个不支持的节点" else ""
             _subscriptionFeedback.value = SubscriptionFeedback(id, message)
             _message.value = message
@@ -402,12 +483,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         } finally { _updatingSubscription.value = null }
     }
     fun deleteSubscription(id: String) = action("订阅及其节点已移除") {
-        subscriptionRepository.remove(id); synchronizeSubscriptionClients()
+        coordinatedSubscriptionChange { subscriptionRepository.remove(id) }
     }
     fun enableNode(profile: ProxyProfile) = routeAction {
         require(profile.type == ProxyType.MIHOMO)
         val current = repository.library.first().profiles.firstOrNull { it.id == profile.id } ?: return@routeAction
-        repository.saveProxy(current.copy(enabled = !current.enabled))
+        resumeAroundChange { repository.saveProxy(current.copy(enabled = !current.enabled)); synchronizeSubscriptionClients() }
     }
     fun resetChannelRoutes(channelId: String) = routeAction("已恢复自动路由，重新播放后生效") { repository.resetChannelRoutes(channelId) }
     fun setRoute(channelId: String, streamId: String?, target: RouteTarget?) = routeAction("路由已保存，重新播放后生效") {

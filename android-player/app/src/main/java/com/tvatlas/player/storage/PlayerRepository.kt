@@ -49,7 +49,11 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         val enabled = p.filter { it.enabled }.map { it.id }.toSet()
         val byChannel = s.filter { it.sourcePlaylistId in enabled }.groupBy { it.channelId }
         val channels = c.mapNotNull { ch ->
-            val streams = byChannel[ch.id].orEmpty().distinctBy { it.url }.map {
+            val hongKong = Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, emptyList()).isHongKong()
+            val streams = byChannel[ch.id].orEmpty().filter { !hongKong ||
+                com.tvatlas.player.source.MyTvSuperSource.recognizes(it.url) || com.tvatlas.player.source.ViuTvSource.recognizes(it.url) ||
+                com.tvatlas.player.source.HongKongPublicSources.recognizesStream(it.url)
+            }.distinctBy { it.url }.map {
                 Stream(it.id, it.url, it.sourcePlaylistId, route(it.manualRoute), it.lastSuccessAt, it.lastFailureAt, it.failureCount)
             }
             if (streams.isEmpty()) null else Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, streams, route(ch.manualRoute)).normalizeHongKongGroup()
@@ -61,7 +65,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
 
     suspend fun refresh(playlist: Playlist) = withContext(Dispatchers.IO) {
         require(httpUri(playlist.url) != null) { "请输入不含凭证的 HTTP(S) 地址" }
-        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else if (fetch != null) fetch.invoke(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).readCancellable { response ->
+        val body = if (playlist.url.trimEnd('/') == com.tvatlas.player.source.MyTvSuperSource.FREE_PAGE.trimEnd('/') || com.tvatlas.player.source.MyTvSuperSource.recognizes(playlist.url)) com.tvatlas.player.source.MyTvSuperSource.playlist(playlist.url) else if (com.tvatlas.player.source.ViuTvSource.recognizes(playlist.url)) com.tvatlas.player.source.ViuTvSource.playlist(playlist.url) else if (com.tvatlas.player.source.HongKongPublicSources.recognizesPage(playlist.url)) com.tvatlas.player.source.HongKongPublicSources.playlist(playlist.url) else if (fetch != null) fetch.invoke(playlist.url) else directClient.newCall(Request.Builder().url(playlist.url).build()).readCancellable { response ->
             log?.event("INFO", "PLAYLIST_HTTP", "status=${response.code} host=${response.request.url.host}")
             require(response.isSuccessful) { "播放列表请求失败（HTTP ${response.code}）" }
             val body = requireNotNull(response.body)
@@ -85,11 +89,19 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         require(parsed.isNotEmpty()) { "没有有效的 HTTP(S) 频道，已保留旧列表" }
         db.withTransaction {
             val oldStreams = dao.sourceStreams(playlist.id).associateBy { it.id }
+            val previousChannels = dao.channelsSnapshot()
             val rows = parsed.flatMap { ch ->
-                val previous = dao.channel(ch.id)
-                dao.saveChannel(ChannelRow(ch.id, ch.name, ch.group, ch.logo, ch.tvgId, previous?.manualRoute))
+                // Retain legacy IDs only when identity/region is unambiguous, preserving favorites and routes.
+                val previous = dao.channel(ch.id) ?: previousChannels.filter { row -> row.name == ch.name &&
+                    (ch.tvgId == null || row.tvgId == null || ch.tvgId == row.tvgId) &&
+                    Channel(row.id, row.name, row.channelGroup, row.logo, row.tvgId, emptyList()).playbackRegion() == ch.playbackRegion()
+                }.singleOrNull()
+                val channelId = previous?.id ?: ch.id
+                dao.saveChannel(ChannelRow(channelId, ch.name, ch.group, ch.logo, ch.tvgId, previous?.manualRoute))
                 ch.streams.map { stream ->
-                    oldStreams[stream.id]?.copy(url = stream.url) ?: StreamRow(stream.id, ch.id, stream.url, playlist.id)
+                    val old = oldStreams[stream.id] ?: oldStreams.values.filter { it.channelId == channelId &&
+                        M3uParser.streamIdentity(it.url) == M3uParser.streamIdentity(stream.url) }.singleOrNull()
+                    old?.copy(url = stream.url, channelId = channelId) ?: StreamRow(stream.id, channelId, stream.url, playlist.id)
                 }
             }
             dao.deleteStreams(oldStreams.keys.toList() - rows.map { it.id }.toSet())
@@ -98,6 +110,12 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             dao.savePlaylist(PlaylistRow(playlist.id, playlist.name, playlist.url, playlist.enabled,
                 playlist.refreshIntervalHours, System.currentTimeMillis()))
         }
+    }
+
+    suspend fun enablePlaylist(id: String, enabled: Boolean) = dao.enablePlaylist(id, enabled)
+    suspend fun removePlaylist(id: String) = db.withTransaction {
+        dao.deleteStreams(dao.sourceStreams(id).map { it.id }); dao.deletePlaylist(id)
+        dao.pruneHistory(); dao.pruneFailures()
     }
 
     suspend fun refreshBuiltIn(): String {

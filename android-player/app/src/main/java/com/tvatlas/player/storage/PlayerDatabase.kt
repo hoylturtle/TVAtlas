@@ -96,6 +96,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     @Upsert suspend fun saveHistory(row: HistoryRow)
     @Upsert suspend fun saveFailure(row: FailureRow)
     @Query("DELETE FROM streams WHERE id IN (:ids)") suspend fun deleteStreams(ids: List<String>)
+    @Query("DELETE FROM playlists WHERE id = :id") suspend fun deletePlaylist(id: String)
+    @Query("UPDATE playlists SET enabled = :enabled WHERE id = :id") suspend fun enablePlaylist(id: String, enabled: Boolean)
     @Query("DELETE FROM history WHERE streamId NOT IN (SELECT id FROM streams)") suspend fun pruneHistory()
     @Query("DELETE FROM failures WHERE streamId NOT IN (SELECT id FROM streams)") suspend fun pruneFailures()
     @Query("UPDATE streams SET manualRoute = NULL WHERE channelId = :id") suspend fun resetStreamRoutes(id: String)

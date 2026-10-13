@@ -27,9 +27,9 @@ class ChannelPresentationTest {
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), false, Modifier, {}, {}, {}) } }
         compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
         compose.onNodeWithText("体育频道").assertDoesNotExist()
-        compose.onNodeWithText("›  新闻").performClick()
+        compose.onNodeWithText("›  其他频道").performClick()
         compose.onNodeWithText("CCTV 新闻").assertExists()
-        compose.onNodeWithText("⌄  新闻").performClick()
+        compose.onNodeWithText("⌄  其他频道").performClick()
         compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
         compose.onNodeWithText("搜索频道").performTextInput("体育")
         compose.onNodeWithText("体育频道").assertExists()
@@ -40,7 +40,7 @@ class ChannelPresentationTest {
         val channel = Channel("c1", "新闻频道", "新闻", streams = listOf(first))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), true, Modifier, {}, {}, {}) } }
-        compose.onNodeWithText("›  新闻").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("›  其他频道").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.onNodeWithText("新闻频道").assertExists()
     }
     @Test fun selectedProxyShowsItsNameAndNoInternalId() {

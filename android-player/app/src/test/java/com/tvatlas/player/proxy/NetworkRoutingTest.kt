@@ -15,6 +15,42 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class NetworkRoutingTest {
+    @Test fun customCdnPrimaryFailureUsesBackupAndDoesNotPinLaterSegmentsToDeadNode() {
+        val primary = MockWebServer().apply { start(); enqueue(MockResponse().setResponseCode(503)) }
+        val backup = MockWebServer().apply { start(); enqueue(MockResponse().setBody("first")); enqueue(MockResponse().setBody("second")) }
+        val nodes = listOf(ProxyProfile("hk1", "香港 1", ProxyType.HTTP, "127.0.0.1", primary.port),
+            ProxyProfile("hk2", "香港 2", ProxyType.HTTP, "127.0.0.1", backup.port))
+        val pool = ProxyClientPool { null }.apply { update(nodes) }
+        try {
+            val stream = Stream("s", "http://origin.test/master.m3u8", "p")
+            val context = StreamContext(Channel("c", "test", "香港", streams = listOf(stream)), stream)
+            val resolver = DefaultRouteResolver(RuleConfig(rules = listOf(Rule("cdn", Match(domain = "cdn.test"), RouteTarget.proxy("hk1")))), nodes)
+            val calls = RoutedCallFactory(pool, resolver, context, RouteTarget.proxy("hk2"))
+            calls.newCall(Request.Builder().url("http://cdn.test/1.ts").build()).execute().use { assertEquals("first", it.body!!.string()) }
+            calls.newCall(Request.Builder().url("http://cdn.test/2.ts").build()).execute().use { assertEquals("second", it.body!!.string()) }
+            assertEquals(1, primary.requestCount)
+            assertEquals(2, backup.requestCount)
+        } finally { pool.close(); primary.shutdown(); backup.shutdown() }
+    }
+
+    @Test fun bodyReadFailureAlsoMarksActualCdnNodeForNextSegment() {
+        val primary = MockWebServer().apply { start(); enqueue(MockResponse().setBody("x".repeat(10000)).setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)) }
+        val backup = MockWebServer().apply { start(); enqueue(MockResponse().setBody("recovered")) }
+        val nodes = listOf(ProxyProfile("hk1", "香港 1", ProxyType.HTTP, "127.0.0.1", primary.port),
+            ProxyProfile("hk2", "香港 2", ProxyType.HTTP, "127.0.0.1", backup.port))
+        val pool = ProxyClientPool { null }.apply { update(nodes) }
+        try {
+            val stream = Stream("s", "http://origin.test/master.m3u8", "p")
+            val context = StreamContext(Channel("c", "test", "香港", streams = listOf(stream)), stream)
+            val resolver = DefaultRouteResolver(RuleConfig(rules = listOf(Rule("cdn", Match(domain = "cdn.test"), RouteTarget.proxy("hk1")))), nodes)
+            val calls = RoutedCallFactory(pool, resolver, context, RouteTarget.proxy("hk2"))
+            try { calls.newCall(Request.Builder().url("http://cdn.test/1.ts").build()).execute().use { it.body!!.string() }; fail("truncated body accepted") }
+            catch (_: java.io.IOException) { }
+            calls.newCall(Request.Builder().url("http://cdn.test/2.ts").build()).execute().use { assertEquals("recovered", it.body!!.string()) }
+            assertEquals(1, primary.requestCount)
+        } finally { pool.close(); primary.shutdown(); backup.shutdown() }
+    }
+
     @Test fun redirectIsReevaluatedBeforeNextConnection() {
         val origin = MockWebServer()
         val proxy = MockWebServer()
