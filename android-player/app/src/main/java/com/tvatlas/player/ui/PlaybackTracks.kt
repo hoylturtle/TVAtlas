@@ -13,15 +13,24 @@ import androidx.media3.exoplayer.ExoPlayer
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable internal fun PlaybackTracks(player: ExoPlayer?) {
     var open by remember { mutableStateOf(false) }
-    var tracks by remember(player) { mutableStateOf(player?.currentTracks) }
-    DisposableEffect(player) {
-        val listener = object : Player.Listener { override fun onTracksChanged(value: Tracks) { tracks = value } }
-        player?.addListener(listener)
-        onDispose { player?.removeListener(listener) }
-    }
     TvTextButton(onClick = { open = true }, enabled = player != null,
         colors = ButtonDefaults.textButtonColors(contentColor = androidx.compose.ui.graphics.Color.White)) { Text("画质", maxLines = 1) }
-    if (open && player != null) AlertDialog(onDismissRequest = { open = false }, title = { Text("画质、音轨与字幕") }, text = {
+    if (open && player != null) PlaybackTrackDialog(player) { open = false }
+}
+
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable internal fun PlaybackTrackDialog(player: ExoPlayer, onDismiss: () -> Unit) {
+    var tracks by remember(player) { mutableStateOf(player.currentTracks) }
+    var parameters by remember(player) { mutableStateOf(player.trackSelectionParameters) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onTracksChanged(value: Tracks) { tracks = value }
+            override fun onTrackSelectionParametersChanged(value: TrackSelectionParameters) { parameters = value }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("画质、音轨与字幕") }, text = {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp).testTag("track-list"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(C.TRACK_TYPE_VIDEO to "画质", C.TRACK_TYPE_AUDIO to "音轨", C.TRACK_TYPE_TEXT to "字幕").forEach { (type, title) ->
                 item { Text(title, style = MaterialTheme.typography.titleSmall) }
@@ -29,9 +38,9 @@ import androidx.media3.exoplayer.ExoPlayer
                     TvTextButton(onClick = {
                         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().clearOverridesOfType(type)
                             .setTrackTypeDisabled(type, type == C.TRACK_TYPE_TEXT).build()
-                    }, modifier = Modifier.fillMaxWidth()) { Text(if (type == C.TRACK_TYPE_TEXT) "关闭字幕" else "自动选择") }
+                    }, modifier = Modifier.fillMaxWidth().selectionOutline(if (type == C.TRACK_TYPE_TEXT) type in parameters.disabledTrackTypes else parameters.overrides.values.none { it.type == type })) { Text(if (type == C.TRACK_TYPE_TEXT) "关闭字幕" else "自动选择") }
                 }
-                val groups = tracks?.groups.orEmpty().filter { it.type == type }
+                val groups = tracks.groups.filter { it.type == type }
                 if (groups.isEmpty()) item { Text("当前播放源没有提供可选$title", style = MaterialTheme.typography.bodySmall) }
                 groups.forEach { group ->
                     (0 until group.length).filter { group.isTrackSupported(it) }.forEach { index ->
@@ -43,11 +52,11 @@ import androidx.media3.exoplayer.ExoPlayer
                             TvTextButton(onClick = {
                                 player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().clearOverridesOfType(type)
                                     .setTrackTypeDisabled(type, false).addOverride(TrackSelectionOverride(group.mediaTrackGroup, listOf(index))).build()
-                            }, modifier = Modifier.fillMaxWidth().selectionOutline(group.isTrackSelected(index))) { Text(label) }
+                            }, modifier = Modifier.fillMaxWidth().selectionOutline(parameters.overrides[group.mediaTrackGroup]?.trackIndices?.contains(index) == true)) { Text(label) }
                         }
                     }
                 }
             }
         }
-    }, confirmButton = { TvTextButton(onClick = { open = false }) { Text("关闭") } })
+    }, confirmButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
 }

@@ -65,6 +65,25 @@ class UserFeaturesTest {
             compose.onNodeWithText("关闭", substring = false).performClick()
         } finally { compose.runOnIdle { player.release() } }
     }
+    @Test fun trackDialogSurvivesBottomBarAutoHide() {
+        lateinit var player: ExoPlayer
+        var open by mutableStateOf(false)
+        compose.runOnIdle { player = ExoPlayer.Builder(compose.activity).build() }
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.setContent { MaterialTheme(colorScheme = colors) {
+                ImmersivePlaybackLayout(true, false, Modifier.size(640.dp, 360.dp), picture = {}, controls = {
+                    TvTextButton(onClick = { open = true }) { Text("画质") }
+                })
+                if (open) PlaybackTrackDialog(player) { open = false }
+            } }
+            compose.onNodeWithText("画质").performClick()
+            compose.mainClock.advanceTimeBy(10000)
+            compose.onNodeWithTag("playback-controls").assertDoesNotExist()
+            compose.onNodeWithText("画质、音轨与字幕").assertIsDisplayed()
+            compose.onNodeWithText("关闭", substring = false).performClick()
+        } finally { compose.runOnIdle { player.release() } }
+    }
     @Test fun androidXmlParserUsesCurrentAndNextProgrammeTimes() {
         val guide = com.tvatlas.core.epg.XmlTv.parse("""<tv><channel id="Jade.hk"><display-name>翡翠台</display-name></channel><programme channel="Jade.hk" start="20261013120000 +0800" stop="20261013123000 +0800"><title>新闻</title></programme></tv>""".toByteArray())
         assertEquals(1, guide.programmes.size)

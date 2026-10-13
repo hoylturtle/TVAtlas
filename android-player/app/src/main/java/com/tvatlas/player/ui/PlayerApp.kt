@@ -284,6 +284,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
 @Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean, immersive: Boolean, compact: Boolean,
     onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()
+    var tracksOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(player) { if (player == null) tracksOpen = false }
     val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
     val picture: @Composable () -> Unit = {
             if (player == null) Text(if (compact && status.error != null && !status.loading) "播放未成功" else status.message, Modifier.padding(16.dp), color = Color.White, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -307,7 +309,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
             canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
             fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
-            tail = { if (immersive) { PlaybackNetworkInfo(model, displayedAttempt); PlaybackTracks(player) } }, fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
+            tail = { if (immersive) { PlaybackNetworkInfo(model, displayedAttempt); TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("画质", maxLines = 1) } } }, fullscreenRoute = displayedAttempt?.let { attempt -> when (attempt.target.type) {
                 RouteType.DIRECT -> "直连"
                 RouteType.PROXY -> library.profiles.firstOrNull { it.id == attempt.target.profile }?.let { playbackRegion(it.name)?.label }?.let { "${it}代理" } ?: "代理"
                 RouteType.AUTO -> "自动代理"
@@ -326,6 +329,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
     if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
         onChannel, onDetails, picture, controls)
     else PlayerPaneLayout(fillPicture, modifier, picture, controls)
+    if (tracksOpen && player != null) PlaybackTrackDialog(requireNotNull(player)) { tracksOpen = false }
 }
 
 

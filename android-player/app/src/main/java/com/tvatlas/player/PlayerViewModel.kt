@@ -179,8 +179,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         return com.tvatlas.player.update.withUpdateRoutes(subscriptionTargets(selected, profiles), false,
             client = { pool.client(it) }, label = pool::label, log = debugLog, routeTag = "${tag}_ROUTE", compatTag = "${tag}_COMPAT") { base ->
             val client = base.newBuilder().callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).readTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build()
-            client.newCall(okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Android) TVAtlas-Resources")
-                .apply { if (java.net.URI(url).host == "nowplayer.now.com") header("Cookie", "LANG=zh") }.build()).readCancellable { response ->
+            val request = okhttp3.Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Android) TVAtlas-Resources").build()
+            val localized = if (request.url.host == "nowplayer.now.com") request.newBuilder().header("Cookie", "LANG=zh").build() else request
+            client.newCall(localized).readCancellable { response ->
                 debugLog.event("INFO", "${tag}_HTTP", "host=${response.request.url.host} status=${response.code}")
                 if (!response.isSuccessful) throw UpdateException("资源请求失败", response.code, response.protocol)
                 val input = requireNotNull(response.body).byteStream().buffered()
@@ -264,6 +265,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { repository.initializeDefaults(); autoRefreshJob = viewModelScope.launch { refreshDue() } }
         viewModelScope.launch { val prefs = settings.options.first(); epg.load(prefs.epgUrl); if (!isMetered()) epg.refresh(prefs.epgUrl) }
         viewModelScope.launch { while (isActive) { delay(900000); autoRefreshJob?.cancelAndJoin(); autoRefreshJob = viewModelScope.launch { refreshDue() } } }
+        viewModelScope.launch {
+            while (isActive) {
+                delay(60000)
+                val target = playback.status.value.attempt?.target
+                if (playback.player.value != null && target != null) {
+                    if (target.type == RouteType.DIRECT) latency.measureDirect()
+                    else target.profile?.let { id -> latency.measure(library.value.profiles.filter { it.id == id }, staleOnly = true) }
+                }
+            }
+        }
         viewModelScope.launch {
             combine(traffic.state, settings.options) { usage, prefs -> usage.direct + usage.proxy to prefs.limitMiB }.collect { (bytes, limit) ->
                 if (limit == 0L || bytes < limit * 1048576L) limitWarned = false

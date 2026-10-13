@@ -24,7 +24,7 @@ internal val LocalTvMode = staticCompositionLocalOf<Boolean?> { null }
 }
 
 @Composable internal fun TvTextButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-    colors: ButtonColors = ButtonDefaults.textButtonColors(), content: @Composable RowScope.() -> Unit) {
+    colors: ButtonColors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface), content: @Composable RowScope.() -> Unit) {
     val tv = isTv()
     var focused by remember { mutableStateOf(false) }
     androidx.compose.material3.TextButton(onClick, modifier.then(if (tv) Modifier.heightIn(min = 52.dp)
