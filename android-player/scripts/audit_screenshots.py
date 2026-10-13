@@ -6,7 +6,7 @@ import base64
 from pathlib import Path
 
 root = Path('app/build/reports/androidTests')
-for name in ('tv-layout.png', 'phone-proxy-layout.png', 'phone-settings-layout.png', 'phone-recovery-layout.png'):
+for name in ('tv-layout.png', 'phone-proxy-layout.png', 'phone-settings-layout.png', 'phone-recovery-layout.png', 'fullscreen-layout.png', 'fullscreen-stopped-layout.png'):
     path = root / name
     if not path.is_file():
         raise SystemExit(f'Missing audit fixture: {name}')

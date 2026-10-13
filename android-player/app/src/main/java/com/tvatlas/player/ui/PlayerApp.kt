@@ -107,7 +107,9 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         BackHandler(immersive) { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
         BackHandler(theater && channelPanelOpen && status.channelId != null) { channelPanelOpen = false }
         BackHandler(!immersive && tab != 0) { tab = 0 }
-        Scaffold(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+        PlaybackSystemBars(immersive)
+        Scaffold(modifier = Modifier.fillMaxSize().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
+            contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 if (!tv && !immersive && !theater && tab == 0) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -131,8 +133,12 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
-                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, wide || immersive,
-                                { if (wide) channelPanelOpen = !channelPanelOpen else if (immersive) { fullscreen = false; landscapeChannels = true } else fullscreen = true },
+                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, wide || immersive, immersive,
+                                { if (immersive) {
+                                    fullscreen = false; landscapeChannels = true; channelPanelOpen = true
+                                } else {
+                                    fullscreen = true; landscapeChannels = false; channelPanelOpen = false
+                                } },
                                 { channelPanelOpen = true; fullscreen = false; landscapeChannels = true },
                                 { detailId = status.channelId }, { offset ->
                                     if (library.channels.isNotEmpty()) {
@@ -243,13 +249,14 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
 }
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean,
+@Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean, immersive: Boolean,
     onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
     val player by model.playback.player.collectAsStateWithLifecycle()
-    PlayerPaneLayout(fillPicture, modifier, picture = {
+    val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
+    val picture: @Composable () -> Unit = {
             if (player == null) Text(status.message, Modifier.padding(24.dp), color = Color.White)
-            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv; keepScreenOn = true; isFocusable = !tv || pictureFocused; isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.isFocusable = !tv || pictureFocused; it.isFocusableInTouchMode = !tv || pictureFocused; if (pictureFocused && !it.hasFocus()) it.post { it.requestFocus() } },
-                onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !tv || pictureFocused }.onPreviewKeyEvent { event ->
+            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv && !immersive; keepScreenOn = true; isFocusable = !immersive && (!tv || pictureFocused); isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.useController = !tv && !immersive; it.isFocusable = !immersive && (!tv || pictureFocused); it.isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive && !it.hasFocus()) it.post { it.requestFocus() } },
+                onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !immersive && (!tv || pictureFocused) }.onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
                         Key.DirectionDown -> { onChannel(1); true }
@@ -258,20 +265,26 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
                         else -> false
                     }
                 })
-        }, controls = {
-        if (tv && pictureFocused) Text("↑↓ 换台   确认 / ← 频道菜单   长按确认 线路设置", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+        }
+    val controls: @Composable () -> Unit = {
+        if (tv && pictureFocused) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         val displayedAttempt = status.attempt ?: status.lastAttempt
         VideoControls(status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
         } ?: "线路", displayedAttempt?.let { routeLabel(it.target, library.profiles) }.orEmpty(),
-            status.channelId != null, player != null, onDetails, onFullscreen, model::stopPlayback)
+            status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
+            canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
+            fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道")
 
-        if (player == null && status.error != null) PlaybackRecoveryCard(status.error,
-            onRetry = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it) } }, onChooseRoute = onDetails)
+        if (player == null && !status.loading && status.error != null) PlaybackRecoveryCard(status.error,
+            onRetry = replay, onChooseRoute = onDetails)
         val diagnosticAttempt = status.attempt ?: status.lastAttempt
         if (diagnostics && diagnosticAttempt != null) Text("${redactedUrl(diagnosticAttempt.streamUrl)}\n${routeLabel(diagnosticAttempt.target, library.profiles)} · ${diagnosticAttempt.matchedRule}" +
             (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
-        })
+        }
+    if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
+        onChannel, onDetails, picture, controls)
+    else PlayerPaneLayout(fillPicture, modifier, picture, controls)
 }
 
 
@@ -286,7 +299,8 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
 }
 
 @Composable internal fun VideoControls(status: String, line: String, proxy: String,
-    canDetails: Boolean, canStop: Boolean, onDetails: () -> Unit, onFullscreen: () -> Unit, onStop: () -> Unit) {
+    canDetails: Boolean, canStop: Boolean, onDetails: () -> Unit, onFullscreen: () -> Unit, onStop: () -> Unit,
+    canReplay: Boolean = false, onReplay: () -> Unit = {}, fullscreenLabel: String = "全屏 / 频道") {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (proxy.isNotBlank()) Text(proxy, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
@@ -296,8 +310,10 @@ internal val colors = darkColorScheme(primary = Color(0xFFB5CCFF), secondary = C
         TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {
             Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        TvTextButton(onClick = onFullscreen, modifier = Modifier.weight(1f)) { Text("全屏 / 频道", maxLines = 1) }
-        TvTextButton(onClick = onStop, enabled = canStop, modifier = Modifier.weight(1f)) { Text("停止", maxLines = 1) }
+        TvTextButton(onClick = onFullscreen, modifier = Modifier.weight(1f)) { Text(fullscreenLabel, maxLines = 1) }
+        TvTextButton(onClick = if (canReplay) onReplay else onStop, enabled = canStop || canReplay, modifier = Modifier.weight(1f)) {
+            Text(if (canReplay) "重新播放" else "停止", maxLines = 1)
+        }
     }
 }
 
