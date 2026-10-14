@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -64,7 +65,10 @@ import java.util.Date
 
 internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = Color.White, primaryContainer = Color(0xFF6D28D9), onPrimaryContainer = Color.White,
     secondary = Color(0xFFD0B6FF), secondaryContainer = Color(0xFF6D28D9), onSecondaryContainer = Color.White,
-    background = Color(0xFF0B0A10), surface = Color(0xFF17141F), surfaceVariant = Color(0xFF292333),
+    background = Color(0xFF171323), surface = Color(0xFF211C30), surfaceVariant = Color(0xFF342C47),
+    surfaceContainerLowest = Color(0xFF171323), surfaceContainerLow = Color(0xFF211C30),
+    surfaceContainer = Color(0xFF2A243B), surfaceContainerHigh = Color(0xFF342C47), surfaceContainerHighest = Color(0xFF403650),
+    outline = Color(0xFF867A9C), outlineVariant = Color(0xFF4C415F),
     onBackground = Color(0xFFF5F3FF), onSurface = Color(0xFFF5F3FF), onSurfaceVariant = Color(0xFFA9A3B5),
     tertiary = Color(0xFFFFC857), error = Color(0xFFFF6B7A))
 
@@ -153,7 +157,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 if (!tv && !immersive) NavigationBar {
                     listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
-                            icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
+                            icon = { AppNavigationIcon(index) }, label = { Text(label) })
                     }
                 }
             }) { padding ->
@@ -191,11 +195,11 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         when {
                             immersive -> video(Modifier.fillMaxSize())
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
-                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) },
+                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork) },
                                 picture = { video(Modifier.fillMaxSize()) },
                                 navigation = { if (tv) TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
-                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) })
+                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork) })
                         }
                     }
                     1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
@@ -262,11 +266,21 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 @Composable internal fun ChannelList(library: Library, status: PlaybackStatus, tv: Boolean, modifier: Modifier,
     onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit,
     favorites: Set<String> = emptySet(), recent: List<String> = emptyList(), onFavorite: (Channel) -> Unit = {},
-    programme: @Composable (Channel) -> Unit = {}) {
+    programme: @Composable (Channel) -> Unit = {}, autoExpand: Boolean = false,
+    allowArtworkNetwork: () -> Boolean = { false }) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var collapsed by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var initialized by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(autoExpand, library.channels.isNotEmpty()) {
+        if (autoExpand && !initialized && library.channels.isNotEmpty()) {
+            val first = library.channels.firstOrNull { it.id == status.channelId }
+                ?: library.channels.hongKongFirst().first()
+            expanded = listOf("region:${first.browseRegion()}", "type:${first.browseRegion()}:${first.browseType()}")
+            initialized = true
+        }
+    }
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
@@ -324,14 +338,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         if (open(typeKey)) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
-                            leadingContent = if (status.channelId == channel.id) ({ Text("▶", Modifier.semantics { contentDescription = "正在播放" }) }) else null,
+                            leadingContent = { ChannelArtwork(channel, status.channelId == channel.id, allowArtworkNetwork) },
                             supportingContent = { programme(channel) },
                             trailingContent = { TvTextButton(onClick = { onFavorite(channel) }) {
                                 Text(if (channel.id in favorites) "★" else "☆", color = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
-                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceContainer, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 supportingColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
-                            modifier = Modifier.padding(start = 32.dp).onFocusChanged { focused = it.isFocused }
+                            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).onFocusChanged { focused = it.isFocused }
                                 .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&

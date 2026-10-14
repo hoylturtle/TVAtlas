@@ -43,6 +43,9 @@ android {
  ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
     implementation("com.google.zxing:core:3.5.3")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")

@@ -37,7 +37,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
 }
 
 @Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.width(112.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp),
+    Column(modifier.width(132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("TVAtlas", Modifier.padding(vertical = 20.dp), fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium)
@@ -45,6 +45,8 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
             TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).selectionOutline(selected == index),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
                     MaterialTheme.colorScheme.primary else Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)) {
+                AppNavigationIcon(index)
+                Spacer(Modifier.width(6.dp))
                 Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)
             }
         }

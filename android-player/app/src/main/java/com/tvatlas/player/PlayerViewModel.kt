@@ -237,6 +237,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+    fun canLoadChannelArtwork(): Boolean = allowCurrentNetwork(options.value) && !needsConsent()
     fun isMetered(): Boolean = connectivity.activeNetwork != null && connectivity.isActiveNetworkMetered
     private fun isMobileNetwork(): Boolean {
         val caps = connectivity.activeNetwork?.let(connectivity::getNetworkCapabilities) ?: return false

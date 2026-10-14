@@ -6,6 +6,13 @@ import android.content.res.Configuration
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -58,6 +65,11 @@ import com.tvatlas.player.update.*
                     Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp).tvFocusOutline(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(when (index) { 0 -> Icons.Default.PlayArrow; 1 -> Icons.Default.Refresh; 2 -> Icons.Default.Settings; else -> Icons.Default.Info },
+                                contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                        }
+                        Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(title, style = MaterialTheme.typography.titleMedium)
                             Text(summaries[index], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

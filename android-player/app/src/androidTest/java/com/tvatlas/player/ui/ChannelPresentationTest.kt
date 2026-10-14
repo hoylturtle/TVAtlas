@@ -21,6 +21,15 @@ class ChannelPresentationTest {
     private val second = Stream("s2", "https://private.example/other?token=fixture", "p2")
     private val profile = ProxyProfile("sub_internal_identifier", "香港节点", ProxyType.MIHOMO, "private.example", 443)
 
+    @Test fun defaultBrowseShowsChannelArtworkAndCanCollapse() {
+        val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(first))
+        compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()),
+            PlaybackStatus(), false, Modifier, {}, {}, {}, autoExpand = true) } }
+        compose.onNodeWithText("翡翠台").assertIsDisplayed()
+        compose.onNodeWithContentDescription("翡翠台频道标识", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("⌄  香港").performClick()
+        compose.onNodeWithText("翡翠台").assertDoesNotExist()
+    }
     @Test fun groupsStartCollapsedAndSearchShowsMatchesWithoutOpeningEveryGroup() {
         val channels = listOf(Channel("c1", "CCTV 新闻", "中国大陆 · 新闻", streams = listOf(first)), Channel("c2", "体育频道", "体育", streams = listOf(second)))
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())

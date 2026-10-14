@@ -34,7 +34,7 @@ class UiPreviewTest {
                         Row {
                             if (tv && screen != 0) TvNavigation(screen, {})
                             Box(Modifier.weight(1f)) {
-                                val channels: @Composable (Modifier) -> Unit = { modifier -> ChannelList(library, PlaybackStatus(), tv, modifier, {}, {}, {}) }
+                                val channels: @Composable (Modifier) -> Unit = { modifier -> ChannelList(library, PlaybackStatus(), tv, modifier, {}, {}, {}, autoExpand = true) }
                                 val picture: @Composable (Modifier) -> Unit = { modifier -> PlayerPaneLayout(true, modifier,
                                     { Text("选择频道开始观看") }, { VideoControls("准备就绪", "TVAtlas 默认频道", "艾可云 · 香港 02", true, false, {}, {}, {}, immersive = tv) }) }
                                 when (screen) {
@@ -56,6 +56,10 @@ class UiPreviewTest {
             compose.waitForIdle()
             if (television && page == 3) {
                 compose.onNodeWithText("界面与遥控器").performClick()
+                compose.waitForIdle()
+            }
+            if (page == 0) {
+                compose.onNodeWithText("翡翠台").performScrollTo()
                 compose.waitForIdle()
             }
             val bitmap = compose.onNodeWithTag("preview").captureToImage().asAndroidBitmap()

@@ -1,0 +1,40 @@
+{
+  "description": "Channel identity artwork; channel names and logos belong to their respective broadcasters. Bundled for offline channel identification.",
+  "sources": [
+    {
+      "file": "channel_rthk31.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/rthk-tv-31-hk.png",
+      "gitBlob": "3b6dde5b6ad0c27dc7bb1e80b68f5e5fe21b89b4"
+    },
+    {
+      "file": "channel_rthk32.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/rthk-tv-32-hk.png",
+      "gitBlob": "e1697b4f3c8e89225b96dfb7da253ff653badb1f"
+    },
+    {
+      "file": "channel_rthk33.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/rthk-tv-33-hk.png",
+      "gitBlob": "1acf3f373a44a625c6ae20a262885406abdfdaf6"
+    },
+    {
+      "file": "channel_jade.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/tvb-jade-hk.png",
+      "gitBlob": "e53d679e99b72bbef9ef622e73c06eb8a2645bbf"
+    },
+    {
+      "file": "channel_pearl.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/tvb-pearl-hk.png",
+      "gitBlob": "abdacadf6f12f4f52107ca7e2a04213391120115"
+    },
+    {
+      "file": "channel_viu.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/viu-tv-hk.png",
+      "gitBlob": "508523a966e20d72832dd14e38b748d7df13584c"
+    },
+    {
+      "file": "channel_viusix.png",
+      "source": "https://github.com/tv-logo/tv-logos/blob/main/countries/hong-kong/viu-tv-six-hk.png",
+      "gitBlob": "1666273d44be3e83f9533530eb7fb8f776edc921"
+    }
+  ]
+}
