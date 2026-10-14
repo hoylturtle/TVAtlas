@@ -45,7 +45,8 @@ import com.tvatlas.core.model.browseType
 @Composable internal fun ChannelArtwork(channel: Channel, playing: Boolean = false,
     allowNetwork: () -> Boolean = { false }, modifier: Modifier = Modifier.width(64.dp).height(48.dp)) {
     val bundled = bundledChannelArtwork(channel.name)
-    val tileColor = if (bundled != null && channel.browseType() != "ViuTV") Color(0xFF30293E) else Color(0xFFF8F6FC)
+    val darkTile = bundled != null && channel.browseType() != "ViuTV" || channel.name.trim().startsWith("CCTV", ignoreCase = true)
+    val tileColor = if (darkTile) Color(0xFF30293E) else Color(0xFFF8F6FC)
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(tileColor)
         .semantics { contentDescription = "${channel.name}频道标识" }, contentAlignment = Alignment.Center) {
         val fallback: @Composable () -> Unit = {
@@ -54,7 +55,7 @@ import com.tvatlas.core.model.browseType
                 "明珠台" -> "明珠"
                 else -> channel.name.take(8)
             }
-            Text(text, Modifier.padding(4.dp).clearAndSetSemantics {}, color = when (channel.browseType()) {
+            Text(text, Modifier.padding(4.dp).clearAndSetSemantics {}, color = if (darkTile) Color(0xFFF5F3FF) else when (channel.browseType()) {
                 "TVB" -> Color(0xFF126C66)
                 "ViuTV" -> Color(0xFF204EAB)
                 else -> Color(0xFF51338C)

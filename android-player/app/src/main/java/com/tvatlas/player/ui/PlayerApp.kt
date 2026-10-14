@@ -77,8 +77,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     onBackground = Color(0xFFF5F3FF), onSurface = Color(0xFFF5F3FF), onSurfaceVariant = Color(0xFFA9A3B5),
     tertiary = Color(0xFFFFC857), error = Color(0xFFFF6B7A))
 
-@Composable fun PlayerApp(model: PlayerViewModel) {
+/** Establish foreground explicitly: a transparent Surface cannot infer it from its background. */
+@Composable internal fun AtlasTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = colors) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface, content = content)
+    }
+}
+
+@Composable fun PlayerApp(model: PlayerViewModel) {
+    AtlasTheme {
         val library by model.library.collectAsStateWithLifecycle()
         val status by model.playback.status.collectAsStateWithLifecycle()
         val options by model.options.collectAsStateWithLifecycle()
@@ -148,7 +155,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
         PlaybackOrientation(immersive, tv)
         PlaybackSystemBars(immersive)
-        Scaffold(containerColor = Color.Transparent, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
+        Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {

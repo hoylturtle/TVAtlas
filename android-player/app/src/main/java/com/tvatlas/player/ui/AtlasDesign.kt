@@ -40,12 +40,12 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
 
 @Composable internal fun AtlasBrand(modifier: Modifier = Modifier) {
     Text(buildAnnotatedString { append("TV"); withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Atlas") } },
-        modifier, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        modifier, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 }
 @Composable internal fun AtlasHeader(title: String, subtitle: String, actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         actions()

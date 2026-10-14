@@ -38,9 +38,9 @@ class UiPreviewTest {
         val library = Library(DefaultPlaylists.entries, channels, listOf(profile,
             profile.copy(id = "hk2", name = "香港备用"), profile.copy(id = "tw1", name = "台湾 01")), RuleConfig())
         compose.setContent {
-            MaterialTheme(colorScheme = colors) { CompositionLocalProvider(LocalTvMode provides tv) {
+            AtlasTheme { CompositionLocalProvider(LocalTvMode provides tv) {
                 key(tv, screen) {
-                    Surface(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 780.dp).testTag("preview"), color = MaterialTheme.colorScheme.background) {
+                    Box(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 780.dp).testTag("preview")) {
                         Column(Modifier.atlasBackdrop()) {
                         if (!tv) AtlasAppBar({}, { screen = 3 })
                         Row(Modifier.weight(1f)) {

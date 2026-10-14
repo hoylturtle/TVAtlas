@@ -61,7 +61,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
         Box(Modifier.align(androidx.compose.ui.Alignment.CenterStart).fillMaxHeight().padding(bottom = 76.dp)) { navigation() }
         Surface(Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
             .fillMaxHeight().width(if (tv) 340.dp else 320.dp).padding(top = 12.dp, bottom = 76.dp, end = 12.dp),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.68f), shape = MaterialTheme.shapes.large) {
+            color = MaterialTheme.colorScheme.background.copy(alpha = 0.68f), contentColor = MaterialTheme.colorScheme.onSurface, shape = MaterialTheme.shapes.large) {
             Column(Modifier.padding(12.dp)) {
                 Text("频道列表", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("方向键选择 · 确认播放 · 返回收起", Modifier.padding(horizontal = 8.dp),
