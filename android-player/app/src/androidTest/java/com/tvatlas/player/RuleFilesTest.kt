@@ -51,9 +51,14 @@ class RuleFilesTest {
             db.close()
             android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, 0).use {
                 it.execSQL("DROP TABLE rule_files")
+                // Recreate the actual v2 column layout, not a v5 database with only its version changed.
+                it.execSQL("ALTER TABLE streams DROP COLUMN headers")
+                listOf("uploadBytes", "downloadBytes", "totalBytes", "expireAt", "quotaUpdatedAt").forEach { column ->
+                    it.execSQL("ALTER TABLE subscriptions DROP COLUMN $column")
+                }
                 it.execSQL("PRAGMA user_version=2")
             }
-            db = Room.databaseBuilder(context, PlayerDatabase::class.java, name).addMigrations(PlayerDatabase.MIGRATION_2_3).build()
+            db = Room.databaseBuilder(context, PlayerDatabase::class.java, name).addMigrations(PlayerDatabase.MIGRATION_2_3, PlayerDatabase.MIGRATION_3_4, PlayerDatabase.MIGRATION_4_5).build()
             assertEquals(config, db.dao().ruleFiles().first().single().json)
             assertTrue(db.dao().ruleFiles().first().single().active)
             assertEquals("saved-route", db.dao().channel("saved")!!.manualRoute)
