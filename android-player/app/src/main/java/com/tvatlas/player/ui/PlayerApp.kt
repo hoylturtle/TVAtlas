@@ -99,6 +99,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
         var tvBackArmed by remember { mutableStateOf(false) }
+        var pageMenuOpen by remember { mutableStateOf(false) }
+        var remoteActivity by remember { mutableIntStateOf(0) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
@@ -128,6 +130,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             else exitPrompt = true
         }
         BackHandler(!immersive && tab != 0) { tab = 0 }
+        LaunchedEffect(tv, channelPanelOpen, remoteActivity, status.successAt) {
+            if (tv && tab == 0 && channelPanelOpen && status.successAt != null) {
+                kotlinx.coroutines.delay(8000)
+                channelPanelOpen = false; fullscreen = true
+            }
+        }
         PlaybackOrientation(immersive, tv)
         PlaybackSystemBars(immersive)
         Scaffold(modifier = Modifier.fillMaxSize().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
@@ -151,9 +159,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 }
             }) { padding ->
             Row(Modifier.fillMaxSize().padding(padding).onPreviewKeyEvent { event ->
+                if (tv && event.type == KeyEventType.KeyDown) remoteActivity++
                 if (tv && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
                     if (tab == 0) { tvBackArmed = false; channelPanelOpen = !channelPanelOpen; fullscreen = !channelPanelOpen }
-                    else tab = 0
+                    else pageMenuOpen = true
                     true
                 } else false
             }) {
@@ -206,6 +215,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 }
             }
         }
+        if (pageMenuOpen) AlertDialog(onDismissRequest = { pageMenuOpen = false }, title = { Text("页面操作") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (tab == 1) TvTextButton(onClick = { pageMenuOpen = false; addPlaylist = true }) { Text("添加频道源 / 手机扫码") }
+                if (tab == 2) TvTextButton(onClick = { pageMenuOpen = false; addSubscription = true }) { Text("添加代理订阅") }
+                if (tab == 3) TvTextButton(onClick = { pageMenuOpen = false; logsOpen = true }) { Text("调试日志") }
+                TvTextButton(onClick = { pageMenuOpen = false; tab = 0 }) { Text("返回直播") }
+                TvTextButton(onClick = { pageMenuOpen = false; exitPrompt = true }) { Text("退出应用") }
+            }
+        }, confirmButton = { TvTextButton(onClick = { pageMenuOpen = false }) { Text("关闭") } })
         if (exitPrompt) ExitConfirmation({ exitPrompt = false }) { model.stopPlayback(); (context as? android.app.Activity)?.finish() }
         if (pendingPlay != null || pendingDownload) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为移动数据网络") },
             text = { Text(if (pendingDownload) "下载 APK 会消耗移动数据。确认继续？" else "直播可能消耗较多移动数据。继续后，本次运行允许使用移动数据。") },
