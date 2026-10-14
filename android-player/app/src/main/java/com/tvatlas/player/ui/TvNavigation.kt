@@ -48,9 +48,6 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
                 Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)
             }
         }
-        Spacer(Modifier.weight(1f))
-        Text("方向键移动\n确认选择", color = MaterialTheme.colorScheme.secondary,
-            style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -60,7 +57,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     navigation: @Composable () -> Unit = {}) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize()) { picture() }
-        Box(Modifier.align(androidx.compose.ui.Alignment.CenterStart).fillMaxHeight()) { navigation() }
+        Box(Modifier.align(androidx.compose.ui.Alignment.CenterStart).fillMaxHeight().padding(bottom = 76.dp)) { navigation() }
         Surface(Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
             .fillMaxHeight().width(if (tv) 340.dp else 320.dp).padding(top = 12.dp, bottom = 76.dp, end = 12.dp),
             color = MaterialTheme.colorScheme.background.copy(alpha = 0.82f), shape = MaterialTheme.shapes.large) {

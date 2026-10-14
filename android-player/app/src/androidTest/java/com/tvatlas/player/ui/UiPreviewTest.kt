@@ -30,7 +30,7 @@ class UiPreviewTest {
         compose.setContent {
             MaterialTheme(colorScheme = colors) { CompositionLocalProvider(LocalTvMode provides tv) {
                 key(tv, screen) {
-                    Surface(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 650.dp).testTag("preview")) {
+                    Surface(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 650.dp).testTag("preview"), color = MaterialTheme.colorScheme.background) {
                         Row {
                             if (tv && screen != 0) TvNavigation(screen, {})
                             Box(Modifier.weight(1f)) {

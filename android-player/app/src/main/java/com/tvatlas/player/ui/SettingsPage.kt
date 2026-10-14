@@ -51,16 +51,19 @@ import com.tvatlas.player.update.*
         }
         Column(Modifier.padding(start = if (tv) 230.dp else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("设置", style = MaterialTheme.typography.headlineSmall)
+            if (!tv) Text("设置", style = MaterialTheme.typography.headlineSmall)
             if (category == null) {
                 Text("按类别管理播放、网络与应用", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 categories.forEachIndexed { index, title ->
-                    TvOutlinedButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp)) {
+                    Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp).tvFocusOutline(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(title, style = MaterialTheme.typography.titleMedium)
                             Text(summaries[index], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text("›")
+                        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
                 Text("TVAtlas ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)

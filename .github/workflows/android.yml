@@ -104,7 +104,7 @@ jobs:
           script: |
             adb shell wm size 1280x720
             adb shell wm density 160
-            bash -c 'gradle :app:connectedDebugAndroidTest --stacktrace; result=$?; adb pull /sdcard/Pictures/TVAtlas app/build/ui-previews; exit "$result"' 
+            bash -c 'gradle :app:connectedDebugAndroidTest --stacktrace; result=$?; adb pull /sdcard/Pictures/TVAtlas app/build/ui-previews; exit "$result"'
             adb pull /sdcard/Pictures/TVAtlas/tv-layout.png app/build/reports/androidTests/tv-layout.png
             adb pull /sdcard/Pictures/TVAtlas/phone-proxy-layout.png app/build/reports/androidTests/phone-proxy-layout.png
             adb pull /sdcard/Pictures/TVAtlas/phone-settings-layout.png app/build/reports/androidTests/phone-settings-layout.png
