@@ -13,7 +13,7 @@ import org.junit.Test
 class PlaylistBundleTest {
     @get:Rule val compose = createComposeRule()
     @Test fun existingBuiltInSourcesShowOneSubscriptionAndCustomSourceStaysSeparate() {
-        val custom = Playlist("custom", "我的频道源", "https://example.com/channels.m3u")
+        val custom = Playlist("custom", "用户测试订阅", "https://example.com/channels.m3u")
         val library = Library(DefaultPlaylists.entries + custom, emptyList(), emptyList(), RuleConfig())
         var allRefreshed = false
         var customRefreshed = false
@@ -27,7 +27,7 @@ class PlaylistBundleTest {
         compose.onNodeWithText("关闭").performClick()
         compose.onNodeWithText("刷新订阅").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(allRefreshed) }
-        compose.onNodeWithText("我的频道源").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("用户测试订阅").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("刷新", substring = false).performScrollTo().performClick()
         compose.runOnIdle { assertTrue(customRefreshed) }
     }
