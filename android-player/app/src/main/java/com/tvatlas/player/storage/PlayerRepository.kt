@@ -54,7 +54,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
                 com.tvatlas.player.source.MyTvSuperSource.recognizes(it.url) || com.tvatlas.player.source.ViuTvSource.recognizes(it.url) ||
                 com.tvatlas.player.source.HongKongPublicSources.recognizesStream(it.url)
             }.distinctBy { it.url }.map {
-                Stream(it.id, it.url, it.sourcePlaylistId, route(it.manualRoute), it.lastSuccessAt, it.lastFailureAt, it.failureCount)
+                Stream(it.id, it.url, it.sourcePlaylistId, route(it.manualRoute), it.lastSuccessAt, it.lastFailureAt, it.failureCount, runCatching { RuleCodec.json.decodeFromString<Map<String, String>>(it.headers) }.getOrDefault(emptyMap()))
             }
             if (streams.isEmpty()) null else Channel(ch.id, ch.name, ch.channelGroup, ch.logo, ch.tvgId, streams, route(ch.manualRoute)).normalizeHongKongGroup()
         }
@@ -101,7 +101,7 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
                 ch.streams.map { stream ->
                     val old = oldStreams[stream.id] ?: oldStreams.values.filter { it.channelId == channelId &&
                         M3uParser.streamIdentity(it.url) == M3uParser.streamIdentity(stream.url) }.singleOrNull()
-                    old?.copy(url = stream.url, channelId = channelId) ?: StreamRow(stream.id, channelId, stream.url, playlist.id)
+                    old?.copy(url = stream.url, channelId = channelId, headers = RuleCodec.json.encodeToString(stream.headers)) ?: StreamRow(stream.id, channelId, stream.url, playlist.id, headers = RuleCodec.json.encodeToString(stream.headers))
                 }
             }
             dao.deleteStreams(oldStreams.keys.toList() - rows.map { it.id }.toSet())

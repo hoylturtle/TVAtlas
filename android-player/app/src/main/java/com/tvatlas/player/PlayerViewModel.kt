@@ -40,7 +40,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val profiles = library.value.profiles
         val selected = settings.subscriptionRoute.first()
         withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
-        SubscriptionDownloader(pool::client, debugLog).download(url, subscriptionTargets(selected, profiles))
+        SubscriptionDownloader(pool::client, debugLog).downloadWithMetadata(url, subscriptionTargets(selected, profiles))
     }
     val subscriptions = subscriptionRepository.subscriptions.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val settings = SettingsStore(application)

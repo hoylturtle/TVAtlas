@@ -154,6 +154,7 @@ class PlaybackCoordinator(
                 })
         if (token != generation) return
         val factory = OkHttpDataSource.Factory(mediaCalls)
+            .setDefaultRequestProperties(if (official) emptyMap() else stream.headers)
             .setTransferListener(object : TransferListener {
                 override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
                 override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit

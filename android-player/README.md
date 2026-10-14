@@ -19,7 +19,7 @@
 
 ## 构建与验证
 
-需要 JDK 17、Gradle 8.11.1、Android SDK platform 35 / build-tools 35.0.0。打开此目录作为 Android Studio 工程，或执行：
+需要 JDK 21、Gradle 8.11.1、Android SDK platform 35 / build-tools 35.0.0。打开此目录作为 Android Studio 工程，或执行：
 
 ```sh
 python3 scripts/fetch_mihomo.py

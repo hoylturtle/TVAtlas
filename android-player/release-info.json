@@ -1,9 +1,9 @@
 {
-  "versionCode": 36,
-  "versionName": "0.1.35",
+  "versionCode": 37,
+  "versionName": "0.1.36",
   "minSdk": 23,
-  "notes": "频道列表改为地区 → 频道类型 → 频道两层可折叠菜单，例如香港 → TVB → 翡翠台、大陆 → CCTV → CCTV1、大陆 → 卫视 → 广东卫视。香港置顶，搜索自动展开，收藏和最近观看同步使用分级菜单；保留频道身份和路由设置。",
+  "notes": "新增代理订阅套餐已用、剩余、总流量与到期信息，区分服务商额度与本机订阅/节点统计；完善默认频道地区说明、规则详情和紫色界面；修正平板分屏布局及播放源请求头兼容性。项目与 CI 升级至 Java 21。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.35-beta.1",
+  "releaseTag": "v0.1.36-beta.1",
   "coreVersion": "v1.19.32"
 }

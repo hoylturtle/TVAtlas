@@ -21,6 +21,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     @PrimaryKey val id: String, val channelId: String, val url: String, val sourcePlaylistId: String,
     val manualRoute: String? = null, val lastSuccessAt: Long? = null,
     val lastFailureAt: Long? = null, val failureCount: Int = 0,
+    @ColumnInfo(defaultValue = "'{}'") val headers: String = "{}",
 )
 @kotlinx.serialization.Serializable
 @Entity(tableName = "proxies") data class ProxyRow(
@@ -30,6 +31,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @kotlinx.serialization.Serializable
 @Entity(tableName = "subscriptions") data class SubscriptionRow(
     @PrimaryKey val id: String, val name: String, val lastUpdatedAt: Long, val nodeCount: Int,
+    val uploadBytes: Long? = null, val downloadBytes: Long? = null, val totalBytes: Long? = null,
+    val expireAt: Long? = null, val quotaUpdatedAt: Long? = null,
 )
 @kotlinx.serialization.Serializable
 @Entity(tableName = "history") data class HistoryRow(
@@ -108,7 +111,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 }
 
 @Database(entities = [PlaylistRow::class, ChannelRow::class, StreamRow::class, ProxyRow::class,
-    HistoryRow::class, FailureRow::class, RulesRow::class, SubscriptionRow::class, RuleFileRow::class], version = 3, exportSchema = true)
+    HistoryRow::class, FailureRow::class, RulesRow::class, SubscriptionRow::class, RuleFileRow::class], version = 5, exportSchema = true)
 abstract class PlayerDatabase : RoomDatabase() {
     abstract fun dao(): PlayerDao
     companion object {
@@ -124,7 +127,21 @@ abstract class PlayerDatabase : RoomDatabase() {
                 db.execSQL("INSERT INTO rule_files (id,name,json,importedAt,active) SELECT 'legacy','原有自定义规则',json,0,1 FROM rules WHERE id=1")
             }
         }
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE streams ADD COLUMN headers TEXT NOT NULL DEFAULT '{}'")
+            }
+        }
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE subscriptions ADD COLUMN uploadBytes INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE subscriptions ADD COLUMN downloadBytes INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE subscriptions ADD COLUMN totalBytes INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE subscriptions ADD COLUMN expireAt INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE subscriptions ADD COLUMN quotaUpdatedAt INTEGER DEFAULT NULL")
+            }
+        }
         fun open(context: Context) = Room.databaseBuilder(context, PlayerDatabase::class.java, "tvatlas.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 }

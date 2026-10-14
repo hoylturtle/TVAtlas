@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tvatlas.player.traffic.*
+import com.tvatlas.core.model.ProxyProfile
+import com.tvatlas.player.storage.SubscriptionRow
 import java.util.Locale
 
 internal fun trafficSize(bytes: Long): String = when {
@@ -20,12 +22,14 @@ internal fun trafficSize(bytes: Long): String = when {
 }
 
 /** Scope the one-second statistics updates to this card, rather than recomposing the whole app. */
-@Composable internal fun TrafficStatistics(store: TrafficStore) {
+@Composable internal fun TrafficStatistics(store: TrafficStore, profiles: List<ProxyProfile> = emptyList(),
+    subscriptions: List<SubscriptionRow> = emptyList()) {
     val state by store.state.collectAsStateWithLifecycle()
-    TrafficStatisticsCard(state, store::reset)
+    TrafficStatisticsCard(state, store::reset, profiles, subscriptions)
 }
 
-@Composable internal fun TrafficStatisticsCard(state: TrafficSnapshot, onReset: () -> Unit) {
+@Composable internal fun TrafficStatisticsCard(state: TrafficSnapshot, onReset: () -> Unit,
+    profiles: List<ProxyProfile> = emptyList(), subscriptions: List<SubscriptionRow> = emptyList()) {
     var details by remember { mutableStateOf(false) }
     var reset by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
@@ -47,9 +51,27 @@ internal fun trafficSize(bytes: Long): String = when {
     if (details) AlertDialog(onDismissRequest = { details = false }, title = { Text("流量明细") }, text = {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.entries.isEmpty()) item { Text("暂无流量记录") }
+            val profileById = profiles.associateBy { it.id }
+            val subscriptionNames = subscriptions.associate { it.id to it.name }
+            val subscriptionUsage = state.entries.filter { it.proxy }.groupBy { entry ->
+                profileById[entry.id.removePrefix("PROXY:")]?.subscriptionId
+            }.filterKeys { it != null }.mapValues { (_, entries) -> entries.sumOf { it.total } }
+            if (subscriptionUsage.isNotEmpty()) item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("按订阅", style = MaterialTheme.typography.titleSmall)
+                    subscriptionUsage.entries.sortedByDescending { it.value }.forEach { (id, total) ->
+                        Text("${id?.let(subscriptionNames::get) ?: "已移除订阅"} · ${trafficSize(total)}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    HorizontalDivider()
+                    Text("按节点", style = MaterialTheme.typography.titleSmall)
+                }
+            }
             items(state.entries.sortedByDescending { it.total }, key = { it.id }) { entry ->
                 Column {
-                    Text(if (entry.proxy) entry.name else "直连", style = MaterialTheme.typography.titleSmall)
+                    val profile = profileById[entry.id.removePrefix("PROXY:")]
+                    val subscription = profile?.subscriptionId?.let(subscriptionNames::get)
+                    Text(if (entry.proxy) listOfNotNull(subscription, entry.name).joinToString(" · ") else "直连",
+                        style = MaterialTheme.typography.titleSmall)
                     Text("下载 ${trafficSize(entry.received)} · 上传 ${trafficSize(entry.sent)}", style = MaterialTheme.typography.bodySmall)
                     Text("合计 ${trafficSize(entry.total)}", style = MaterialTheme.typography.bodyMedium)
                 }

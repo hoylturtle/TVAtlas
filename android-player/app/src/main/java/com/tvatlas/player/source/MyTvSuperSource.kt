@@ -99,13 +99,17 @@ object MyTvSuperSource {
             throw MissingGuestCredentials()
         return token
     }
-    fun parseCheckout(text: String, network: String = "J", log: com.tvatlas.player.debug.DebugLog? = null): String {
+    fun parseCheckout(text: String, network: String = "J", log: com.tvatlas.player.debug.DebugLog? = null): String =
+        parseCheckoutConfig(text, network, log).url
+    fun parseCheckoutConfig(text: String, network: String = "J", log: com.tvatlas.player.debug.DebugLog? = null): Playback {
         val root = Json.parseToJsonElement(text).jsonObject
+        val protocol = root["protocol"]?.jsonPrimitive?.contentOrNull
+        val drm = root["drm"]?.jsonPrimitive?.contentOrNull
+        val protected = drm == "cenc_m"
         if (root["content_id"]?.jsonPrimitive?.contentOrNull != "ott_${network}_h264" ||
-            root["protocol"]?.jsonPrimitive?.contentOrNull != "dash" ||
-            root["drm"]?.jsonPrimitive?.contentOrNull != "cenc_m" ||
-            root["video_stage"]?.jsonPrimitive?.contentOrNull != "free")
-            throw SourceResolutionException("官方播放配置不受支持（仅接入免费 TVB DASH）", PlaybackFailure(FailureKind.MANIFEST))
+            protocol !in listOf("dash", "hls") || drm !in listOf(null, "", "none", "cenc_m") ||
+            (protected && protocol != "dash") || root["video_stage"]?.jsonPrimitive?.contentOrNull != "free")
+            throw SourceResolutionException("官方播放配置不受支持（仅接入免费 DASH / HLS）", PlaybackFailure(FailureKind.MANIFEST))
         val profiles = root["profiles"]?.jsonArray?.map { it.jsonObject }.orEmpty()
         val profile = profiles.firstOrNull { it["quality"]?.jsonPrimitive?.contentOrNull == "auto" }
             ?: profiles.firstOrNull { it["quality"]?.jsonPrimitive?.contentOrNull == "high" }
@@ -113,20 +117,21 @@ object MyTvSuperSource {
         val url = profile["streaming_path"]?.jsonPrimitive?.contentOrNull?.toHttpUrlOrNull()
             ?: throw SourceResolutionException("官方未返回播放地址", PlaybackFailure(FailureKind.MANIFEST))
         // Checkout can return the entry host or a direct session host on the same official CDN.
-        val trustedHost = url.host == "edgeware.tvb.com" || url.host.endsWith(".edgeware.tvb.com")
+        val trustedHost = url.host == "edgeware.tvb.com" || url.host.endsWith(".edgeware.tvb.com") ||
+            Regex("""amg[0-9]+-amg[0-9]+c[0-9]+-mytvsuper-apac-[0-9]+\.playouts\.now\.amagi\.tv""").matches(url.host)
         val reason = when {
             url.scheme != "https" -> "scheme"
             !trustedHost -> "host"
             url.port != 443 -> "port"
             url.username.isNotEmpty() || url.password.isNotEmpty() -> "credentials"
             url.fragment != null -> "fragment"
-            !url.encodedPath.endsWith("/index.mpd") -> "manifest"
+            !url.encodedPath.endsWith(if (protocol == "hls") ".m3u8" else ".mpd") -> "manifest"
             else -> null
         }
         log?.event(if (reason == null) "INFO" else "WARN", "CHECKOUT_URL",
             "host=${url.host} accepted=${reason == null} reason=${reason ?: "none"}")
         if (reason != null) throw SourceResolutionException("官方播放地址校验失败（$reason），请导出日志", PlaybackFailure(FailureKind.MANIFEST))
-        return url.toString()
+        return Playback(url.toString(), "", drmRequired = protected, mimeType = if (protocol == "hls") "application/x-mpegURL" else "application/dash+xml")
     }
     fun licenseClient(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): OkHttpClient = base.newBuilder()
         .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->
@@ -198,9 +203,9 @@ object MyTvSuperSource {
                 .header("Accept", "application/json").header("Referer", PAGE)
                 .header("Origin", "https://www.mytvsuper.com")
                 .header("App-Domain", "com.tvb.mytvsuper.web").header("Authorization", "Bearer $token").build(), "播放配置", log)
-            val url = parseCheckout(checkout, entry.network, log)
-            log?.event("INFO", "CHECKOUT", "free ${entry.network} DASH cenc_m automatic profile accepted")
-            return Playback(url, token, "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_${entry.network}_h264")
+            val playback = parseCheckoutConfig(checkout, entry.network, log)
+            log?.event("INFO", "CHECKOUT", "free ${entry.network} mime=${playback.mimeType} drm=${playback.drmRequired} automatic profile accepted")
+            return playback.copy(userToken = token, licenseUrl = "https://wv.drm.tvb.com/wvproxy/mlicense?contentid=ott_${entry.network}_h264")
         } finally { synchronized(cookies) { cookies.clear() } }
     }
     private suspend fun request(client: OkHttpClient, request: Request, stage: String, log: com.tvatlas.player.debug.DebugLog?): String = suspendCancellableCoroutine { continuation ->

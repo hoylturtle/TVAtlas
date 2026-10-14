@@ -57,4 +57,15 @@ class RoutingPageTest {
         compose.onNodeWithText("更新订阅").performScrollTo().performClick()
         compose.runOnIdle { assertEquals("sub", refreshed) }
     }
+    @Test fun subscriptionShowsProviderQuotaAndRulesRemainDiscoverable() {
+        val quota = listOf(SubscriptionRow("sub", "艾可云", 1791763200000, 2,
+            uploadBytes = 1024, downloadBytes = 3072, totalBytes = 10240,
+            expireAt = 1791763200000, quotaUpdatedAt = 1791760000000))
+        compose.setContent { MaterialTheme { RoutingPage(library, {}, {}, {}, {}, quota, false, {}, {}, {}, {}) } }
+        compose.onNodeWithText("套餐：已用", substring = true).assertExists()
+        compose.onNodeWithText("剩余", substring = true).assertExists()
+        compose.onNodeWithText("规则").performClick()
+        compose.onNodeWithText("中国大陆 → 直连", substring = true).assertExists()
+        compose.onNodeWithText("香港、澳门 → 香港节点", substring = true).assertExists()
+    }
 }

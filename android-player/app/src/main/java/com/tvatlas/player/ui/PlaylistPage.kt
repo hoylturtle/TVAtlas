@@ -35,9 +35,9 @@ import com.tvatlas.player.storage.*
         if (builtIn.isNotEmpty()) item(key = "built-in-bundle") {
             Card(onClick = { details = true }, modifier = Modifier.fillMaxWidth().tvFocusOutline(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("TVAtlas 频道订阅", style = MaterialTheme.typography.titleMedium)
+                    Text("TVAtlas 默认频道", style = MaterialTheme.typography.titleMedium)
                     Text("$count 个频道 · 内置订阅", style = MaterialTheme.typography.bodyMedium)
-                    Text("香港仅使用 TVB、ViuTV、港台及 HOY 官方线路，分为综合、新闻、影视。", style = MaterialTheme.typography.bodySmall,
+                    Text("覆盖中国大陆、香港、澳门、台湾、日本、韩国；香港使用 TVB、ViuTV、港台及 HOY 官方线路。", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TvTextButton(onClick = { details = true }, modifier = Modifier.fillMaxWidth()) { Text("查看内置线路详情") }
                     Text("上次完整更新：${date(updatedAt)}", style = MaterialTheme.typography.bodySmall)
@@ -74,7 +74,8 @@ import com.tvatlas.player.storage.*
         text = {
             var expanded by remember { mutableStateOf<String?>(null) }
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("$count 个频道 · ${builtIn.size} 个来源", style = MaterialTheme.typography.bodyMedium)
+                Text("$count 个频道 · 中国大陆、香港、澳门、台湾、日本、韩国", style = MaterialTheme.typography.bodyMedium)
+                Text("默认频道由 ${builtIn.size} 个内置来源合并展示；刷新失败的来源会保留上次成功内容。", style = MaterialTheme.typography.bodySmall)
                 builtIn.forEach { source ->
                     val official = when {
                         source.url == MyTvSuperSource.FREE_PAGE || MyTvSuperSource.recognizes(source.url) -> MyTvSuperSource.playlist(source.url)

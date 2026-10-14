@@ -23,9 +23,38 @@ internal fun subscriptionTargets(selected: RouteTarget, profiles: List<ProxyProf
         listOf(RouteTarget.DIRECT) + profiles.filter { it.enabled }
             .sortedBy { if (isHongKongLabel(it.name)) 0 else 1 }.take(2).map { RouteTarget.proxy(it.id) }
 
+data class SubscriptionQuota(
+    val uploadBytes: Long,
+    val downloadBytes: Long,
+    val totalBytes: Long,
+    val expireAt: Long?,
+) {
+    val usedBytes: Long get() = if (uploadBytes > Long.MAX_VALUE - downloadBytes) Long.MAX_VALUE else uploadBytes + downloadBytes
+    val remainingBytes: Long get() = (totalBytes - usedBytes).coerceAtLeast(0)
+}
+
+data class DownloadedSubscription(val text: String, val quota: SubscriptionQuota?)
+
+internal fun parseSubscriptionQuota(value: String?): SubscriptionQuota? {
+    if (value.isNullOrBlank()) return null
+    val fields = value.split(';').mapNotNull { part ->
+        val pair = part.trim().split('=', limit = 2)
+        if (pair.size == 2) pair[0].trim().lowercase() to pair[1].trim() else null
+    }.toMap()
+    val upload = fields["upload"]?.toLongOrNull()?.takeIf { it >= 0 } ?: return null
+    val download = fields["download"]?.toLongOrNull()?.takeIf { it >= 0 } ?: return null
+    val total = fields["total"]?.toLongOrNull()?.takeIf { it > 0 } ?: return null
+    val expireAt = fields["expire"]?.toLongOrNull()?.takeIf { it > 0 }?.let { seconds ->
+        if (seconds > Long.MAX_VALUE / 1000) null else seconds * 1000
+    }
+    return SubscriptionQuota(upload, download, total, expireAt)
+}
+
 /** Retry transport failures only; never replace saved nodes with a failed or malformed response. */
 class SubscriptionDownloader(private val client: (RouteTarget) -> OkHttpClient, private val log: DebugLog? = null) {
-    suspend fun download(url: String, targets: List<RouteTarget>): String = withContext(Dispatchers.IO) {
+    suspend fun download(url: String, targets: List<RouteTarget>): String = downloadWithMetadata(url, targets).text
+
+    suspend fun downloadWithMetadata(url: String, targets: List<RouteTarget>): DownloadedSubscription = withContext(Dispatchers.IO) {
         if (httpUri(url) == null) throw SubscriptionException("请输入合法的 HTTP(S) 订阅地址")
         var reason = "网络连接失败"
         for ((index, target) in targets.distinct().withIndex()) {
@@ -58,7 +87,7 @@ class SubscriptionDownloader(private val client: (RouteTarget) -> OkHttpClient, 
                             output.write(buffer, 0, count)
                         }
                     }
-                    output.toString("UTF-8")
+                    DownloadedSubscription(output.toString("UTF-8"), parseSubscriptionQuota(response.header("subscription-userinfo")))
                 }
                 if (downloaded != null) return@withContext downloaded
             } catch (cancelled: CancellationException) { throw cancelled }

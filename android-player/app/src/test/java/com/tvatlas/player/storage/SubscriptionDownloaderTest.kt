@@ -48,4 +48,22 @@ class SubscriptionDownloaderTest {
             assertEquals(3, server.requestCount)
         } finally { server.shutdown() }
     }
+    @Test fun readsSubscriptionQuotaWithoutExposingSubscriptionAddress() = runBlocking {
+        val server = MockWebServer().apply { start() }
+        try {
+            server.enqueue(MockResponse().setBody("proxies: []")
+                .addHeader("subscription-userinfo", "upload=1024; download=3072; total=10240; expire=1791763200"))
+            val result = SubscriptionDownloader({ OkHttpClient() }).downloadWithMetadata(
+                server.url("/private?token=fixture").toString(), listOf(RouteTarget.DIRECT))
+            assertEquals("proxies: []", result.text)
+            assertEquals(4096L, result.quota?.usedBytes)
+            assertEquals(6144L, result.quota?.remainingBytes)
+            assertEquals(1791763200000L, result.quota?.expireAt)
+        } finally { server.shutdown() }
+    }
+    @Test fun malformedOrMissingQuotaIsTreatedAsUnavailable() {
+        assertNull(parseSubscriptionQuota(null))
+        assertNull(parseSubscriptionQuota("upload=1; download=2"))
+        assertNull(parseSubscriptionQuota("upload=nope; download=2; total=10"))
+    }
 }

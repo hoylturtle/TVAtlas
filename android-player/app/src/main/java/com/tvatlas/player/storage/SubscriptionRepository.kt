@@ -16,7 +16,7 @@ class SubscriptionRepository(
     private val db: PlayerDatabase, private val client: OkHttpClient,
     private val vault: CredentialVault, private val core: MihomoRuntime,
     private val log: com.tvatlas.player.debug.DebugLog? = null,
-    private val download: (suspend (String) -> String)? = null,
+    private val download: (suspend (String) -> DownloadedSubscription)? = null,
 ) {
     val subscriptions = db.dao().subscriptions()
     suspend fun add(name: String, url: String): Int {
@@ -32,8 +32,10 @@ class SubscriptionRepository(
     }
     private suspend fun update(id: String, name: String, url: String): Int = withContext(Dispatchers.IO) {
         if (httpUri(url) == null) throw SubscriptionException("请输入合法的 HTTP(S) 订阅地址")
-        val text = download?.invoke(url) ?: SubscriptionDownloader({ client }, log).download(url, listOf(com.tvatlas.core.model.RouteTarget.DIRECT))
-        val parsed = ClashSubscription.parse(text, id)
+        val downloaded = download?.invoke(url) ?: SubscriptionDownloader({ client }, log)
+            .downloadWithMetadata(url, listOf(com.tvatlas.core.model.RouteTarget.DIRECT))
+        val parsed = ClashSubscription.parse(downloaded.text, id)
+        val previousSubscription = db.dao().subscription(id)
         val old = db.dao().subscriptionNodes(id).associateBy { it.id }
         if (db.dao().coreNodes().count { it.subscriptionId != id } + parsed.nodes.size > ClashSubscription.MAX_NODES)
             throw SubscriptionException("最多启用 ${ClashSubscription.MAX_NODES} 个订阅节点，请先移除其他订阅")
@@ -49,7 +51,13 @@ class SubscriptionRepository(
                     val p = n.profile
                     ProxyRow(p.id, p.name, p.type.name, p.host, p.port, old[p.id]?.enabled ?: true, id)
                 })
-                db.dao().saveSubscription(SubscriptionRow(id, name, System.currentTimeMillis(), parsed.nodes.size))
+                val quota = downloaded.quota
+                db.dao().saveSubscription(SubscriptionRow(id, name, System.currentTimeMillis(), parsed.nodes.size,
+                    quota?.uploadBytes ?: previousSubscription?.uploadBytes,
+                    quota?.downloadBytes ?: previousSubscription?.downloadBytes,
+                    quota?.totalBytes ?: previousSubscription?.totalBytes,
+                    if (quota != null) quota.expireAt else previousSubscription?.expireAt,
+                    quota?.let { System.currentTimeMillis() } ?: previousSubscription?.quotaUpdatedAt))
             }
         } catch (error: Exception) { previous.forEach { (key, value) -> vault.putSecret(key, value) }; throw error }
         old.keys.filter { oldId -> parsed.nodes.none { it.profile.id == oldId } }.forEach { vault.putSecret("node:$it", null) }

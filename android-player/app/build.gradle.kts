@@ -16,7 +16,7 @@ val releaseSigning = Properties().apply {
 android {
     namespace = "com.tvatlas.player"
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("36").get().toInt(); versionName = "0.1.35"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("37").get().toInt(); versionName = "0.1.36"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {
@@ -35,8 +35,8 @@ android {
             if (signingFile != null) signingConfig = signingConfigs.getByName("tvatlasRelease")
         }
     }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17; isCoreLibraryDesugaringEnabled = true }
-    kotlinOptions { jvmTarget = "17" }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_21; targetCompatibility = JavaVersion.VERSION_21; isCoreLibraryDesugaringEnabled = true }
+    kotlinOptions { jvmTarget = "21" }
     buildFeatures { compose = true; buildConfig = true }
     packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/libmihomo.so" } }
 }

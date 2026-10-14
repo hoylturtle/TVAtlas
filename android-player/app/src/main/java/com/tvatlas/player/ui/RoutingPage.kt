@@ -24,12 +24,14 @@ import com.tvatlas.player.storage.*
     coreInfo: CoreInfo = CoreInfo(BuildConfig.MIHOMO_VERSION, "", false, false),
     onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {},
     nodeHealth: Map<String, NodeHealth> = emptyMap(), nodeTesting: Boolean = false, onTestNodes: () -> Unit = {},
-    ruleFiles: List<RuleFileRow> = emptyList(), onSelectRule: (String?) -> Unit = {}) {
+    ruleFiles: List<RuleFileRow> = emptyList(), onSelectRule: (String?) -> Unit = {},
+    trafficContent: @Composable () -> Unit = {}) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     var nodeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var hongKongOnly by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(section) { if (section == 3) onCoreInfo() }
+    var inspectedRuleFile by remember { mutableStateOf<RuleFileRow?>(null) }
+    LaunchedEffect(section) { if (section == 4) onCoreInfo() }
     val shownNodes = remember(library.profiles, nodeSubscription, hongKongOnly, query, nodeHealth) { library.profiles.filter { (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
         (!hongKongOnly || isHongKongLabel(it.name)) && it.name.contains(query, true) }.sortedWith(compareBy<ProxyProfile>(
         { val sample = nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
@@ -40,7 +42,7 @@ import com.tvatlas.player.storage.*
             Text("订阅获取节点，播放时按频道选择使用。", Modifier.padding(top = 4.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TabRow(selectedTabIndex = section) {
-                listOf("订阅", "节点", "规则", "内核").forEachIndexed { index, title ->
+                listOf("订阅", "节点", "规则", "流量", "内核").forEachIndexed { index, title ->
                     Tab(selected = section == index, onClick = { section = index; nodeSubscription = null },
                         selectedContentColor = MaterialTheme.colorScheme.onPrimary, unselectedContentColor = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.selectionOutline(section == index), text = { Text(title) })
@@ -68,6 +70,7 @@ import com.tvatlas.player.storage.*
                         val enabled = library.profiles.count { it.subscriptionId == sub.id && it.enabled }
                         Text("${sub.nodeCount} 个节点 · $enabled 个已启用", style = MaterialTheme.typography.bodyMedium)
                         Text("上次成功更新：${date(sub.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        SubscriptionQuotaSummary(sub)
                         if (updatingId == sub.id) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在下载并校验节点…", style = MaterialTheme.typography.bodySmall) }
                         if (feedback?.id == sub.id) Text(feedback.message,
                             color = if (feedback.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
@@ -114,6 +117,9 @@ import com.tvatlas.player.storage.*
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     ListItem(headlineContent = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                         supportingContent = { Column { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${if (p.enabled) "已启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)
+                            p.subscriptionId?.let { id ->
+                                Text("订阅：${subscriptions.firstOrNull { it.id == id }?.name ?: "未知订阅"}", style = MaterialTheme.typography.bodySmall)
+                            }
                             val sample = nodeHealth[p.id]
                             Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期测速 / 连接失败"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
                         } },
@@ -130,7 +136,7 @@ import com.tvatlas.player.storage.*
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("内置地区规则 · 不可修改", style = MaterialTheme.typography.titleSmall)
-                        Text("大陆：直连\n港澳 → 香港 · 台湾 → 台湾\n日本 → 日本 · 韩国 → 韩国\n同地区低延迟优先，连接失败切换其他节点。", style = MaterialTheme.typography.bodyMedium)
+                        Text("中国大陆 → 直连\n香港、澳门 → 香港节点\n台湾 → 台湾节点\n日本 → 日本节点\n韩国 → 韩国节点\n其他地区 → 自动选择保底节点", style = MaterialTheme.typography.bodyMedium)
                         Text("自定义文件未匹配时，内置规则保底生效。手动线路优先。", style = MaterialTheme.typography.bodySmall)
                         Row {
                             RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.onPrimary), selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = Modifier.selectionOutline(ruleFiles.none { it.active }))
@@ -152,19 +158,74 @@ import com.tvatlas.player.storage.*
                         Column(Modifier.weight(1f)) {
                             Text(file.name, style = MaterialTheme.typography.titleMedium)
                             Text(if (file.active) "当前生效" else "未启用", style = MaterialTheme.typography.bodySmall)
+                            TvTextButton(onClick = { inspectedRuleFile = file }) { Text("查看规则详情") }
                             TvTextButton(onClick = { onSelectRule(file.id) }, enabled = !busy && !file.active) { Text("使用此规则文件") }
                         }
                     }
                 }
             }
             items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
-                ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text(matchLabel(rule.match)) }, trailingContent = { Text(routeLabel(rule.route, library.profiles)) })
+                ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text("匹配：${matchLabel(rule.match)}") },
+                    trailingContent = { Text("路由：${routeLabel(rule.route, library.profiles)}") })
             }
         }
-        if (section == 3) item {
+        if (section == 3) item { trafficContent() }
+        if (section == 4) item {
             CoreManagement(coreInfo, onCoreAppUpdate)
         }
 
+    }
+    inspectedRuleFile?.let { file ->
+        val config = remember(file.json) { runCatching {
+            com.tvatlas.core.routing.RuleCodec.json.decodeFromString<com.tvatlas.core.routing.RuleConfig>(file.json)
+        }.getOrNull() }
+        AlertDialog(onDismissRequest = { inspectedRuleFile = null }, title = { Text(file.name) }, text = {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item { Text(if (file.active) "当前生效；未匹配频道继续使用内置地区规则" else "未启用，以下为文件内容预览") }
+                if (config == null) item { Text("无法读取规则内容", color = MaterialTheme.colorScheme.error) }
+                else {
+                    item { Text("${config.rules.size} 条规则") }
+                    items(config.rules, key = { it.id }) { rule ->
+                        Column {
+                            Text(rule.id, style = MaterialTheme.typography.titleSmall)
+                            Text("匹配：${matchLabel(rule.match)}")
+                            Text("路由：${routeLabel(rule.route, library.profiles)}")
+                            Text("优先级：${rule.priority?.toString() ?: "默认"}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }, confirmButton = { TvTextButton(onClick = { inspectedRuleFile = null }) { Text("关闭") } })
+    }
+}
+
+@Composable private fun SubscriptionQuotaSummary(sub: SubscriptionRow) {
+    val upload = sub.uploadBytes
+    val download = sub.downloadBytes
+    val total = sub.totalBytes
+    if (upload == null || download == null || total == null || total <= 0) {
+        Text("套餐流量：服务商未提供", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val used = SubscriptionQuota(upload, download, total, sub.expireAt).usedBytes
+    val remaining = (total - used).coerceAtLeast(0)
+    val ratio = (used.toDouble() / total.toDouble()).coerceIn(0.0, 1.0)
+    val remainingRatio = 1.0 - ratio
+    val warning = when {
+        remainingRatio <= 0.10 -> MaterialTheme.colorScheme.error
+        remainingRatio <= 0.20 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Text("套餐：已用 ${trafficSize(used)} / ${trafficSize(total)}", style = MaterialTheme.typography.bodyMedium)
+    LinearProgressIndicator(progress = { ratio.toFloat() }, modifier = Modifier.fillMaxWidth(), color = warning)
+    Text("剩余 ${trafficSize(remaining)}${sub.expireAt?.let { " · 到期 ${date(it)}" }.orEmpty()}",
+        style = MaterialTheme.typography.bodySmall, color = warning)
+    Text("套餐数据更新：${date(sub.quotaUpdatedAt)} · 可能包含其他设备用量", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (sub.quotaUpdatedAt != null && sub.quotaUpdatedAt < sub.lastUpdatedAt) {
+        Text("本次未返回套餐信息，以上为上次记录", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

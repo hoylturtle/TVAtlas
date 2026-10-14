@@ -18,7 +18,7 @@ class PlaylistBundleTest {
         var allRefreshed = false
         var customRefreshed = false
         compose.setContent { MaterialTheme { PlaylistPage(library, false, {}, { customRefreshed = it.id == custom.id }, { allRefreshed = true }) } }
-        compose.onAllNodesWithText("TVAtlas 频道订阅").assertCountEquals(1)
+        compose.onAllNodesWithText("TVAtlas 默认频道").assertCountEquals(1)
         compose.onNodeWithText("TVB Plus 官方（实验）").assertDoesNotExist()
         compose.onNodeWithText("ViuTV 官方（实验）").assertDoesNotExist()
         compose.onNodeWithText("查看内置线路详情").performScrollTo().performClick()

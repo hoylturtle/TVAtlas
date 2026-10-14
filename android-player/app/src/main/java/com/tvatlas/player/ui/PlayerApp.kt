@@ -31,6 +31,8 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
@@ -60,9 +62,11 @@ import com.tvatlas.player.storage.SubscriptionRow
 import java.text.DateFormat
 import java.util.Date
 
-internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = Color.White, primaryContainer = Color(0xFF7139C1), onPrimaryContainer = Color.White,
-    secondary = Color(0xFFD0B6FF), secondaryContainer = Color(0xFF7139C1), onSecondaryContainer = Color.White,
-    background = Color(0xFF0D0F13), surface = Color(0xFF171A21), surfaceVariant = Color(0xFF292F3A))
+internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = Color.White, primaryContainer = Color(0xFF6D28D9), onPrimaryContainer = Color.White,
+    secondary = Color(0xFFD0B6FF), secondaryContainer = Color(0xFF6D28D9), onSecondaryContainer = Color.White,
+    background = Color(0xFF0B0A10), surface = Color(0xFF17141F), surfaceVariant = Color(0xFF292333),
+    onBackground = Color(0xFFF5F3FF), onSurface = Color(0xFFF5F3FF), onSurfaceVariant = Color(0xFFA9A3B5),
+    tertiary = Color(0xFFFFC857), error = Color(0xFFFF6B7A))
 
 @Composable fun PlayerApp(model: PlayerViewModel) {
     MaterialTheme(colorScheme = colors) {
@@ -89,8 +93,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
         val context = LocalContext.current
         val config = LocalConfiguration.current
         val tv = (context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
-        val wide = tv || (config.screenWidthDp >= 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
-        val landscape = !tv && config.screenWidthDp < 840 && config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+        val wide = tv || (windowWidth >= 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
@@ -177,9 +182,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8757D8), onPrimary = C
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
-                        subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() }, nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile)
+                        subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() },
+                        nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile,
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) })
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
-                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate, trafficContent = { TrafficStatistics(model.traffic) }, extrasContent = { FeatureSettings(model) })
+                        { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, extrasContent = { FeatureSettings(model) })
                 }
                 }
             }

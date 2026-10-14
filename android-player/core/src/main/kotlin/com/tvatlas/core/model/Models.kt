@@ -28,7 +28,7 @@ data class Playlist(
 data class Stream(
     val id: String, val url: String, val sourcePlaylistId: String,
     val manualRoute: RouteTarget? = null, val lastSuccessAt: Long? = null,
-    val lastFailureAt: Long? = null, val failureCount: Int = 0,
+    val lastFailureAt: Long? = null, val failureCount: Int = 0, val headers: Map<String, String> = emptyMap(),
 )
 data class Channel(
     val id: String, val name: String, val group: String, val logo: String? = null,

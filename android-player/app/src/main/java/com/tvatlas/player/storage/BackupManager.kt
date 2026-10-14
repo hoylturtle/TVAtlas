@@ -62,6 +62,9 @@ class BackupManager(private val db: PlayerDatabase, private val vault: Credentia
             value.streams.forEach { require(it.channelId in channels && it.sourcePlaylistId in playlists && httpUri(it.url) != null) }
             val profiles = value.proxies.map { ProxyProfile(it.id, it.name, ProxyType.valueOf(it.type), it.host, it.port, it.enabled, it.subscriptionId) }
             profiles.forEach { RuleCodec.validateProxy(it) }
+            value.subscriptions.forEach { sub ->
+                require(listOfNotNull(sub.uploadBytes, sub.downloadBytes, sub.totalBytes, sub.expireAt, sub.quotaUpdatedAt).all { it >= 0 }) { "备份套餐流量无效" }
+            }
             require(profiles.map { it.id }.distinct().size == profiles.size)
             fun validateRules(json: String) {
                 val config = RuleCodec.json.decodeFromString<com.tvatlas.core.routing.RuleConfig>(json)

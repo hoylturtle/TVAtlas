@@ -728,7 +728,7 @@ def first_hls_uri(text, base_url, want_variant=False):
 # These observations prove a source cannot be consumed by the player. Network or
 # region failures alone do not: keep those candidates for devices in their region.
 INVALID_FALLBACK_REASONS = {
-    "player-blocklisted", "player-audio-incompatible", "html", "invalid-hls",
+    "unsupported-scheme", "player-blocklisted", "player-audio-incompatible", "html", "invalid-hls",
     "invalid-variant", "master-no-variant", "media-no-segment", "segment-html",
     "segment-text", "segment-short", "unrecognized-media", "short",
 }
@@ -760,6 +760,8 @@ def check_stream(entry):
     """Playback-oriented probe: playlist -> media playlist -> real media bytes."""
     url = entry["url"].decode("utf-8", errors="ignore")
     started = time.time()
+    if urlsplit(url).scheme.lower() not in ("http", "https"):
+        return False, 0.0, "unsupported-scheme"
 
     if url in PLAYER_BLOCKLIST:
         return False, 0.0, "player-blocklisted"
@@ -1105,21 +1107,17 @@ def build_playlist(results, orange=False):
             output.extend(entry["extras"])
             output.append(entry["url"])
         emit(selected)
-        if orange or channel.get("region") == "HK":
-            region = channel.get("region", "CN")
-            is_cctv = config_cctv(channel) is not None
-            if region == "HK" or is_cctv:
-                emitted = {selected["url"]}
-                max_lines = 4 if is_cctv else 3
-                for alternate in result.get("ranked", []):
-                    if len(emitted) >= max_lines:
-                        break
-                    if alternate["url"] in emitted:
-                        continue
-                    if is_cctv and url_conflicts_with_channel(alternate["url"], channel):
-                        continue
-                    emit(alternate)
-                    emitted.add(alternate["url"])
+        region = channel.get("region", "CN")
+        is_cctv = config_cctv(channel) is not None
+        emitted = {selected["url"]}
+        max_lines = 4 if is_cctv else 3
+        for alternate in result.get("ranked", []):
+            if len(emitted) >= max_lines:
+                break
+            if alternate["url"] in emitted or url_conflicts_with_channel(alternate["url"], channel):
+                continue
+            emit(alternate)
+            emitted.add(alternate["url"])
         logical += 1
         region = channel.get("region", "CN")
         region_counts[region] = region_counts.get(region, 0) + 1
