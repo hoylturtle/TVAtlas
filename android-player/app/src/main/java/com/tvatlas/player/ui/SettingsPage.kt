@@ -34,14 +34,22 @@ import com.tvatlas.player.update.*
     var help by rememberSaveable { mutableStateOf(false) }
     var privacy by rememberSaveable { mutableStateOf(false) }
     var licenses by rememberSaveable { mutableStateOf(false) }
-    var category by rememberSaveable { mutableStateOf<Int?>(null) }
-    BackHandler(category != null) { category = null }
+    var category by rememberSaveable { mutableStateOf<Int?>(if (tv) 0 else null) }
+    BackHandler(category != null && !tv) { category = null }
     val categories = listOf("播放与网络", "更新与诊断", "界面与遥控器", "隐私与关于")
     val summaries = listOf("网络范围、流量保护、节目单与刷新", "版本更新、网络选择与调试日志", "焦点提示、遥控器按键与播放操作", "加密备份、配置隐私与开源许可")
     val networkBusy = update.checking || update.downloading
     val release = update.release
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        if (tv) Column(Modifier.align(Alignment.CenterStart).width(230.dp).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("设置", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 12.dp))
+            categories.forEachIndexed { index, title ->
+                TvTextButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).selectionOutline(category == index)) {
+                    Text(title, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+        Column(Modifier.padding(start = if (tv) 230.dp else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("设置", style = MaterialTheme.typography.headlineSmall)
             if (category == null) {
@@ -57,7 +65,7 @@ import com.tvatlas.player.update.*
                 }
                 Text("TVAtlas ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
-                TvTextButton(onClick = { category = null }) { Text("返回设置") }
+                if (!tv) TvTextButton(onClick = { category = null }) { Text("返回设置") }
                 Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
             }
             if (category == 0) playbackContent()
