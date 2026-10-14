@@ -62,7 +62,6 @@ import com.tvatlas.player.update.*
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (!tv) AtlasHeader("设置", "播放、网络与应用偏好")
             if (category == null) {
-                Text("按类别管理播放、网络与应用", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 categories.forEachIndexed { index, title ->
                     Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).tvFocusOutline(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
@@ -142,7 +141,7 @@ import com.tvatlas.player.update.*
                         Text("播放诊断", style = MaterialTheme.typography.bodyLarge)
                         Text("在播放器显示线路和错误详情", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = diagnostics, onCheckedChange = onDiagnostics)
+                    Switch(checked = diagnostics, onCheckedChange = onDiagnostics, modifier = if (tv) Modifier.tvFocusOutline() else Modifier)
                 }
                 HorizontalDivider()
                 TvOutlinedButton(onClick = onLogs, modifier = Modifier.fillMaxWidth()) { Text("调试日志") }

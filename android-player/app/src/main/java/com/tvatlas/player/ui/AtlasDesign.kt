@@ -4,6 +4,7 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -78,7 +79,7 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
     }
 }
 @Composable internal fun AtlasKeyRow(key: String, title: String, description: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
+    Row(Modifier.fillMaxWidth().then(if (atlasTv()) Modifier.tvFocusOutline().focusable() else Modifier).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
             Box(Modifier.width(74.dp).heightIn(min = 36.dp).padding(6.dp), contentAlignment = Alignment.Center) {

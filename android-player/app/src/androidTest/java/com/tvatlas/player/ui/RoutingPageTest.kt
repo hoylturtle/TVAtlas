@@ -26,6 +26,13 @@ class RoutingPageTest {
     private val us = hk.copy(id = "us", name = "美国节点")
     private val library = Library(emptyList(), emptyList(), listOf(hk, us), RuleConfig())
     private val subscriptions = listOf(SubscriptionRow("sub", "艾可云", 1791763200000, 2))
+    @Test fun phoneNodeEnableActionRemainsAvailableInDetails() {
+        var toggled: String? = null
+        compose.setContent { MaterialTheme { RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {}, {}, {}, { toggled = it.id }) } }
+        compose.onNodeWithText("香港节点").performClick()
+        compose.onNodeWithText("停用节点").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("hk", toggled) }
+    }
     @Test fun tvNodeSelectionShowsMatchingDetailsAndKeepsHostsPrivate() {
         compose.setContent { MaterialTheme { CompositionLocalProvider(LocalTvMode provides true) {
             RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {}, {}, {}, {})

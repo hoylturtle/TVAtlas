@@ -46,7 +46,7 @@ class UiPreviewTest {
                         Row(Modifier.weight(1f)) {
                             if (tv && screen != 0) TvNavigation(screen, {})
                             Box(Modifier.weight(1f)) {
-                                val channels: @Composable (Modifier) -> Unit = { modifier -> ChannelList(library, PlaybackStatus(), tv, modifier, {}, {}, {}, autoExpand = true) }
+                                val channels: @Composable (Modifier) -> Unit = { modifier -> ChannelList(library, PlaybackStatus(channelId = channel.id), tv, modifier, {}, {}, {}, autoExpand = true) }
                                 val controls: @Composable () -> Unit = { VideoControls("准备就绪", "TVAtlas 默认频道", "艾可云 · 香港 02", true, false, {}, {}, {}, immersive = tv,
                                     channel = channel, tail = { Text("延迟 — ms · 网速 0 B/s", style = MaterialTheme.typography.labelSmall) }) }
                                 val picture: @Composable (Modifier) -> Unit = { modifier ->
@@ -57,7 +57,7 @@ class UiPreviewTest {
                                     0 -> if (tv) TvBrowseLayout(true, "翡翠台", { channels(Modifier.fillMaxSize()) }, { picture(Modifier.fillMaxSize()) }, { TvNavigation(0, {}) })
                                         else MobileLiveLayout(true, picture = picture, channels = channels)
                                     1 -> PlaylistPage(library, false, {}, {}, {})
-                                    2 -> RoutingPage(library, {}, {}, {}, {}, listOf(SubscriptionRow("sub", "艾可云", 1791946800000, 19, 1024, 38L * 1024 * 1024 * 1024, 100L * 1024 * 1024 * 1024, quotaUpdatedAt = 1791946800000)), false, {}, {}, {}, {})
+                                    2 -> RoutingPage(library, {}, {}, {}, {}, listOf(SubscriptionRow("sub", "艾可云", 1791946800000, 3, 1024, 38L * 1024 * 1024 * 1024, 100L * 1024 * 1024 * 1024, quotaUpdatedAt = 1791946800000)), false, {}, {}, {}, {})
                                     3 -> SettingsPage(false, {}, com.tvatlas.player.update.UpdateState(), {}, {})
                                 }
                             }

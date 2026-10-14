@@ -202,13 +202,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     2 -> {
                         val target by model.playback.networkTarget.collectAsStateWithLifecycle()
                         val speed by model.playback.speed.collectAsStateWithLifecycle()
+                        val usage by model.traffic.state.collectAsStateWithLifecycle()
                         RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
                         subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() },
                         nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, currentTarget = target, currentSpeed = speed)
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, currentTarget = target, currentSpeed = speed, currentUsage = usage.entries.associate { it.id to it.total })
                     }
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
@@ -274,7 +275,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     var initialized by rememberSaveable { mutableStateOf(false) }
     var selectedRegion by rememberSaveable { mutableStateOf<String?>(null) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(searchRequest) { if (searchRequest > 0) searchOpen = true }
+    LaunchedEffect(searchRequest) { if (searchRequest > 0) { searchOpen = true; mode = 0 } }
     LaunchedEffect(autoExpand, library.channels.isNotEmpty()) {
         if (autoExpand && !initialized && library.channels.isNotEmpty()) {
             val first = library.channels.firstOrNull { it.id == status.channelId }
@@ -355,7 +356,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         if (open(typeKey)) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
                         ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
-                            leadingContent = { ChannelArtwork(channel, status.channelId == channel.id, allowArtworkNetwork) },
+                            leadingContent = { ChannelArtwork(channel, status.channelId == channel.id && status.successAt != null, allowArtworkNetwork) },
                             supportingContent = { programme(channel) },
                             trailingContent = { TvTextButton(onClick = { onFavorite(channel) }) {
                                 Text(if (channel.id in favorites) "★" else "☆", color = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,

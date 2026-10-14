@@ -107,6 +107,6 @@ import com.tvatlas.player.storage.NetworkAccess
 }
 @Composable private fun PreferenceSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium); Switch(checked, onChange)
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium); Switch(checked, onChange, modifier = if (atlasTv()) Modifier.tvFocusOutline() else Modifier)
     }
 }

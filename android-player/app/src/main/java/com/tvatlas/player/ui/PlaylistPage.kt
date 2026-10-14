@@ -1,6 +1,7 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -11,6 +12,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.tvatlas.core.playlist.M3uParser
 import com.tvatlas.player.source.MyTvSuperSource
 import com.tvatlas.player.source.ViuTvSource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
@@ -29,13 +31,14 @@ import com.tvatlas.player.storage.*
     val tv = atlasTv()
     val builtIn = library.playlists.filter(DefaultPlaylists::contains)
     val custom = library.playlists.filterNot(DefaultPlaylists::contains)
+    val selectedSourceId = inspected ?: custom.firstOrNull()?.id.takeIf { builtIn.isEmpty() }
     val enabled = builtIn.filter { it.enabled }.map { it.id }.toSet()
     val count = library.channels.count { ch -> ch.streams.any { it.sourcePlaylistId in enabled } }
     val timestamps = builtIn.filter { it.enabled }.map { it.lastUpdatedAt }
     val updatedAt = if (timestamps.isNotEmpty() && timestamps.all { it != null }) timestamps.filterNotNull().minOrNull() else null
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         AtlasHeader("频道源", "默认频道与自己的订阅，统一管理") {
-            TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
+            if (tv) TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             LazyColumn(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -44,7 +47,7 @@ import com.tvatlas.player.storage.*
                         modifier = Modifier.padding(bottom = 8.dp))
                     Card(onClick = { inspected = null; if (!tv) details = true },
                         modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.hasFocus) inspected = null }.tvFocusOutline(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                        colors = CardDefaults.cardColors(containerColor = if (tv && inspected == null) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 SourceIcon()
@@ -71,7 +74,7 @@ import com.tvatlas.player.storage.*
                     var menu by remember { mutableStateOf(false) }
                     Card(onClick = { inspected = playlist.id }, modifier = Modifier.fillMaxWidth()
                         .onFocusChanged { if (it.hasFocus) inspected = playlist.id }.tvFocusOutline(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                        colors = CardDefaults.cardColors(containerColor = if (tv && selectedSourceId == playlist.id) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 SourceIcon()
@@ -98,16 +101,16 @@ import com.tvatlas.player.storage.*
                 item { TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("添加频道源 / 手机扫码") } }
             }
             if (tv) {
-                val selected = custom.firstOrNull { it.id == inspected }
+                val selected = custom.firstOrNull { it.id == selectedSourceId }
                 val channels = library.channels.filter { ch -> ch.streams.any { if (selected == null) it.sourcePlaylistId in enabled else it.sourcePlaylistId == selected.id } }
                 AtlasPanel(Modifier.weight(1.1f).fillMaxHeight()) {
-                    Text(selected?.name ?: "TVAtlas 默认频道", style = MaterialTheme.typography.titleLarge)
+                    Text(selected?.name ?: if (builtIn.isNotEmpty()) "TVAtlas 默认频道" else "来源详情", style = MaterialTheme.typography.titleLarge)
                     Text("${channels.size} 个频道 · 订阅详情", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     if (selected == null) Text("TVB / ViuTV / HOY / 港台 · 大陆及港澳台日韩频道", style = MaterialTheme.typography.bodySmall)
                     HorizontalDivider()
                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(channels.hongKongFirst(), key = { it.id }) { channel ->
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(Modifier.fillMaxWidth().tvFocusOutline().focusable().semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 ChannelArtwork(channel)
                                 Column { Text(channel.name, style = MaterialTheme.typography.bodyMedium); Text("${channel.browseRegion()} / ${channel.browseType()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             }

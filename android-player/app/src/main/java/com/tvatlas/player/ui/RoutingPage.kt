@@ -29,7 +29,7 @@ import com.tvatlas.player.storage.*
     onCoreInfo: () -> Unit = {}, onCoreAppUpdate: () -> Unit = {},
     nodeHealth: Map<String, NodeHealth> = emptyMap(), nodeTesting: Boolean = false, onTestNodes: () -> Unit = {},
     ruleFiles: List<RuleFileRow> = emptyList(), onSelectRule: (String?) -> Unit = {},
-    trafficContent: @Composable () -> Unit = {}, currentTarget: RouteTarget? = null, currentSpeed: Long = 0) {
+    trafficContent: @Composable () -> Unit = {}, currentTarget: RouteTarget? = null, currentSpeed: Long = 0, currentUsage: Map<String, Long> = emptyMap()) {
     var section by rememberSaveable { mutableIntStateOf(if (library.profiles.isEmpty()) 0 else 1) }
     val tv = atlasTv()
     var inspectedNode by rememberSaveable { mutableStateOf<String?>(null) }
@@ -37,6 +37,7 @@ import com.tvatlas.player.storage.*
     var nodeRegion by rememberSaveable { mutableStateOf<String?>(null) }
     var nodeSubscription by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
+    var nodeSearchOpen by rememberSaveable { mutableStateOf(false) }
     var hongKongOnly by rememberSaveable { mutableStateOf(false) }
     var inspectedRuleFile by remember { mutableStateOf<RuleFileRow?>(null) }
     LaunchedEffect(section) { if (section == 4) onCoreInfo() }
@@ -46,16 +47,17 @@ import com.tvatlas.player.storage.*
         { nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
     Column(Modifier.weight(1f)) {
-        AtlasHeader("代理与路由", "地区自动匹配 · 低延迟优先 · 失败回退")
+        AtlasHeader("代理与路由", "地区自动匹配 · 低延迟优先 · 失败回退") {
+            TvTextButton(onClick = onSubscribe, enabled = !busy) { Text("＋ 订阅") }
+        }
         AtlasTabs(listOf("订阅", "节点", "规则", "流量", "内核"), section) { section = it; nodeSubscription = null; inspectedNode = null }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)) {
-        item {
+        if (!tv || section != 1) item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("● 地区自动路由", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                     Text(currentTarget?.let { playbackRouteLabel(it, library.profiles, subscriptions) } ?: "大陆直连 · 港澳台日韩匹配地区节点", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TvTextButton(onClick = onSubscribe, enabled = !busy) { Text("＋ 订阅") }
             }
         }
         if (section == 0) {
@@ -110,32 +112,31 @@ import com.tvatlas.player.storage.*
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("${shownNodes.size} 个节点", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                    TvTextButton(onClick = { nodeSearchOpen = !nodeSearchOpen; if (!nodeSearchOpen) query = "" }) { Text("搜索节点") }
                     TvOutlinedButton(onClick = onTestNodes, enabled = !busy && !nodeTesting) { Text(if (nodeTesting) "测速中…" else "测速全部节点") }
                 }
                 if (nodeTesting) LinearProgressIndicator(Modifier.fillMaxWidth())
                 AtlasTabs(listOf("全部", "香港", "台湾", "日本", "韩国", "其他"), listOf(null, "香港", "台湾", "日本", "韩国", "其他").indexOf(nodeRegion).coerceAtLeast(0)) { index ->
                     nodeRegion = listOf(null, "香港", "台湾", "日本", "韩国", "其他")[index]; inspectedNode = null
                 }
-                OutlinedTextField(query, { query = it; inspectedNode = null }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索节点名称") })
+                if (nodeSearchOpen) OutlinedTextField(query, { query = it; inspectedNode = null }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索节点名称") })
             }
             if (shownNodes.isEmpty()) item { Text("没有符合条件的节点") }
             items(shownNodes, key = { it.id }) { p ->
+                val selectedNode = tv && (inspectedNode ?: shownNodes.firstOrNull()?.id) == p.id
+                val nodeColor = if (selectedNode) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer
                 Card(onClick = { inspectedNode = p.id; nodeDialog = !tv },
                     modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.hasFocus) inspectedNode = p.id }.tvFocusOutline(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                    ListItem(colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    colors = CardDefaults.cardColors(containerColor = nodeColor)) {
+                    ListItem(colors = ListItemDefaults.colors(containerColor = nodeColor, supportingColor = if (selectedNode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
                         headlineContent = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = { Column { Text("${if (p.type == ProxyType.MIHOMO) "订阅节点" else p.type.name} · ${if (p.enabled) "已启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)
-                            p.subscriptionId?.let { id ->
-                                Text("订阅：${subscriptions.firstOrNull { it.id == id }?.name ?: "未知订阅"}", style = MaterialTheme.typography.bodySmall)
-                            }
+                        supportingContent = { Column {
+                            Text("${subscriptions.firstOrNull { it.id == p.subscriptionId }?.name ?: "手动节点"} · ${p.type.name} · ${if (p.enabled) "已启用" else "已停用"}",
+                                style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val sample = nodeHealth[p.id]
                             Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期测速 / 连接失败"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
                         } },
-                        trailingContent = {
-                            if (p.type == ProxyType.MIHOMO) Switch(checked = p.enabled, onCheckedChange = { onEnable(p) }, enabled = !busy)
-                            else TvTextButton(onClick = { onEdit(p) }, enabled = !busy) { Text("编辑") }
-                        })
+                        trailingContent = { Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) })
                 }
             }
             item { TvOutlinedButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
@@ -148,8 +149,8 @@ import com.tvatlas.player.storage.*
                         Text("中国大陆 → 直连\n香港、澳门 → 香港节点\n台湾 → 台湾节点\n日本 → 日本节点\n韩国 → 韩国节点\n其他地区 → 自动选择保底节点", style = MaterialTheme.typography.bodyMedium)
                         Text("自定义文件未匹配时，内置规则保底生效。手动线路优先。", style = MaterialTheme.typography.bodySmall)
                         Row {
-                            RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary), selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy)
-                            TvTextButton(onClick = { onSelectRule(null) }, enabled = !busy) { Text("仅使用内置规则") }
+                            RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary), selected = ruleFiles.none { it.active }, onClick = { onSelectRule(null) }, enabled = !busy, modifier = if (tv) Modifier.tvFocusOutline() else Modifier)
+                            TvTextButton(onClick = { onSelectRule(null) }, enabled = !busy, modifier = if (tv) Modifier.tvFocusOutline() else Modifier) { Text("仅使用内置规则") }
                         }
                     }
                 }
@@ -163,7 +164,7 @@ import com.tvatlas.player.storage.*
             items(ruleFiles, key = { "rulefile:${it.id}" }) { file ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp)) {
-                        RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary), selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy)
+                        RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary), selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = if (tv) Modifier.tvFocusOutline() else Modifier)
                         Column(Modifier.weight(1f)) {
                             Text(file.name, style = MaterialTheme.typography.titleMedium)
                             Text(if (file.active) "当前生效" else "未启用", style = MaterialTheme.typography.bodySmall)
@@ -189,7 +190,7 @@ import com.tvatlas.player.storage.*
         AtlasPanel(Modifier.width(280.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
             when (section) {
                 1 -> NodeInspector(library.profiles.firstOrNull { it.id == inspectedNode }
-                    ?: shownNodes.firstOrNull(), library, subscriptions, nodeHealth, currentTarget, currentSpeed, busy, onEnable, onEdit)
+                    ?: shownNodes.firstOrNull(), library, subscriptions, nodeHealth, currentTarget, currentSpeed, currentUsage, busy, onEnable, onEdit)
                 2 -> {
                     Text("当前规则", style = MaterialTheme.typography.titleLarge)
                     Text(ruleFiles.firstOrNull { it.active }?.name ?: "内置地区规则", color = MaterialTheme.colorScheme.secondary)
@@ -212,7 +213,7 @@ import com.tvatlas.player.storage.*
     if (!tv && nodeDialog) AlertDialog(onDismissRequest = { nodeDialog = false },
         title = { Text("节点详情") }, text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NodeInspector(library.profiles.firstOrNull { it.id == inspectedNode }, library, subscriptions, nodeHealth, currentTarget, currentSpeed, busy, onEnable, onEdit)
+                NodeInspector(library.profiles.firstOrNull { it.id == inspectedNode }, library, subscriptions, nodeHealth, currentTarget, currentSpeed, currentUsage, busy, onEnable, onEdit)
             }
         }, confirmButton = { TvTextButton(onClick = { nodeDialog = false }) { Text("关闭") } })
     inspectedRuleFile?.let { file ->
@@ -288,7 +289,7 @@ import com.tvatlas.player.storage.*
 }
 
 @Composable private fun ColumnScope.NodeInspector(profile: ProxyProfile?, library: Library, subscriptions: List<SubscriptionRow>,
-    health: Map<String, NodeHealth>, currentTarget: RouteTarget?, speed: Long, busy: Boolean,
+    health: Map<String, NodeHealth>, currentTarget: RouteTarget?, speed: Long, usage: Map<String, Long>, busy: Boolean,
     onEnable: (ProxyProfile) -> Unit, onEdit: (ProxyProfile) -> Unit) {
     Text("节点详情", style = MaterialTheme.typography.titleMedium)
     if (profile == null) { Text("选择左侧节点查看详情", style = MaterialTheme.typography.bodyMedium); return }
@@ -297,6 +298,7 @@ import com.tvatlas.player.storage.*
     Text("协议：${profile.type.name}", style = MaterialTheme.typography.bodySmall)
     val sample = health[profile.id]?.takeIf { it.fresh(System.currentTimeMillis()) }
     Text(sample?.delayMs?.let { "HTTPS 延迟：$it ms" } ?: "暂无有效测速", style = MaterialTheme.typography.bodyMedium)
+    Text("本机累计：${usage["PROXY:${profile.id}"]?.let(::trafficSize) ?: "暂无记录"}", style = MaterialTheme.typography.bodySmall)
     if (currentTarget?.profile == profile.id) Text("当前播放：${trafficSize(speed)}/s", color = MaterialTheme.colorScheme.secondary)
     HorizontalDivider()
     Text("同地区回退候选", style = MaterialTheme.typography.titleSmall)
