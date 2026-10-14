@@ -567,6 +567,14 @@ def build_recovery_sources():
         'http://live3.tdm.com.mo:1935/ch1/ch1.live/playlist.m3u8\n',
         encoding="utf-8"
     )
+    # Verified 1080p H.264/AAC CDN alternative, discovered from the supplied live list.
+    kr_recovery = TEMP_DIR / "recovery-kr.m3u"
+    kr_recovery.write_text(
+        '#EXTM3U\n'
+        '#EXTINF:-1 group-title="KR Recovery",Arirang TV\n'
+        'https://amdlive-ch01-ctnd-com.akamaized.net/arirang_1ch/smil:arirang_1ch.smil/chunklist_b3256000_sleng.m3u8\n',
+        encoding="utf-8"
+    )
     sg_recovery = TEMP_DIR / "recovery-sg.m3u"
     sg_recovery.write_text(
         '#EXTM3U\n'
@@ -600,6 +608,11 @@ def build_recovery_sources():
         "region": "MO",
         "priority": 1,
         "path": mo_recovery,
+    }, {
+        "id": "recovery-kr",
+        "region": "KR",
+        "priority": 1,
+        "path": kr_recovery,
     }, {
         "id": "recovery-sg",
         "region": "SG",
