@@ -27,7 +27,7 @@ internal val LocalTvMode = staticCompositionLocalOf<Boolean?> { null }
     colors: ButtonColors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface), content: @Composable RowScope.() -> Unit) {
     val tv = isTv()
     var focused by remember { mutableStateOf(false) }
-    androidx.compose.material3.TextButton(onClick, modifier.then(if (tv) Modifier.heightIn(min = 52.dp)
+    androidx.compose.material3.TextButton(onClick, modifier.then(if (tv) Modifier.heightIn(min = 48.dp)
         .onFocusChanged { focused = it.hasFocus }
         .border(if (focused) 3.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp)) else Modifier),
         enabled = enabled, shape = RoundedCornerShape(12.dp),
@@ -39,7 +39,7 @@ internal val LocalTvMode = staticCompositionLocalOf<Boolean?> { null }
     content: @Composable RowScope.() -> Unit) {
     val tv = isTv()
     var focused by remember { mutableStateOf(false) }
-    androidx.compose.material3.Button(onClick, modifier.then(if (tv) Modifier.heightIn(min = 52.dp)
+    androidx.compose.material3.Button(onClick, modifier.then(if (tv) Modifier.heightIn(min = 48.dp)
         .onFocusChanged { focused = it.hasFocus }.border(if (focused) 3.dp else 0.dp,
             if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp)) else Modifier),
         enabled = enabled, shape = RoundedCornerShape(12.dp),

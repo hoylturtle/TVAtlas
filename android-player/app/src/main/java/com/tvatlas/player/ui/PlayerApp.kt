@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -18,6 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.clip
@@ -38,6 +42,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -101,6 +106,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val wide = tv || (windowWidth >= 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        var channelSearchRequest by remember { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
         var tvBackArmed by remember { mutableStateOf(false) }
         var pageMenuOpen by remember { mutableStateOf(false) }
@@ -142,24 +148,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
         PlaybackOrientation(immersive, tv)
         PlaybackSystemBars(immersive)
-        Scaffold(modifier = Modifier.fillMaxSize().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
+        Scaffold(containerColor = Color.Transparent, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!tv && !immersive && !theater && tab == 0) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("TVAtlas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("选频道，即可观看", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-                    }
-                    if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
+                if (!tv && !immersive && !theater) AtlasAppBar({ tab = 0; channelSearchRequest++ }, { tab = 3 }, busy)
             }, bottomBar = {
-                if (!tv && !immersive) NavigationBar {
-                    listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
-                        NavigationBarItem(selected = tab == index, onClick = { tab = index },
-                            icon = { AppNavigationIcon(index) }, label = { Text(label) })
-                    }
-                }
+                if (!tv && !immersive) AtlasBottomNavigation(tab) { tab = it }
             }) { padding ->
             Row(Modifier.fillMaxSize().padding(padding).onPreviewKeyEvent { event ->
                 if (tv && event.type == KeyEventType.KeyDown) remoteActivity++
@@ -195,22 +190,26 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         when {
                             immersive -> video(Modifier.fillMaxSize())
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
-                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork) },
+                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest) },
                                 picture = { video(Modifier.fillMaxSize()) },
                                 navigation = { if (tv) TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
-                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork) })
+                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest) })
                         }
                     }
                     1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
                         { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id })
-                    2 -> RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                    2 -> {
+                        val target by model.playback.networkTarget.collectAsStateWithLifecycle()
+                        val speed by model.playback.speed.collectAsStateWithLifecycle()
+                        RoutingPage(library, { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                         { exporter.launch("tvatlas-routes.json") }, { addProxy = true }, { editProxyId = it.id },
                         subscriptions, busy, { addSubscription = true }, model::refreshSubscription,
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
                         subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() },
                         nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) })
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, currentTarget = target, currentSpeed = speed)
+                    }
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
                         trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") })
@@ -267,16 +266,20 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit,
     favorites: Set<String> = emptySet(), recent: List<String> = emptyList(), onFavorite: (Channel) -> Unit = {},
     programme: @Composable (Channel) -> Unit = {}, autoExpand: Boolean = false,
-    allowArtworkNetwork: () -> Boolean = { false }) {
+    allowArtworkNetwork: () -> Boolean = { false }, searchRequest: Int = 0) {
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var collapsed by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var initialized by rememberSaveable { mutableStateOf(false) }
+    var selectedRegion by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(searchRequest) { if (searchRequest > 0) searchOpen = true }
     LaunchedEffect(autoExpand, library.channels.isNotEmpty()) {
         if (autoExpand && !initialized && library.channels.isNotEmpty()) {
             val first = library.channels.firstOrNull { it.id == status.channelId }
                 ?: library.channels.hongKongFirst().first()
+            selectedRegion = first.browseRegion()
             expanded = listOf("region:${first.browseRegion()}", "type:${first.browseRegion()}:${first.browseType()}")
             initialized = true
         }
@@ -284,12 +287,25 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     val firstFocus = remember { FocusRequester() }
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
-        if (tv) Text("确认展开地区 / 类型 · 长按频道设置线路", Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
+        if (autoExpand && library.channels.isNotEmpty()) {
+            val regions = library.channels.hongKongFirst().map { it.browseRegion() }.distinct()
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    regions.forEachIndexed { index, region ->
+                        AtlasChip(region, region == (selectedRegion ?: regions.first()), {
+                            selectedRegion = region
+                            val firstType = library.channels.first { it.browseRegion() == region }.browseType()
+                            expanded = listOf("region:$region", "type:$region:$firstType")
+                        }, if (tv && index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                    }
+                }
+                TextButton(onClick = { searchOpen = !searchOpen }, contentPadding = PaddingValues(4.dp), modifier = Modifier.width(48.dp)) { Text(if (searchOpen) "收起" else "搜索", style = MaterialTheme.typography.labelSmall) }
+            }
+        }
+        if (!autoExpand || searchOpen) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索频道") })
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
-                TvTextButton(onClick = { mode = index; collapsed = emptyList() }, modifier = Modifier.weight(1f).selectionOutline(mode == index),
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) { Text(label) }
+                AtlasChip(label, mode == index, { mode = index; collapsed = emptyList() }, Modifier.weight(1f))
             }
         }
         if (library.channels.isEmpty()) {
@@ -299,12 +315,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 TvButton(onClick = onAdd) { Text("添加播放列表") }
             }
         } else {
-            val filtered = remember(library.channels, query, mode, favorites, recent) {
+            val filtered = remember(library.channels, query, mode, favorites, recent, selectedRegion, autoExpand) {
                 val items = library.channels.filter { (it.name.contains(query, true) || it.group.contains(query, true) || it.browseRegion().contains(query, true) || it.browseType().contains(query, true)) &&
-                    (mode == 0 || mode == 1 && it.id in favorites || mode == 2 && it.id in recent) }
+                    (mode == 0 || mode == 1 && it.id in favorites || mode == 2 && it.id in recent) &&
+                    (!autoExpand || mode != 0 || query.isNotBlank() || it.browseRegion() == (selectedRegion ?: library.channels.hongKongFirst().firstOrNull()?.browseRegion())) }
                 if (mode == 2) items.sortedBy { recent.indexOf(it.id) } else items.hongKongFirst()
             }
-            Text("${filtered.size} 个频道" + if (filtered.size != library.channels.size) " / 共 ${library.channels.size} 个" else "", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
+            Text("${filtered.size} 个频道" + if (filtered.size != library.channels.size) " / 共 ${library.channels.size} 个" else "", Modifier.padding(vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
             if (filtered.isEmpty()) Text(if (mode == 1) "尚无收藏频道" else if (mode == 2) "尚无成功观看记录" else "没有匹配频道", style = MaterialTheme.typography.bodySmall)
             val grouped = remember(filtered, mode) { filtered.groupBy { it.browseRegion() }.mapValues { (_, channels) -> channels.groupBy { it.browseType() }.mapValues { (_, items) -> if (mode == 2) items else items.primaryChannelsFirst() } } }
             fun open(key: String) = query.isNotBlank() || if (mode != 0) key !in collapsed else key in expanded
@@ -313,10 +330,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 if (mode != 0) collapsed = if (key in collapsed) collapsed - key else collapsed + key
                 else expanded = if (key in expanded) expanded - key else expanded + key
             }
-            LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 grouped.forEach { (region, types) ->
                     val regionKey = "region:$region"
-                    item(key = regionKey) {
+                    if (!autoExpand || mode != 0 || query.isNotBlank()) item(key = regionKey) {
                         TvTextButton(onClick = { toggle(regionKey) },
                             modifier = Modifier.fillMaxWidth().semantics { stateDescription = if (open(regionKey)) "已展开" else "已收起" }
                                 .then(if (tv) Modifier.tvFocusOutline() else Modifier)
@@ -325,10 +342,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             Text("${types.values.sumOf { it.size }}")
                         }
                     }
-                    if (open(regionKey)) types.forEach { (type, channels) ->
+                    if (autoExpand || open(regionKey)) types.forEach { (type, channels) ->
                         val typeKey = "type:$region:$type"
                         item(key = typeKey) {
-                            TvTextButton(onClick = { toggle(typeKey) }, modifier = Modifier.fillMaxWidth().padding(start = 16.dp)
+                            TvTextButton(onClick = { toggle(typeKey) }, modifier = Modifier.fillMaxWidth().padding(start = if (autoExpand) 0.dp else 16.dp)
                                 .semantics { stateDescription = if (open(typeKey)) "已展开" else "已收起" }
                                 .then(if (tv) Modifier.tvFocusOutline() else Modifier)) {
                                 Text("${if (open(typeKey)) "⌄" else "›"}  $type", Modifier.weight(1f))
@@ -345,7 +362,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                                     modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
                             colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceContainer, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 supportingColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
-                            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).onFocusChanged { focused = it.isFocused }
+                            modifier = Modifier.padding(start = if (autoExpand) 0.dp else 16.dp, bottom = 2.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).onFocusChanged { focused = it.isFocused }
                                 .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
@@ -376,7 +393,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     LaunchedEffect(player) { if (player == null) tracksOpen = false }
     val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
     val picture: @Composable () -> Unit = {
-            if (player == null) Text(if (compact && status.error != null && !status.loading) "播放未成功" else status.message, Modifier.padding(16.dp), color = Color.White, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (player == null) AtlasIdlePicture(if (compact && status.error != null && !status.loading) "播放未成功" else status.message,
+                library.channels.firstOrNull { it.id == status.channelId }, status.loading)
             else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv && !immersive; keepScreenOn = true; isFocusable = !immersive && (!tv || pictureFocused); isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.useController = !tv && !immersive; it.isFocusable = !immersive && (!tv || pictureFocused); it.isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive && !it.hasFocus()) it.post { it.requestFocus() } },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !immersive && (!tv || pictureFocused) }.onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
@@ -401,7 +419,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 PlaybackNetworkInfo(model, networkTarget ?: displayedAttempt?.target)
                 if (immersive) TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("画质", maxLines = 1) }
-            }, fullscreenRoute = playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions))
+            }, fullscreenRoute = playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions),
+            channel = library.channels.firstOrNull { it.id == status.channelId }, artworkNetwork = model::canLoadChannelArtwork)
 
         if (!immersive && !compact && player == null && !status.loading && status.error != null) PlaybackRecoveryCard(status.error,
             onRetry = replay, onChooseRoute = onDetails)
@@ -433,10 +452,11 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 @Composable internal fun VideoControls(status: String, line: String, proxy: String,
     canDetails: Boolean, canStop: Boolean, onDetails: () -> Unit, onFullscreen: () -> Unit, onStop: () -> Unit,
     canReplay: Boolean = false, onReplay: () -> Unit = {}, fullscreenLabel: String = "全屏 / 频道",
-    immersive: Boolean = false, fullscreenRoute: String = proxy, tail: @Composable () -> Unit = {}) {
+    immersive: Boolean = false, fullscreenRoute: String = proxy, channel: Channel? = null, artworkNetwork: () -> Boolean = { false }, tail: @Composable () -> Unit = {}) {
     if (immersive) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            channel?.let { ChannelArtwork(it, allowNetwork = artworkNetwork, modifier = Modifier.size(40.dp)) }
             TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
                 Text(listOf(line, fullscreenRoute).filter { it.isNotBlank() }.joinToString(" | "),
@@ -452,13 +472,11 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
         return
     }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            tail()
-        }
-        if (proxy.isNotBlank()) Text(proxy, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(proxy.ifBlank { status }, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        tail()
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f)) {

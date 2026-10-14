@@ -26,17 +26,33 @@ class UiPreviewTest {
         var tv by mutableStateOf(false)
         val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(Stream("s", "https://www.mytvsuper.com/tc/live/81/", DefaultPlaylists.entries.first().id)))
         val profile = ProxyProfile("hk", "香港 02", ProxyType.MIHOMO, "fixture.invalid", 443, subscriptionId = "sub")
-        val library = Library(DefaultPlaylists.entries, listOf(channel), listOf(profile), RuleConfig())
+        val channels = listOf(channel,
+            channel.copy(id = "pearl", name = "明珠台"), channel.copy(id = "plus", name = "TVB Plus"),
+            channel.copy(id = "viu", name = "ViuTV"),
+            channel.copy(id = "cctv", name = "CCTV1", group = "中国大陆 · 央视"),
+            channel.copy(id = "gd", name = "广东卫视", group = "中国大陆 · 卫视"),
+            channel.copy(id = "tw", name = "TVBS新闻", group = "台湾 · 新闻"),
+            channel.copy(id = "mo", name = "澳视澳门", group = "澳门 · 综合"),
+            channel.copy(id = "jp", name = "NHK総合", group = "日本 · 综合"),
+            channel.copy(id = "kr", name = "KBS1", group = "韩国 · 综合"))
+        val library = Library(DefaultPlaylists.entries, channels, listOf(profile,
+            profile.copy(id = "hk2", name = "香港备用"), profile.copy(id = "tw1", name = "台湾 01")), RuleConfig())
         compose.setContent {
             MaterialTheme(colorScheme = colors) { CompositionLocalProvider(LocalTvMode provides tv) {
                 key(tv, screen) {
-                    Surface(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 650.dp).testTag("preview"), color = MaterialTheme.colorScheme.background) {
-                        Row {
+                    Surface(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 780.dp).testTag("preview"), color = MaterialTheme.colorScheme.background) {
+                        Column(Modifier.atlasBackdrop()) {
+                        if (!tv) AtlasAppBar({}, { screen = 3 })
+                        Row(Modifier.weight(1f)) {
                             if (tv && screen != 0) TvNavigation(screen, {})
                             Box(Modifier.weight(1f)) {
                                 val channels: @Composable (Modifier) -> Unit = { modifier -> ChannelList(library, PlaybackStatus(), tv, modifier, {}, {}, {}, autoExpand = true) }
-                                val picture: @Composable (Modifier) -> Unit = { modifier -> PlayerPaneLayout(true, modifier,
-                                    { Text("选择频道开始观看") }, { VideoControls("准备就绪", "TVAtlas 默认频道", "艾可云 · 香港 02", true, false, {}, {}, {}, immersive = tv) }) }
+                                val controls: @Composable () -> Unit = { VideoControls("准备就绪", "TVAtlas 默认频道", "艾可云 · 香港 02", true, false, {}, {}, {}, immersive = tv,
+                                    channel = channel, tail = { Text("延迟 — ms · 网速 0 B/s", style = MaterialTheme.typography.labelSmall) }) }
+                                val picture: @Composable (Modifier) -> Unit = { modifier ->
+                                    if (tv) ImmersivePlaybackLayout(false, true, modifier, picture = { AtlasIdlePicture("选择频道开始观看") }, controls = controls)
+                                    else PlayerPaneLayout(true, modifier, { AtlasIdlePicture("选择频道开始观看") }, controls)
+                                }
                                 when (screen) {
                                     0 -> if (tv) TvBrowseLayout(true, "翡翠台", { channels(Modifier.fillMaxSize()) }, { picture(Modifier.fillMaxSize()) }, { TvNavigation(0, {}) })
                                         else MobileLiveLayout(true, picture = picture, channels = channels)
@@ -45,6 +61,8 @@ class UiPreviewTest {
                                     3 -> SettingsPage(false, {}, com.tvatlas.player.update.UpdateState(), {}, {})
                                 }
                             }
+                        }
+                        if (!tv) AtlasBottomNavigation(screen) { screen = it }
                         }
                     }
                 }

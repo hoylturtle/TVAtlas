@@ -21,14 +21,26 @@ class ChannelPresentationTest {
     private val second = Stream("s2", "https://private.example/other?token=fixture", "p2")
     private val profile = ProxyProfile("sub_internal_identifier", "香港节点", ProxyType.MIHOMO, "private.example", 443)
 
-    @Test fun defaultBrowseShowsChannelArtworkAndCanCollapse() {
+    @Test fun defaultBrowseShowsArtworkAndCanSwitchRegion() {
         val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(first))
-        compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()),
+        compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel, channel.copy(id = "cctv", name = "CCTV1", group = "中国大陆 · 央视")), emptyList(), RuleConfig()),
             PlaybackStatus(), false, Modifier, {}, {}, {}, autoExpand = true) } }
         compose.onNodeWithText("翡翠台").assertIsDisplayed()
         compose.onNodeWithContentDescription("翡翠台频道标识", useUnmergedTree = true).assertIsDisplayed()
-        compose.onNodeWithText("⌄  香港").performClick()
+        compose.onNodeWithText("大陆", substring = false).performClick()
+        compose.onNodeWithText("CCTV1").assertIsDisplayed()
         compose.onNodeWithText("翡翠台").assertDoesNotExist()
+    }
+    @Test fun tvCompactRegionNavigationCanPlayWithRemote() {
+        val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(first))
+        var played = false
+        compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()),
+            PlaybackStatus(), true, Modifier, { played = true }, {}, {}, autoExpand = true) } }
+        compose.onNodeWithText("香港", substring = false).assertIsFocused()
+        compose.onNodeWithText("⌄  TVB").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        compose.onNodeWithText("⌄  TVB").performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onAllNodesWithText("翡翠台").filterToOne(isFocusable()).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.runOnIdle { assertTrue(played) }
     }
     @Test fun groupsStartCollapsedAndSearchShowsMatchesWithoutOpeningEveryGroup() {
         val channels = listOf(Channel("c1", "CCTV 新闻", "中国大陆 · 新闻", streams = listOf(first)), Channel("c2", "体育频道", "体育", streams = listOf(second)))

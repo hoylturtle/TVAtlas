@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 @Composable internal fun MobileLiveLayout(showPlayer: Boolean, modifier: Modifier = Modifier,
     picture: @Composable (Modifier) -> Unit, channels: @Composable (Modifier) -> Unit) {
     BoxWithConstraints(modifier) {
-        val playerHeight = (maxWidth * (9f / 16f) + 108.dp).coerceAtMost(maxHeight * 0.46f)
+        val playerHeight = (maxWidth * (9f / 16f) + 76.dp).coerceAtMost(maxHeight * 0.46f)
         Column(Modifier.fillMaxSize()) {
             if (showPlayer) {
                 picture(Modifier.fillMaxWidth().height(playerHeight).testTag("mobile-playback-area"))

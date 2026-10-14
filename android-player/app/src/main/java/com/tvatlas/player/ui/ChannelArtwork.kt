@@ -36,17 +36,17 @@ import com.tvatlas.core.model.browseType
     Icon(when (index) {
         0 -> Icons.Default.PlayArrow
         1 -> Icons.AutoMirrored.Filled.List
-        2 -> Icons.Default.Refresh
+        2 -> AtlasSymbols.Route
         else -> Icons.Default.Settings
     }, contentDescription = null, modifier = Modifier.size(24.dp))
 }
 
 /** Reserve a consistent logo tile even when a source has no usable artwork. */
 @Composable internal fun ChannelArtwork(channel: Channel, playing: Boolean = false,
-    allowNetwork: () -> Boolean = { false }) {
+    allowNetwork: () -> Boolean = { false }, modifier: Modifier = Modifier.width(64.dp).height(48.dp)) {
     val bundled = bundledChannelArtwork(channel.name)
     val tileColor = if (bundled != null && channel.browseType() != "ViuTV") Color(0xFF30293E) else Color(0xFFF8F6FC)
-    Box(Modifier.width(64.dp).height(48.dp).clip(RoundedCornerShape(12.dp)).background(tileColor)
+    Box(modifier.clip(RoundedCornerShape(12.dp)).background(tileColor)
         .semantics { contentDescription = "${channel.name}频道标识" }, contentAlignment = Alignment.Center) {
         val fallback: @Composable () -> Unit = {
             val text = when (channel.name) {

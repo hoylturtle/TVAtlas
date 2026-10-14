@@ -39,10 +39,9 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
 @Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.width(132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("TVAtlas", Modifier.padding(vertical = 20.dp), fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium)
+        AtlasBrand(Modifier.padding(vertical = 16.dp))
         listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
-            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp).selectionOutline(selected == index),
+            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectionOutline(selected == index),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
                     MaterialTheme.colorScheme.primary else Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)) {
                 AppNavigationIcon(index)
@@ -62,9 +61,9 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
         Box(Modifier.align(androidx.compose.ui.Alignment.CenterStart).fillMaxHeight().padding(bottom = 76.dp)) { navigation() }
         Surface(Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
             .fillMaxHeight().width(if (tv) 340.dp else 320.dp).padding(top = 12.dp, bottom = 76.dp, end = 12.dp),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.82f), shape = MaterialTheme.shapes.large) {
+            color = MaterialTheme.colorScheme.background.copy(alpha = 0.68f), shape = MaterialTheme.shapes.large) {
             Column(Modifier.padding(12.dp)) {
-                Text("频道", Modifier.padding(8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("频道列表", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("方向键选择 · 确认播放 · 返回收起", Modifier.padding(horizontal = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Box(Modifier.weight(1f)) { channels() }

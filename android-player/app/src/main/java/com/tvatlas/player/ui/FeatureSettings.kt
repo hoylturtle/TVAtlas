@@ -32,6 +32,20 @@ import com.tvatlas.player.storage.NetworkAccess
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) { importUri = uri; passwordPrompt = true }
     }
+    if (section == "all" || section == "playback") FeatureCard("网络与流量保护") {
+        var networkMenu by remember { mutableStateOf(false) }
+        Box {
+            AtlasSettingAction("允许使用的网络", "手机与平板的网络范围", options.networkAccess.label) { networkMenu = true }
+            DropdownMenu(networkMenu, { networkMenu = false }) { NetworkAccess.entries.forEach { access ->
+                DropdownMenuItem(text = { Text(access.label) }, modifier = Modifier.selectionOutline(options.networkAccess == access),
+                    onClick = { networkMenu = false; model.editOptions { it.copy(networkAccess = access) } })
+            } }
+        }
+        Text("手机和平板按此范围使用网络；电视不限制 Wi-Fi 或有线网络。VPN 按有效网络识别。", style = MaterialTheme.typography.bodySmall)
+        PreferenceSwitch("手机移动数据播放／APK 下载前提醒", options.warnMetered) { enabled -> model.editOptions { it.copy(warnMetered = enabled) } }
+        AtlasSettingAction("累计流量提醒", "达到设定用量时提醒，不自动停止播放", if (options.limitMiB == 0L) "未设置" else "${options.limitMiB} MiB") { quotaEdit = true }
+        Text("提醒按统计重置后的累计量计算，不自动停止播放。", style = MaterialTheme.typography.bodySmall)
+    }
     if (section == "all" || section == "playback") FeatureCard("节目单") {
         Text("XMLTV + TVB、ViuTV 官方节目表补充；地址留空可停用 XMLTV", style = MaterialTheme.typography.bodySmall)
         Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "已缓存 ${guide.guide.programmes.size} 个节目", style = MaterialTheme.typography.bodySmall)
@@ -51,22 +65,6 @@ import com.tvatlas.player.storage.NetworkAccess
                     onClick = { menu = false; model.editOptions { it.copy(refreshHours = hours) } })
             } }
         }
-    }
-    if (section == "all" || section == "playback") FeatureCard("网络与流量保护") {
-        var networkMenu by remember { mutableStateOf(false) }
-        Box {
-            TvOutlinedButton(onClick = { networkMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("网络使用：${options.networkAccess.label}") }
-            DropdownMenu(networkMenu, { networkMenu = false }) { NetworkAccess.entries.forEach { access ->
-                DropdownMenuItem(text = { Text(access.label) }, modifier = Modifier.selectionOutline(options.networkAccess == access),
-                    onClick = { networkMenu = false; model.editOptions { it.copy(networkAccess = access) } })
-            } }
-        }
-        Text("手机和平板按此范围使用网络；电视不限制 Wi-Fi 或有线网络。VPN 按有效网络识别。", style = MaterialTheme.typography.bodySmall)
-        PreferenceSwitch("手机移动数据播放／APK 下载前提醒", options.warnMetered) { enabled -> model.editOptions { it.copy(warnMetered = enabled) } }
-        TvOutlinedButton(onClick = { quotaEdit = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (options.limitMiB == 0L) "流量提醒：未设置" else "累计 ${options.limitMiB} MiB 时提醒")
-        }
-        Text("提醒按统计重置后的累计量计算，不自动停止播放。", style = MaterialTheme.typography.bodySmall)
     }
     if (section == "all" || section == "backup") FeatureCard("配置备份与恢复") {
         Text("包含频道源、订阅地址、节点凭证、规则、收藏和偏好。使用密码加密；忘记密码无法恢复。恢复会覆盖当前配置。", style = MaterialTheme.typography.bodySmall)
@@ -105,12 +103,10 @@ import com.tvatlas.player.storage.NetworkAccess
         dismissButton = { TvTextButton(onClick = { passwordPrompt = false; password = ""; importUri = null }) { Text("取消") } })
 }
 @Composable private fun FeatureCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); content() }
-    }
+    AtlasPanel(Modifier.fillMaxWidth()) { Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary); content() }
 }
 @Composable private fun PreferenceSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f)); Switch(checked, onChange, modifier = Modifier.selectionOutline(checked))
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium); Switch(checked, onChange)
     }
 }

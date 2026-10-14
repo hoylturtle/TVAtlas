@@ -30,5 +30,7 @@ private fun clock(at: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).for
     } else if (current != null || next != null) {
         Text(current?.let { "正在播：${it.title}" } ?: next?.let { "下一节目：${clock(it.start)} ${it.title}" }.orEmpty(),
             style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (current != null && next != null) Text("下一个：${next.title}",
+            style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

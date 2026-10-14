@@ -48,25 +48,27 @@ import com.tvatlas.player.update.*
     val networkBusy = update.checking || update.downloading
     val release = update.release
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        if (tv) Column(Modifier.align(Alignment.CenterStart).width(230.dp).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (tv) Column(Modifier.align(Alignment.CenterStart).width(210.dp).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("设置", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 12.dp))
             categories.forEachIndexed { index, title ->
-                TvTextButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).selectionOutline(category == index)) {
-                    Text(title, modifier = Modifier.fillMaxWidth())
+                TvTextButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectionOutline(category == index)) {
+                    Icon(when (index) { 0 -> AtlasSymbols.Network; 1 -> Icons.Default.Refresh; 2 -> AtlasSymbols.Screen; else -> AtlasSymbols.Privacy }, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
-        Column(Modifier.padding(start = if (tv) 230.dp else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (!tv) Text("设置", style = MaterialTheme.typography.headlineSmall)
+        Column(Modifier.padding(start = if (tv) 210.dp else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (!tv) AtlasHeader("设置", "播放、网络与应用偏好")
             if (category == null) {
                 Text("按类别管理播放、网络与应用", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 categories.forEachIndexed { index, title ->
-                    Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp).tvFocusOutline(),
+                    Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).tvFocusOutline(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                        Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            Icon(when (index) { 0 -> Icons.Default.PlayArrow; 1 -> Icons.Default.Refresh; 2 -> Icons.Default.Settings; else -> Icons.Default.Info },
+                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            Icon(when (index) { 0 -> AtlasSymbols.Network; 1 -> Icons.Default.Refresh; 2 -> AtlasSymbols.Screen; else -> AtlasSymbols.Privacy },
                                 contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                         }
                         Spacer(Modifier.width(14.dp))
@@ -140,7 +142,7 @@ import com.tvatlas.player.update.*
                         Text("播放诊断", style = MaterialTheme.typography.bodyLarge)
                         Text("在播放器显示线路和错误详情", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = diagnostics, onCheckedChange = onDiagnostics, modifier = Modifier.selectionOutline(diagnostics))
+                    Switch(checked = diagnostics, onCheckedChange = onDiagnostics)
                 }
                 HorizontalDivider()
                 TvOutlinedButton(onClick = onLogs, modifier = Modifier.fillMaxWidth()) { Text("调试日志") }
@@ -148,8 +150,14 @@ import com.tvatlas.player.update.*
             }
             if (category == 2) SettingsCard {
                 Text("遥控器操作", style = MaterialTheme.typography.titleMedium)
-                Text("方向键：移动焦点；列表上下选择，左右切换区域。\n确认：播放或打开；长按确认：线路详情。\n菜单键：频道或当前页面操作。\n返回：先关闭浮层，再返回直播；直播首页确认退出。\n主页：返回电视系统主页。", style = MaterialTheme.typography.bodyLarge)
-                Text("白色边框表示遥控器焦点，紫色表示当前选择；正在播放的频道显示播放标记。", style = MaterialTheme.typography.bodyMedium)
+                AtlasKeyRow("↑ ↓", "选择频道", "上下移动焦点；播放时上下换台")
+                AtlasKeyRow("← →", "切换区域", "在导航、列表与详情间移动")
+                AtlasKeyRow("OK", "确认", "播放频道或打开当前项目")
+                AtlasKeyRow("长按 OK", "查看线路", "查看频道来源与代理设置")
+                AtlasKeyRow("返回", "返回与收起", "先关闭浮层；直播首页确认退出")
+                AtlasKeyRow("菜单", "更多操作", "打开频道菜单或页面操作")
+                AtlasKeyRow("主页", "系统主页", "返回电视系统主页")
+                Text("白色边框表示遥控器焦点，紫色表示当前选择；正在播放的频道显示播放标记。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("手机／平板进入全屏时横屏播放；停止后可重新播放。", style = MaterialTheme.typography.bodyMedium)
             }
             if (category == 3) SettingsCard {

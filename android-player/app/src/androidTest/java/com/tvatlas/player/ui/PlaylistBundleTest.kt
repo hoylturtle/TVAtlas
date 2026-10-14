@@ -1,6 +1,7 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.tvatlas.core.model.*
@@ -12,6 +13,15 @@ import org.junit.Test
 
 class PlaylistBundleTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun tvShowsSourceListAndItsChannelPreviewTogether() {
+        val playlist = DefaultPlaylists.entries.first()
+        val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(Stream("s", "https://example.com/live", playlist.id)))
+        val library = Library(DefaultPlaylists.entries, listOf(channel), emptyList(), RuleConfig())
+        compose.setContent { MaterialTheme { CompositionLocalProvider(LocalTvMode provides true) { PlaylistPage(library, false, {}, {}, {}) } } }
+        compose.onAllNodesWithText("TVAtlas 默认频道").assertCountEquals(2)
+        compose.onNodeWithText("翡翠台").assertIsDisplayed()
+        compose.onNodeWithText("1 个频道 · 订阅详情").assertIsDisplayed()
+    }
     @Test fun existingBuiltInSourcesShowOneSubscriptionAndCustomSourceStaysSeparate() {
         val custom = Playlist("custom", "用户测试订阅", "https://example.com/channels.m3u")
         val library = Library(DefaultPlaylists.entries + custom, emptyList(), emptyList(), RuleConfig())

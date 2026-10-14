@@ -11,6 +11,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.tvatlas.core.playlist.M3uParser
 import com.tvatlas.player.source.MyTvSuperSource
 import com.tvatlas.player.source.ViuTvSource
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tvatlas.core.model.*
@@ -20,53 +25,96 @@ import com.tvatlas.player.storage.*
     onRefresh: (Playlist) -> Unit, onRefreshBuiltIn: () -> Unit, feedback: String? = null,
     onEdit: (Playlist) -> Unit = {}, onEnable: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {}) {
     var details by remember { mutableStateOf(false) }
+    var inspected by remember { mutableStateOf<String?>(null) }
+    val tv = atlasTv()
     val builtIn = library.playlists.filter(DefaultPlaylists::contains)
     val custom = library.playlists.filterNot(DefaultPlaylists::contains)
     val enabled = builtIn.filter { it.enabled }.map { it.id }.toSet()
     val count = library.channels.count { ch -> ch.streams.any { it.sourcePlaylistId in enabled } }
     val timestamps = builtIn.filter { it.enabled }.map { it.lastUpdatedAt }
     val updatedAt = if (timestamps.isNotEmpty() && timestamps.all { it != null }) timestamps.filterNotNull().minOrNull() else null
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            Text("频道源", style = MaterialTheme.typography.headlineSmall)
-            Text("内置频道统一订阅；也可添加自己的频道源。", Modifier.padding(top = 6.dp),
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        AtlasHeader("频道源", "默认频道与自己的订阅，统一管理") {
+            TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
         }
-        if (builtIn.isNotEmpty()) item(key = "built-in-bundle") {
-            Card(onClick = { details = true }, modifier = Modifier.fillMaxWidth().tvFocusOutline(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("TVAtlas 默认频道", style = MaterialTheme.typography.titleLarge)
-                    Text("$count 个频道 · 内置 · 不可删除", style = MaterialTheme.typography.bodyMedium)
-                    Text("中国大陆 · 香港 · 澳门 · 台湾 · 日本 · 韩国\nTVB / ViuTV / HOY / 港台官方线路", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TvTextButton(onClick = { details = true }, modifier = Modifier.fillMaxWidth()) { Text("查看内置线路详情") }
-                    Text("上次完整更新：${date(updatedAt)}", style = MaterialTheme.typography.bodySmall)
-                    if (builtIn.any { !it.enabled }) Text("部分内置来源已停用，刷新保留原设置。", style = MaterialTheme.typography.bodySmall)
-                    if (feedback != null) Text(feedback, style = MaterialTheme.typography.bodySmall)
-                    TvOutlinedButton(onClick = onRefreshBuiltIn, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (busy) "处理中…" else "刷新订阅")
+        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                if (builtIn.isNotEmpty()) item(key = "built-in-bundle") {
+                    Text("内置频道源", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp))
+                    Card(onClick = { inspected = null; if (!tv) details = true },
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.hasFocus) inspected = null }.tvFocusOutline(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                SourceIcon()
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text("TVAtlas 默认频道", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("$count 个频道 · 内置 · 不可删除", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            Text("大陆 / 香港 / 澳门 / 台湾 / 日本 / 韩国", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("更新：${date(updatedAt)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                TvTextButton(onClick = { details = true }) { Text("查看内置线路详情", style = MaterialTheme.typography.labelMedium) }
+                                TvTextButton(onClick = onRefreshBuiltIn, enabled = !busy) { Text(if (busy) "处理中…" else "刷新订阅", style = MaterialTheme.typography.labelMedium) }
+                            }
+                            if (feedback != null) Text(feedback, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
-                    Text("香港官方线路使用香港节点；可用性以官方服务为准。", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            }
-        }
-        item {
-            Text("我的频道源", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
-            TvButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("添加频道源 / 手机扫码") }
-        }
-        items(custom, key = { it.id }) { playlist ->
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(playlist.name, style = MaterialTheme.typography.titleMedium)
-                    Text(if (playlist.enabled) "已启用" else "已停用", style = MaterialTheme.typography.bodySmall)
-                    Text("最近更新：${date(playlist.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall)
-                    TvOutlinedButton(onClick = { onRefresh(playlist) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("刷新") }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TvTextButton(onClick = { onEdit(playlist) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("编辑") }
-                        TvTextButton(onClick = { onEnable(playlist) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (playlist.enabled) "停用" else "启用") }
-                        TvTextButton(onClick = { onDelete(playlist) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("删除") }
+                item { Text("我的频道源", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall) }
+                if (custom.isEmpty()) item {
+                    Text("暂无自定义频道源", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(custom, key = { it.id }) { playlist ->
+                    var menu by remember { mutableStateOf(false) }
+                    Card(onClick = { inspected = playlist.id }, modifier = Modifier.fillMaxWidth()
+                        .onFocusChanged { if (it.hasFocus) inspected = playlist.id }.tvFocusOutline(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                SourceIcon()
+                                Column(Modifier.weight(1f)) {
+                                    Text(playlist.name, style = MaterialTheme.typography.titleMedium)
+                                    Text(if (playlist.enabled) "已启用" else "已停用", style = MaterialTheme.typography.bodySmall)
+                                }
+                                Box {
+                                    TvTextButton(onClick = { menu = true }) { Text("更多") }
+                                    DropdownMenu(menu, { menu = false }) {
+                                        DropdownMenuItem(text = { Text("编辑") }, onClick = { menu = false; onEdit(playlist) })
+                                        DropdownMenuItem(text = { Text(if (playlist.enabled) "停用" else "启用") }, onClick = { menu = false; onEnable(playlist) })
+                                        DropdownMenuItem(text = { Text("删除") }, onClick = { menu = false; onDelete(playlist) })
+                                    }
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("更新：${date(playlist.lastUpdatedAt)}", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TvTextButton(onClick = { onRefresh(playlist) }, enabled = !busy) { Text("刷新") }
+                            }
+                        }
                     }
+                }
+                item { TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("添加频道源 / 手机扫码") } }
+            }
+            if (tv) {
+                val selected = custom.firstOrNull { it.id == inspected }
+                val channels = library.channels.filter { ch -> ch.streams.any { if (selected == null) it.sourcePlaylistId in enabled else it.sourcePlaylistId == selected.id } }
+                AtlasPanel(Modifier.weight(1.1f).fillMaxHeight()) {
+                    Text(selected?.name ?: "TVAtlas 默认频道", style = MaterialTheme.typography.titleLarge)
+                    Text("${channels.size} 个频道 · 订阅详情", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    if (selected == null) Text("TVB / ViuTV / HOY / 港台 · 大陆及港澳台日韩频道", style = MaterialTheme.typography.bodySmall)
+                    HorizontalDivider()
+                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(channels.hongKongFirst(), key = { it.id }) { channel ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ChannelArtwork(channel)
+                                Column { Text(channel.name, style = MaterialTheme.typography.bodyMedium); Text("${channel.browseRegion()} / ${channel.browseType()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                        if (channels.isEmpty()) item { Text("尚无已加载频道", style = MaterialTheme.typography.bodyMedium) }
+                    }
+                    Text("方向键选择来源 · 确认查看详情 · 返回直播", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -101,4 +149,12 @@ import com.tvatlas.player.storage.*
             }
         }, confirmButton = { TvTextButton(onClick = { details = false }) { Text("关闭") } })
 
+}
+
+@Composable private fun SourceIcon() {
+    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary.copy(alpha = .18f)) {
+        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+        }
+    }
 }

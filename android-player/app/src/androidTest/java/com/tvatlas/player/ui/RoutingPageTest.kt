@@ -3,6 +3,7 @@ package com.tvatlas.player.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.runtime.CompositionLocalProvider
 import android.graphics.Bitmap
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -25,12 +26,23 @@ class RoutingPageTest {
     private val us = hk.copy(id = "us", name = "美国节点")
     private val library = Library(emptyList(), emptyList(), listOf(hk, us), RuleConfig())
     private val subscriptions = listOf(SubscriptionRow("sub", "艾可云", 1791763200000, 2))
-    @Test fun phoneStartsWithSubscriptionManagementAndNodesCanFilterHongKong() {
+    @Test fun tvNodeSelectionShowsMatchingDetailsAndKeepsHostsPrivate() {
+        compose.setContent { MaterialTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {}, {}, {}, {})
+        } } }
+        compose.onNodeWithText("节点详情").assertIsDisplayed()
+        compose.onNodeWithText("美国节点").performClick()
+        compose.onAllNodesWithText("美国节点").assertCountEquals(2)
+        compose.onNodeWithText("暂无同地区备用节点").assertIsDisplayed()
+        compose.onNodeWithText("private.example", substring = true).assertDoesNotExist()
+    }
+    @Test fun phoneNodesAndSubscriptionManagementRemainReachable() {
         compose.setContent { MaterialTheme(colorScheme = colors) {
             Surface(Modifier.width(360.dp).height(650.dp).testTag("phone-proxy-layout"), color = MaterialTheme.colorScheme.background) {
                 RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {}, {}, {}, {})
             }
         } }
+        compose.onNodeWithText("订阅", substring = false).performClick()
         val bitmap = compose.onNodeWithTag("phone-proxy-layout").captureToImage().asAndroidBitmap()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val values = android.content.ContentValues().apply {
@@ -44,7 +56,7 @@ class RoutingPageTest {
         compose.onNodeWithText("香港节点").assertDoesNotExist()
         compose.onNodeWithText("艾可云").assertExists()
         compose.onNodeWithText("查看节点").performScrollTo().performClick()
-        compose.onNodeWithText("只看香港节点").performScrollTo().performClick()
+        compose.onNodeWithText("香港", substring = false).performClick()
         compose.onNodeWithText("香港节点").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("美国节点").assertDoesNotExist()
         compose.onNodeWithText("private.example", substring = true).assertDoesNotExist()
@@ -53,6 +65,7 @@ class RoutingPageTest {
         var refreshed: String? = null
         compose.setContent { MaterialTheme { RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {},
             { refreshed = it }, {}, {}, feedback = SubscriptionFeedback("sub", "连接订阅服务超时；已保留旧节点", true)) } }
+        compose.onNodeWithText("订阅", substring = false).performClick()
         compose.onNodeWithText("连接订阅服务超时；已保留旧节点").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("更新订阅").performScrollTo().performClick()
         compose.runOnIdle { assertEquals("sub", refreshed) }
@@ -62,6 +75,7 @@ class RoutingPageTest {
             uploadBytes = 1024, downloadBytes = 3072, totalBytes = 10240,
             expireAt = 1791763200000, quotaUpdatedAt = 1791760000000))
         compose.setContent { MaterialTheme { RoutingPage(library, {}, {}, {}, {}, quota, false, {}, {}, {}, {}) } }
+        compose.onNodeWithText("订阅", substring = false).performClick()
         compose.onNodeWithText("套餐：已用", substring = true).assertExists()
         compose.onNodeWithText("剩余", substring = true).assertExists()
         compose.onNodeWithText("规则").performClick()
