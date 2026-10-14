@@ -54,6 +54,10 @@ class UiPreviewTest {
         for (television in listOf(false, true)) for (page in 0..3) {
             compose.runOnIdle { tv = television; screen = page }
             compose.waitForIdle()
+            if (television && page == 3) {
+                compose.onNodeWithText("界面与遥控器").performClick()
+                compose.waitForIdle()
+            }
             val bitmap = compose.onNodeWithTag("preview").captureToImage().asAndroidBitmap()
             val values = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "ui-${if (television) "tv" else "phone"}-$page.png")
