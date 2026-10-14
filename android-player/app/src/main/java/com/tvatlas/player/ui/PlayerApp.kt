@@ -383,7 +383,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         } ?: "线路", playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions),
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
             canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
-            fullscreenLabel = if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
+            fullscreenLabel = if (tv) "频道" else if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
             tail = {
                 PlaybackNetworkInfo(model, networkTarget ?: displayedAttempt?.target)
                 if (immersive) TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
