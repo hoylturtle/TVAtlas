@@ -16,7 +16,7 @@ import com.tvatlas.core.model.httpUri
 import com.tvatlas.player.PlayerViewModel
 import com.tvatlas.player.storage.NetworkAccess
 
-@Composable internal fun FeatureSettings(model: PlayerViewModel) {
+@Composable internal fun FeatureSettings(model: PlayerViewModel, section: String = "all") {
     val options by model.options.collectAsStateWithLifecycle()
     val guide by model.epg.state.collectAsStateWithLifecycle()
     val busy by model.busy.collectAsStateWithLifecycle()
@@ -32,7 +32,7 @@ import com.tvatlas.player.storage.NetworkAccess
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) { importUri = uri; passwordPrompt = true }
     }
-    FeatureCard("节目单") {
+    if (section == "all" || section == "playback") FeatureCard("节目单") {
         Text("XMLTV + TVB、ViuTV 官方节目表补充；地址留空可停用 XMLTV", style = MaterialTheme.typography.bodySmall)
         Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "已缓存 ${guide.guide.programmes.size} 个节目", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -40,7 +40,7 @@ import com.tvatlas.player.storage.NetworkAccess
             TvTextButton(onClick = model::refreshGuide, enabled = !guide.loading, modifier = Modifier.weight(1f)) { Text("刷新节目单") }
         }
     }
-    FeatureCard("自动刷新") {
+    if (section == "all" || section == "playback") FeatureCard("自动刷新") {
         PreferenceSwitch("到期刷新频道源与代理订阅", options.autoRefresh) { enabled -> model.editOptions { it.copy(autoRefresh = enabled) } }
         Text("打开应用及运行期间每 15 分钟检查到期来源；仅非计费网络、未播放时更新。失败保留旧配置。", style = MaterialTheme.typography.bodySmall)
         var menu by remember { mutableStateOf(false) }
@@ -52,7 +52,7 @@ import com.tvatlas.player.storage.NetworkAccess
             } }
         }
     }
-    FeatureCard("网络与流量保护") {
+    if (section == "all" || section == "playback") FeatureCard("网络与流量保护") {
         var networkMenu by remember { mutableStateOf(false) }
         Box {
             TvOutlinedButton(onClick = { networkMenu = true }, modifier = Modifier.fillMaxWidth()) { Text("网络使用：${options.networkAccess.label}") }
@@ -68,7 +68,7 @@ import com.tvatlas.player.storage.NetworkAccess
         }
         Text("提醒按统计重置后的累计量计算，不自动停止播放。", style = MaterialTheme.typography.bodySmall)
     }
-    FeatureCard("配置备份与恢复") {
+    if (section == "all" || section == "backup") FeatureCard("配置备份与恢复") {
         Text("包含频道源、订阅地址、节点凭证、规则、收藏和偏好。使用密码加密；忘记密码无法恢复。恢复会覆盖当前配置。", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TvOutlinedButton(onClick = { importUri = null; password = ""; passwordPrompt = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("加密备份") }

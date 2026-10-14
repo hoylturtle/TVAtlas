@@ -35,9 +35,9 @@ import com.tvatlas.player.storage.*
         if (builtIn.isNotEmpty()) item(key = "built-in-bundle") {
             Card(onClick = { details = true }, modifier = Modifier.fillMaxWidth().tvFocusOutline(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("TVAtlas 默认频道", style = MaterialTheme.typography.titleMedium)
-                    Text("$count 个频道 · 内置订阅", style = MaterialTheme.typography.bodyMedium)
-                    Text("覆盖中国大陆、香港、澳门、台湾、日本、韩国；香港使用 TVB、ViuTV、港台及 HOY 官方线路。", style = MaterialTheme.typography.bodySmall,
+                    Text("TVAtlas 默认频道", style = MaterialTheme.typography.titleLarge)
+                    Text("$count 个频道 · 内置 · 不可删除", style = MaterialTheme.typography.bodyMedium)
+                    Text("中国大陆 · 香港 · 澳门 · 台湾 · 日本 · 韩国\nTVB / ViuTV / HOY / 港台官方线路", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TvTextButton(onClick = { details = true }, modifier = Modifier.fillMaxWidth()) { Text("查看内置线路详情") }
                     Text("上次完整更新：${date(updatedAt)}", style = MaterialTheme.typography.bodySmall)
@@ -52,7 +52,8 @@ import com.tvatlas.player.storage.*
             }
         }
         item {
-            TvButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("添加其他频道源") }
+            Text("我的频道源", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
+            TvButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("添加频道源 / 手机扫码") }
         }
         items(custom, key = { it.id }) { playlist ->
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

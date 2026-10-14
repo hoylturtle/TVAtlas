@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -24,16 +25,19 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
 }
 
 
-/** Selected and focused choices share a purple fill and a white outline on touch and TV. */
+/** TV selection is subdued; the white ring always identifies the actual remote focus. */
 internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
+    val context = LocalContext.current
+    val tv = LocalTvMode.current ?: ((context.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
     var focused by remember { mutableStateOf(false) }
     onFocusChanged { focused = it.hasFocus }
         .background(if (selected || focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
-        .border(if (selected || focused) 2.dp else 0.dp, if (selected || focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
+        .border(if (focused || (selected && !tv)) 3.dp else 0.dp,
+            if (focused || (selected && !tv)) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
 }
 
 @Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.width(112.dp).background(MaterialTheme.colorScheme.surface).padding(12.dp),
+    Column(modifier.width(112.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("TVAtlas", Modifier.padding(vertical = 20.dp), fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium)
@@ -50,22 +54,22 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     }
 }
 
+/** Playback remains full size; navigation and channels float above it. */
 @Composable internal fun TvBrowseLayout(tv: Boolean, channelName: String?,
-    channels: @Composable () -> Unit, picture: @Composable () -> Unit) {
-    Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Surface(Modifier.width(if (tv) 300.dp else 340.dp).fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.large) {
+    channels: @Composable () -> Unit, picture: @Composable () -> Unit,
+    navigation: @Composable () -> Unit = {}) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Box(Modifier.fillMaxSize()) { picture() }
+        Box(Modifier.align(androidx.compose.ui.Alignment.CenterStart).fillMaxHeight()) { navigation() }
+        Surface(Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
+            .fillMaxHeight().width(if (tv) 340.dp else 320.dp).padding(top = 12.dp, bottom = 76.dp, end = 12.dp),
+            color = MaterialTheme.colorScheme.background.copy(alpha = 0.82f), shape = MaterialTheme.shapes.large) {
             Column(Modifier.padding(12.dp)) {
                 Text("频道", Modifier.padding(8.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("方向键选择 · 确认播放 · 返回收起", Modifier.padding(horizontal = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Box(Modifier.weight(1f)) { channels() }
             }
-        }
-        Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(channelName ?: "选择频道开始观看", style = MaterialTheme.typography.headlineSmall,
-                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Box(Modifier.weight(1f).fillMaxWidth()) { picture() }
-            if (tv) Text("↑↓ 选择频道   确认 播放   长按确认 线路 / 代理   返回 全屏",
-                color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

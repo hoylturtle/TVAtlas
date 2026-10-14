@@ -38,10 +38,10 @@ import com.tvatlas.player.storage.*
         { nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Text("代理与订阅", style = MaterialTheme.typography.headlineSmall)
-            Text("订阅获取节点，播放时按频道选择使用。", Modifier.padding(top = 4.dp, bottom = 12.dp),
+            Text("代理与路由", style = MaterialTheme.typography.headlineSmall)
+            Text("按地区选择节点，低延迟优先，失败自动回退。", Modifier.padding(top = 4.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TabRow(selectedTabIndex = section) {
+            ScrollableTabRow(selectedTabIndex = section, edgePadding = 0.dp) {
                 listOf("订阅", "节点", "规则", "流量", "内核").forEachIndexed { index, title ->
                     Tab(selected = section == index, onClick = { section = index; nodeSubscription = null },
                         selectedContentColor = MaterialTheme.colorScheme.onPrimary, unselectedContentColor = MaterialTheme.colorScheme.onSurface,
@@ -50,6 +50,15 @@ import com.tvatlas.player.storage.*
             }
         }
         if (section == 0) {
+            item {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f), shape = MaterialTheme.shapes.large) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("地区自动路由", style = MaterialTheme.typography.titleMedium)
+                        Text("大陆直连 · 港澳／台湾／日本／韩国匹配地区节点", style = MaterialTheme.typography.bodySmall)
+                        Text("${subscriptions.size} 个订阅 · ${library.profiles.count { it.enabled }} 个可用配置节点", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
             item {
                 TvButton(onClick = onSubscribe, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("添加代理订阅") }
             }

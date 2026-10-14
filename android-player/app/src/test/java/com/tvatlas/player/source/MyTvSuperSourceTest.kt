@@ -79,6 +79,20 @@ class MyTvSuperSourceTest {
         val geo = assertThrows(SourceResolutionException::class.java) { MyTvSuperSource.parseSession(session.replace("true", "false")) }
         assertEquals(403, geo.failure.httpStatus)
     }
+    @Test fun officialAmagiMusicProfilesAcceptHlsAndExtensionlessManifests() {
+        val host = "amg01076-amg01076c2-mytvsuper-apac-7839.playouts.now.amagi.tv"
+        for (network in listOf("NOW7", "NOW8")) {
+            val base = checkout(host).replace("ott_J_h264", "ott_${network}_h264").replace("cenc_m", "none")
+            val hls = MyTvSuperSource.parseCheckoutConfig(base.replace("index.mpd", "playlist.m3u8"), network)
+            assertEquals("application/x-mpegURL", hls.mimeType)
+            assertFalse(hls.drmRequired)
+            val extensionless = MyTvSuperSource.parseCheckoutConfig(base.replace("index.mpd", "manifest"), network)
+            assertEquals("application/dash+xml", extensionless.mimeType)
+            assertThrows(IOException::class.java) {
+                MyTvSuperSource.parseCheckoutConfig(base.replace(host, "$host.evil.test"), network)
+            }
+        }
+    }
     @Test fun resolvesFreshGuestAndAuthenticatesOnlyCheckout() = runBlocking {
         val requests = mutableListOf<Request>()
         val client = OkHttpClient.Builder().addInterceptor { chain ->

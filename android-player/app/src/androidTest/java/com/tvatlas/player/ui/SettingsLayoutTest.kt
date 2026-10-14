@@ -19,7 +19,7 @@ import org.junit.Test
 
 class SettingsLayoutTest {
     @get:Rule val compose = createComposeRule()
-    @Test fun phoneShowsUpdateFirstAndCollapsedHelpUsesTouchInstructions() {
+    @Test fun phoneShowsCategoriesAndUpdateAndAboutRemainReachable() {
         compose.setContent { CompositionLocalProvider(LocalTvMode provides false) {
             MaterialTheme(colorScheme = colors) {
                 Surface(Modifier.width(360.dp).height(650.dp).testTag("phone-settings-layout"), color = MaterialTheme.colorScheme.background) {
@@ -27,6 +27,8 @@ class SettingsLayoutTest {
                 }
             }
         } }
+        compose.onNodeWithText("播放与网络").assertIsDisplayed()
+        compose.onNodeWithText("更新与诊断").performClick()
         compose.onNodeWithText("尚未检查更新").assertIsDisplayed()
         compose.onNodeWithText("检查更新").assertIsDisplayed()
         compose.onNodeWithText("已是最新版本").assertDoesNotExist()
@@ -39,6 +41,8 @@ class SettingsLayoutTest {
         }
         val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        compose.onNodeWithText("返回设置").performScrollTo().performClick()
+        compose.onNodeWithText("隐私与关于").performScrollTo().performClick()
         compose.onNodeWithText("操作帮助").performScrollTo().performClick()
         compose.onNodeWithText("直播：点频道播放", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("方向键选择", substring = true).assertDoesNotExist()
@@ -47,6 +51,7 @@ class SettingsLayoutTest {
         var installed = false
         val release = PublishedUpdate(BuildConfig.VERSION_CODE + 1, "next", 23, "", "https://github.com/example/app.apk")
         compose.setContent { MaterialTheme { SettingsPage(false, {}, UpdateState(checked = true, release = release, apkReady = true), {}, {}, onInstall = { installed = true }) } }
+        compose.onNodeWithText("更新与诊断").performClick()
         compose.onNodeWithText("安装包已校验，可以安装").assertIsDisplayed()
         compose.onNodeWithText("下载新版 APK").assertDoesNotExist()
         compose.onNodeWithText("安装更新").performScrollTo().performClick()

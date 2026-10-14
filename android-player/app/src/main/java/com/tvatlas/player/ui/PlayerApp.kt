@@ -98,6 +98,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
+        var tvBackArmed by remember { mutableStateOf(false) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
@@ -118,8 +119,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
         val immersive = tab == 0 && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
         val theater = tab == 0 && wide
-        BackHandler(immersive) { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
-        BackHandler(tab == 0 && !immersive && !exitPrompt) { exitPrompt = true }
+        BackHandler(immersive) {
+            if (tv && tvBackArmed) { tvBackArmed = false; exitPrompt = true }
+            else { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
+        }
+        BackHandler(tab == 0 && !immersive && !exitPrompt) {
+            if (tv && channelPanelOpen) { channelPanelOpen = false; fullscreen = true; tvBackArmed = true }
+            else exitPrompt = true
+        }
         BackHandler(!immersive && tab != 0) { tab = 0 }
         PlaybackOrientation(immersive, tv)
         PlaybackSystemBars(immersive)
@@ -143,13 +150,19 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     }
                 }
             }) { padding ->
-            Row(Modifier.fillMaxSize().padding(padding)) {
-                if (tv && !immersive) TvNavigation(tab, { tab = it; channelPanelOpen = true }, Modifier.fillMaxHeight())
+            Row(Modifier.fillMaxSize().padding(padding).onPreviewKeyEvent { event ->
+                if (tv && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                    if (tab == 0) { tvBackArmed = false; channelPanelOpen = !channelPanelOpen; fullscreen = !channelPanelOpen }
+                    else tab = 0
+                    true
+                } else false
+            }) {
+                if (tv && !immersive && tab != 0) TvNavigation(tab, { tab = it; channelPanelOpen = true }, Modifier.fillMaxHeight())
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
-                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, true, immersive, !tv && !wide && !immersive,
+                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, true, immersive || (tv && tab == 0), !tv && !wide && !immersive,
                                 { if (immersive) {
                                     fullscreen = false; landscapeChannels = true; channelPanelOpen = true
                                 } else {
@@ -165,13 +178,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         }
                         val select: (Channel) -> Unit = {
                             if (status.channelId != it.id || model.playback.player.value == null) model.play(it)
-                            if (wide) channelPanelOpen = false
+                            if (wide) { channelPanelOpen = false; tvBackArmed = false }
                         }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
                                 channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) },
-                                picture = { video(Modifier.fillMaxSize()) })
+                                picture = { video(Modifier.fillMaxSize()) },
+                                navigation = { if (tv) TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
                                 channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }) })
                         }
@@ -187,7 +201,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) })
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, extrasContent = { FeatureSettings(model) })
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") })
                 }
                 }
             }

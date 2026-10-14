@@ -20,7 +20,10 @@ class UpdateSettingsTest {
         var opened = false
         val update = UpdateState(error = "连接 GitHub 失败")
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, {}, {}, onRepository = { opened = true }) } }
+        compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("连接 GitHub 失败").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("返回设置").performScrollTo().performClick()
+        compose.onNodeWithText("隐私与关于").performScrollTo().performClick()
         compose.onNodeWithText("打开 GitHub 仓库").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(opened) }
         compose.onNodeWithText("复制仓库链接").performScrollTo().performClick()
@@ -34,6 +37,7 @@ class UpdateSettingsTest {
             MaterialTheme { SettingsPage(false, {}, UpdateState(), {}, {}, profiles = listOf(profile),
                 updateRoute = selected, onUpdateRoute = { selected = it; saved = it }) }
         }
+        compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("直连").performScrollTo().performClick()
         compose.onNodeWithText("香港更新节点").performClick()
         compose.onNodeWithText("香港更新节点").assertExists()
@@ -45,6 +49,7 @@ class UpdateSettingsTest {
         var download = false
         val update = UpdateState(checked = true, release = PublishedUpdate(BuildConfig.VERSION_CODE + 1, "0.1.5", 23, "修复播放", link))
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, {}, { download = true }) } }
+        compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("发现新版本：0.1.5").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("下载新版 APK").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(download) }
@@ -70,6 +75,7 @@ class UpdateSettingsTest {
         var checked = false
         val update = UpdateState(checked = true, release = PublishedUpdate(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 23, "", ""))
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, { checked = true }, {}) } }
+        compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("已是最新版本").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("下载新版 APK").assertDoesNotExist()
         compose.onNodeWithText("检查更新").performScrollTo().performClick()
@@ -78,6 +84,7 @@ class UpdateSettingsTest {
     @Test fun checkingCanBeCancelledWithoutLeavingSettings() {
         var cancelled = false
         compose.setContent { MaterialTheme { SettingsPage(false, {}, UpdateState(checking = true), {}, {}, onCancel = { cancelled = true }) } }
+        compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("取消检查").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(cancelled) }
     }
@@ -85,6 +92,7 @@ class UpdateSettingsTest {
     @Test fun incompleteUpdateCheckNeverClaimsAlreadyLatest() {
         val release = PublishedUpdate(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, 23, "", "", checkComplete = false)
         compose.setContent { MaterialTheme { SettingsPage(false, {}, UpdateState(checked = true, release = release), {}, {}) } }
+        compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("部分更新信息未完成，请重试检查").assertIsDisplayed()
         compose.onNodeWithText("已是最新版本").assertDoesNotExist()
     }

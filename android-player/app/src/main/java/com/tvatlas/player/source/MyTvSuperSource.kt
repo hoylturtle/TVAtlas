@@ -125,13 +125,27 @@ object MyTvSuperSource {
             url.port != 443 -> "port"
             url.username.isNotEmpty() || url.password.isNotEmpty() -> "credentials"
             url.fragment != null -> "fragment"
-            !url.encodedPath.endsWith(if (protocol == "hls") ".m3u8" else ".mpd") -> "manifest"
+            url.encodedPath.trim('/').isEmpty() -> "manifest"
             else -> null
         }
         log?.event(if (reason == null) "INFO" else "WARN", "CHECKOUT_URL",
             "host=${url.host} accepted=${reason == null} reason=${reason ?: "none"}")
         if (reason != null) throw SourceResolutionException("官方播放地址校验失败（$reason），请导出日志", PlaybackFailure(FailureKind.MANIFEST))
-        return Playback(url.toString(), "", drmRequired = protected, mimeType = if (protocol == "hls") "application/x-mpegURL" else "application/dash+xml")
+        // Third-party official CDN profiles may use HLS despite a generic DASH checkout label,
+        // or extensionless manifest endpoints. The trusted host is the security boundary,
+        // not a filename suffix. Prefer an explicit manifest extension when present.
+        val path = url.encodedPath.trimEnd('/').lowercase(java.util.Locale.ROOT)
+        val mediaProtocol = when {
+            path.endsWith(".m3u8") -> "hls"
+            path.endsWith(".mpd") -> "dash"
+            else -> protocol
+        }
+        log?.event("INFO", "CHECKOUT_FORMAT", "declared=$protocol selected=$mediaProtocol drm=$protected extension=${when {
+            path.endsWith(".m3u8") -> "m3u8"
+            path.endsWith(".mpd") -> "mpd"
+            else -> "other"
+        }}")
+        return Playback(url.toString(), "", drmRequired = protected, mimeType = if (mediaProtocol == "hls") "application/x-mpegURL" else "application/dash+xml")
     }
     fun licenseClient(base: OkHttpClient, log: com.tvatlas.player.debug.DebugLog? = null): OkHttpClient = base.newBuilder()
         .followRedirects(false).followSslRedirects(false).addInterceptor { chain ->

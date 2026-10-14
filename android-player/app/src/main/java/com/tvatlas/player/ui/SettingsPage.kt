@@ -4,6 +4,7 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,7 +25,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -33,13 +34,34 @@ import com.tvatlas.player.update.*
     var help by rememberSaveable { mutableStateOf(false) }
     var privacy by rememberSaveable { mutableStateOf(false) }
     var licenses by rememberSaveable { mutableStateOf(false) }
+    var category by rememberSaveable { mutableStateOf<Int?>(null) }
+    BackHandler(category != null) { category = null }
+    val categories = listOf("播放与网络", "更新与诊断", "界面与遥控器", "隐私与关于")
+    val summaries = listOf("网络范围、流量保护、节目单与刷新", "版本更新、网络选择与调试日志", "焦点提示、遥控器按键与播放操作", "加密备份、配置隐私与开源许可")
     val networkBusy = update.checking || update.downloading
     val release = update.release
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("设置", style = MaterialTheme.typography.headlineSmall)
-            SettingsCard {
+            if (category == null) {
+                Text("按类别管理播放、网络与应用", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                categories.forEachIndexed { index, title ->
+                    TvOutlinedButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 88.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(title, style = MaterialTheme.typography.titleMedium)
+                            Text(summaries[index], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("›")
+                    }
+                }
+                Text("TVAtlas ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            } else {
+                TvTextButton(onClick = { category = null }) { Text("返回设置") }
+                Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
+            }
+            if (category == 0) playbackContent()
+            if (category == 1) SettingsCard {
                 Text("应用更新", style = MaterialTheme.typography.titleMedium)
                 Text("当前版本：${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -86,9 +108,9 @@ import com.tvatlas.player.update.*
                 } else TvOutlinedButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) { Text("检查更新") }
                 if (networkBusy) TvTextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text(if (update.downloading) "取消下载" else "取消检查") }
             }
-            trafficContent()
-            extrasContent()
-            SettingsCard {
+            if (category == 0) trafficContent()
+            if (category == 3) { backupContent(); extrasContent() }
+            if (category == 1) SettingsCard {
                 Text("诊断与日志", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -101,7 +123,13 @@ import com.tvatlas.player.update.*
                 TvOutlinedButton(onClick = onLogs, modifier = Modifier.fillMaxWidth()) { Text("调试日志") }
                 Text("可查看、复制或导出日志，便于排查问题。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            SettingsCard {
+            if (category == 2) SettingsCard {
+                Text("遥控器操作", style = MaterialTheme.typography.titleMedium)
+                Text("方向键：移动焦点；列表上下选择，左右切换区域。\n确认：播放或打开；长按确认：线路详情。\n菜单键：频道或当前页面操作。\n返回：先关闭浮层，再返回直播；直播首页确认退出。\n主页：返回电视系统主页。", style = MaterialTheme.typography.bodyLarge)
+                Text("白色边框表示遥控器焦点，紫色表示当前选择；正在播放的频道显示播放标记。", style = MaterialTheme.typography.bodyMedium)
+                Text("手机／平板进入全屏时横屏播放；停止后可重新播放。", style = MaterialTheme.typography.bodyMedium)
+            }
+            if (category == 3) SettingsCard {
                 Text("帮助与关于", style = MaterialTheme.typography.titleMedium)
                 Text("TVAtlas · 测试版 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
                 TvOutlinedButton(onClick = onRepository, modifier = Modifier.fillMaxWidth()) { Text("打开 GitHub 仓库") }

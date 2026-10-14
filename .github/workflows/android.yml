@@ -112,7 +112,14 @@ jobs:
             adb pull /sdcard/Pictures/TVAtlas/fullscreen-layout.png app/build/reports/androidTests/fullscreen-layout.png
             adb pull /sdcard/Pictures/TVAtlas/fullscreen-stopped-layout.png app/build/reports/androidTests/fullscreen-stopped-layout.png
             adb pull /sdcard/Pictures/TVAtlas/mobile-failure-layout.png app/build/reports/androidTests/mobile-failure-layout.png
+            adb pull /sdcard/Pictures/TVAtlas app/build/ui-previews
             python3 scripts/verify_upgrade_install.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-previews
+          path: android-player/app/build/ui-previews/**/*.png
+          if-no-files-found: warn
       - name: Show native test failure details
         if: failure()
         run: |

@@ -1,9 +1,9 @@
 {
-  "versionCode": 37,
-  "versionName": "0.1.36",
+  "versionCode": 38,
+  "versionName": "0.1.37",
   "minSdk": 23,
-  "notes": "新增代理订阅套餐已用、剩余、总流量与到期信息，区分服务商额度与本机订阅/节点统计；完善默认频道地区说明、规则详情和紫色界面；修正平板分屏布局及播放源请求头兼容性。项目与 CI 升级至 Java 21。",
+  "notes": "重做手机和电视主界面：电视频道浮层覆盖播放画面、底部单行透明控制栏，设置改为四类入口，默认频道源和代理页重排，区分遥控器焦点与选中状态；修复 TVB 官方 Amagi 频道因播放地址后缀被误拒的问题。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.36-beta.1",
+  "releaseTag": "v0.1.37-beta.1",
   "coreVersion": "v1.19.32"
 }
