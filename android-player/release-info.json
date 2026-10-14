@@ -1,9 +1,9 @@
 {
-  "versionCode": 39,
+  "versionCode": 40,
   "versionName": "0.1.38",
   "minSdk": 23,
-  "notes": "选中项保留紫色底色并去掉白边，电视遥控器焦点保留独立提示；各频道类型优先显示主要频道，TVB 优先翡翠台、明珠台、TVB Plus，CCTV 按频道数字排序；其他频道保留稳定顺序，最近观看保持时间顺序。",
+  "notes": "修复平板横屏频道浮层下播放控制区仍显示多行的问题：统一使用底部单行控制栏，隐藏地址与重复诊断信息；套餐流量条仅已用部分着色，剩余部分改为白色轨道并移除紫色末端标记。包含上一测试版的紫色选中无白边与主要频道优先排序调整。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.38-beta.1",
+  "releaseTag": "v0.1.38-beta.2",
   "coreVersion": "v1.19.32"
 }

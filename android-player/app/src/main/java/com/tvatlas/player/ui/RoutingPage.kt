@@ -227,7 +227,8 @@ import com.tvatlas.player.storage.*
         else -> MaterialTheme.colorScheme.primary
     }
     Text("套餐：已用 ${trafficSize(used)} / ${trafficSize(total)}", style = MaterialTheme.typography.bodyMedium)
-    LinearProgressIndicator(progress = { ratio.toFloat() }, modifier = Modifier.fillMaxWidth(), color = warning)
+    LinearProgressIndicator(progress = { ratio.toFloat() }, modifier = Modifier.fillMaxWidth(), color = warning,
+        trackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.75f), drawStopIndicator = {})
     Text("剩余 ${trafficSize(remaining)}${sub.expireAt?.let { " · 到期 ${date(it)}" }.orEmpty()}",
         style = MaterialTheme.typography.bodySmall, color = warning)
     Text("套餐数据更新：${date(sub.quotaUpdatedAt)} · 可能包含其他设备用量", style = MaterialTheme.typography.bodySmall,

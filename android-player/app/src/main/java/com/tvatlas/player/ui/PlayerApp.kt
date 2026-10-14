@@ -170,7 +170,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
-                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, true, immersive || (tv && tab == 0), !tv && !wide && !immersive,
+                            VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, true, immersive || wide || tv, !tv && !wide && !immersive,
                                 { if (immersive) {
                                     fullscreen = false; landscapeChannels = true; channelPanelOpen = true
                                 } else {
