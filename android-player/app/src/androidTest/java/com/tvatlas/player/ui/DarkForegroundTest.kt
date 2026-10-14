@@ -1,6 +1,7 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -21,12 +22,14 @@ class DarkForegroundTest {
         compose.setContent {
             CompositionLocalProvider(LocalContentColor provides Color.Black) {
                 AtlasTheme {
-                    Scaffold(containerColor = Color.Transparent) { _ ->
+                    Scaffold(containerColor = Color.Transparent) { padding ->
                         page = LocalContentColor.current
+                        Box(androidx.compose.ui.Modifier.padding(padding)) {
                         TvBrowseLayout(false, null, channels = {
                             overlay = LocalContentColor.current
                             Text("频道数量")
                         }, picture = { Box(androidx.compose.ui.Modifier) })
+                        }
                     }
                 }
             }
