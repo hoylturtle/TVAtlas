@@ -23,4 +23,22 @@ class ChannelMenuTest {
         assertEquals("台湾", Channel("t", "TVBS新闻", "台湾 · 新闻", streams = emptyList()).browseRegion())
         assertEquals("TVBS", Channel("t", "TVBS新闻", "台湾 · 新闻", streams = emptyList()).browseType())
     }
+    private fun sortedNames(group: String, vararg names: String) = names.mapIndexed { index, name ->
+        Channel(index.toString(), name, group, streams = emptyList())
+    }.primaryChannelsFirst().map { it.name }
+
+    @Test fun tvbFlagshipsLeadAndOtherChannelsKeepSourceOrder() {
+        assertEquals(listOf("翡翠台", "明珠台", "TVB Plus", "电影甲", "电影乙"),
+            sortedNames("香港 · 综合", "电影甲", "TVB Plus", "电影乙", "明珠台", "翡翠台"))
+    }
+    @Test fun cctvUsesChannelNumbersAndSupportsHdNames() {
+        assertEquals(listOf("CCTV-1 HD", "CCTV2", "CCTV10", "CCTV17", "CCTV4K"),
+            sortedNames("中国大陆 · 央视", "CCTV10", "CCTV4K", "CCTV17", "CCTV2", "CCTV-1 HD"))
+    }
+    @Test fun broadcasterMainChannelsLeadWithoutDroppingDuplicates() {
+        assertEquals(listOf("ViuTV", "ViuTV", "ViuTVsix"),
+            sortedNames("香港 · 综合", "ViuTVsix", "ViuTV", "ViuTV"))
+        assertEquals(listOf("NHK総合", "NHKEテレ", "NHKBS", "NHK World"),
+            sortedNames("日本", "NHK World", "NHKBS", "NHKEテレ", "NHK総合"))
+    }
 }

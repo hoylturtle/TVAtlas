@@ -86,3 +86,31 @@ fun Channel.browseType(): String {
         else -> "综合"
     }
 }
+
+/** Presentation only: flagship channels lead each type; equal ranks retain source order. */
+fun List<Channel>.primaryChannelsFirst(): List<Channel> = sortedBy { it.primaryChannelRank() }
+
+private fun Channel.primaryChannelRank(): Int {
+    val key = name.lowercase().replace(Regex("[\\s_·-]"), "")
+        .replace(Regex("(?:高清|超高清|hd|fhd|uhd)$"), "")
+    val names = when (browseType()) {
+        "TVB" -> listOf(listOf("翡翠台", "翡翠", "tvbjade", "jade"), listOf("明珠台", "明珠", "tvbpearl", "pearl"), listOf("tvbplus", "翡翠台plus"))
+        "ViuTV" -> listOf(listOf("viutv"), listOf("viutvsix", "viutv6"))
+        "港台" -> listOf(listOf("港台电视31", "港台電視31", "rthk31"), listOf("港台电视32", "港台電視32", "rthk32"), listOf("港台电视33", "港台電視33", "rthk33"))
+        "HOY" -> listOf(listOf("hoytv", "奇妙电视", "奇妙電視"), listOf("hoy资讯台", "hoy資訊台", "hoyinfotainment"))
+        "卫视" -> listOf("广东卫视", "廣東衛視", "湖南卫视", "浙江卫视", "江苏卫视", "东方卫视", "北京卫视", "深圳卫视").map { listOf(it) }
+        "TVBS" -> listOf(listOf("tvbs", "tvbs欢乐台", "tvbs歡樂台"), listOf("tvbs新闻台", "tvbs新聞台", "tvbs新闻", "tvbs新聞"))
+        "东森" -> listOf(listOf("东森综合", "東森綜合", "东森综合台", "東森綜合台"), listOf("东森新闻", "東森新聞", "东森新闻台", "東森新聞台"))
+        "中天" -> listOf(listOf("中天综合", "中天綜合", "中天综合台", "中天綜合台"), listOf("中天新闻", "中天新聞"))
+        "三立" -> listOf(listOf("三立台湾台", "三立台灣台"), listOf("三立都会台", "三立都會台"))
+        "NHK" -> listOf(listOf("nhk総合", "nhk综合", "nhkg", "nhkgeneral"), listOf("nhkeテレ", "nhke", "nhk教育"), listOf("nhkbs"))
+        "KBS", "MBC", "SBS", "EBS" -> listOf(listOf(browseType().lowercase() + "1", browseType().lowercase()), listOf(browseType().lowercase() + "2"))
+        else -> emptyList()
+    }
+    if (browseType() == "CCTV") {
+        val number = Regex("^cctv(\\d{1,2})(?:[+频道套].*)?$").matchEntire(key)?.groupValues?.get(1)?.toIntOrNull()
+        if (number != null && number in 1..17) return number
+    }
+    val rank = names.indexOfFirst { key in it }
+    return if (rank >= 0) rank else 1000
+}

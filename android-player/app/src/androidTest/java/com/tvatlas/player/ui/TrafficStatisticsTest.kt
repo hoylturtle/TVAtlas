@@ -41,14 +41,14 @@ class TrafficStatisticsTest {
         compose.onNodeWithText("重置", substring = false).performClick()
         compose.runOnIdle { assertEquals(1, resets) }
     }
-    @Test fun selectedFillIsPurpleWithWhiteBorderAndChangesImmediately() {
+    @Test fun selectedFillIsPurpleWithoutBorderAndChangesImmediately() {
         var selected by mutableStateOf(true)
         compose.setContent { MaterialTheme(colorScheme = colors) {
             Box(Modifier.size(100.dp).background(Color.Black).selectionOutline(selected).testTag("selection"))
         } }
         val bitmap = compose.onNodeWithTag("selection").captureToImage().toPixelMap()
         assertEquals(colors.primary, bitmap[bitmap.width / 2, bitmap.height / 2])
-        assertEquals(Color.White, bitmap[bitmap.width / 2, 1])
+        assertEquals(colors.primary, bitmap[bitmap.width / 2, 1])
         compose.runOnIdle { selected = false }
         val changed = compose.onNodeWithTag("selection").captureToImage().toPixelMap()
         assertEquals(Color.Black, changed[changed.width / 2, changed.height / 2])

@@ -25,15 +25,15 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
 }
 
 
-/** TV selection is subdued; the white ring always identifies the actual remote focus. */
+/** Selection uses a purple fill; only actual TV remote focus has an outline. */
 internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
     var focused by remember { mutableStateOf(false) }
     onFocusChanged { focused = it.hasFocus }
         .background(if (selected || focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
-        .border(if (focused || (selected && !tv)) 3.dp else 0.dp,
-            if (focused || (selected && !tv)) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
+        .border(if (tv && focused) 3.dp else 0.dp,
+            if (tv && focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
 }
 
 @Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {

@@ -153,7 +153,6 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 if (!tv && !immersive) NavigationBar {
                     listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index },
-                            modifier = Modifier.border(if (tab == index) 2.dp else 0.dp, if (tab == index) Color.White else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(16.dp)),
                             icon = { Text(listOf("▶", "▤", "⇄", "⚙")[index]) }, label = { Text(label) })
                     }
                 }
@@ -293,7 +292,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             }
             Text("${filtered.size} 个频道" + if (filtered.size != library.channels.size) " / 共 ${library.channels.size} 个" else "", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
             if (filtered.isEmpty()) Text(if (mode == 1) "尚无收藏频道" else if (mode == 2) "尚无成功观看记录" else "没有匹配频道", style = MaterialTheme.typography.bodySmall)
-            val grouped = remember(filtered) { filtered.groupBy { it.browseRegion() }.mapValues { (_, channels) -> channels.groupBy { it.browseType() } } }
+            val grouped = remember(filtered, mode) { filtered.groupBy { it.browseRegion() }.mapValues { (_, channels) -> channels.groupBy { it.browseType() }.mapValues { (_, items) -> if (mode == 2) items else items.primaryChannelsFirst() } } }
             fun open(key: String) = query.isNotBlank() || if (mode != 0) key !in collapsed else key in expanded
             fun toggle(key: String) {
                 if (query.isNotBlank()) return
