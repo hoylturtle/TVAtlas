@@ -92,6 +92,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val recent by model.recent.collectAsStateWithLifecycle()
         val pendingPlay by model.pendingPlay.collectAsStateWithLifecycle()
         val pendingDownload by model.pendingDownload.collectAsStateWithLifecycle()
+        val pendingCloud by model.pendingCloudConsent.collectAsStateWithLifecycle()
         val busy by model.busy.collectAsStateWithLifecycle()
         val message by model.message.collectAsStateWithLifecycle()
         val update by model.update.collectAsStateWithLifecycle()
@@ -114,6 +115,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var channelSearchRequest by remember { mutableIntStateOf(0) }
+        var cloudImportRequest by remember { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
         var tvBackArmed by remember { mutableStateOf(false) }
         var pageMenuOpen by remember { mutableStateOf(false) }
@@ -204,6 +206,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                                 channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest) })
                         }
                     }
+                    4 -> if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview") {
+                        val controller = model.cloudLibrary
+                        val cloudState by controller.state.collectAsStateWithLifecycle()
+                        CloudLibraryPage(cloudState, controller::importShare,
+                            { share -> model.cloudNetworkAction { controller.open(share) } },
+                            { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
+                            { model.cloudNetworkAction { controller.refresh() } },
+                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest)
+                    }
                     1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
                         { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id })
                     2 -> {
@@ -229,13 +240,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (tab == 1) TvTextButton(onClick = { pageMenuOpen = false; addPlaylist = true }) { Text("添加频道源 / 手机扫码") }
                 if (tab == 2) TvTextButton(onClick = { pageMenuOpen = false; addSubscription = true }) { Text("添加代理订阅") }
+                if (tab == 4) TvTextButton(onClick = { pageMenuOpen = false; cloudImportRequest++ }) { Text("导入网盘分享") }
                 if (tab == 3) TvTextButton(onClick = { pageMenuOpen = false; logsOpen = true }) { Text("调试日志") }
                 TvTextButton(onClick = { pageMenuOpen = false; tab = 0 }) { Text("返回直播") }
                 TvTextButton(onClick = { pageMenuOpen = false; exitPrompt = true }) { Text("退出应用") }
             }
         }, confirmButton = { TvTextButton(onClick = { pageMenuOpen = false }) { Text("关闭") } })
         if (exitPrompt) ExitConfirmation({ exitPrompt = false }) { model.stopPlayback(); (context as? android.app.Activity)?.finish() }
-        if (pendingPlay != null || pendingDownload) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为移动数据网络") },
+        if (pendingPlay != null || pendingDownload || pendingCloud) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为移动数据网络") },
             text = { Text(if (pendingDownload) "下载 APK 会消耗移动数据。确认继续？" else "直播可能消耗较多移动数据。继续后，本次运行允许使用移动数据。") },
             confirmButton = { TvTextButton(onClick = model::approveMetered) { Text("继续播放") } },
             dismissButton = { TvTextButton(onClick = model::dismissMetered) { Text("取消") } })

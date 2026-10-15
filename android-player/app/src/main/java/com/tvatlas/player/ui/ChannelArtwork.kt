@@ -36,6 +36,7 @@ import com.tvatlas.core.model.browseType
     Icon(when (index) {
         0 -> Icons.Default.PlayArrow
         1 -> Icons.AutoMirrored.Filled.List
+        4 -> AtlasSymbols.Screen
         2 -> AtlasSymbols.Route
         else -> Icons.Default.Settings
     }, contentDescription = null, modifier = Modifier.size(24.dp))

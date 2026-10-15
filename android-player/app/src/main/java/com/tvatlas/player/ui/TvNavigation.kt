@@ -40,7 +40,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     Column(modifier.width(132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AtlasBrand(Modifier.padding(vertical = 16.dp))
-        listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
+        atlasNavigationItems.forEach { (index, label) ->
             TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectionOutline(selected == index),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
                     MaterialTheme.colorScheme.primary else Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)) {

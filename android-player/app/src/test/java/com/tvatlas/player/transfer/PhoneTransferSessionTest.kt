@@ -52,6 +52,21 @@ class PhoneTransferSessionTest {
         assertFalse(cancelled.state.value.active)
         assertTrue(runCatching { post(cancelled.pageUrl, "https://example.com/a") }.isFailure)
     }
+    @Test fun cloudTransferAcceptsPastedShareTextButRejectsUnrelatedLinks() {
+        PhoneTransferSession(InetAddress.getByName("127.0.0.1"), TransferKind.CLOUD).use { transfer ->
+            assertEquals(400, post(transfer.pageUrl, "https://example.com/not-a-cloud-share"))
+            val pasted = "给你分享了「测试」 链接：https://pan.quark.cn/s/abcdef123456?pwd=aB12 提取码：aB12"
+            val request = Request.Builder().url(transfer.pageUrl).post(FormBody.Builder().add("name", "测试分享").add("url", pasted).build()).build()
+            client.newCall(request).execute().use { response ->
+                assertEquals(200, response.code)
+                val acknowledgement = response.body!!.string()
+                assertFalse(acknowledgement.contains("abcdef123456")); assertFalse(acknowledgement.contains("aB12"))
+            }
+            await { transfer.state.value.received != null }
+            assertEquals(pasted, transfer.state.value.received!!.url)
+            assertFalse(transfer.state.value.active)
+        }
+    }
     private fun await(predicate: () -> Boolean) {
         val end = System.nanoTime() + 2_000_000_000
         while (!predicate() && System.nanoTime() < end) Thread.sleep(10)

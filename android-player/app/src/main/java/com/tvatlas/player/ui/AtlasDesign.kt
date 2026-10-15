@@ -29,6 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
+internal val atlasNavigationItems: List<Pair<Int, String>> get() = if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview")
+    listOf(0 to "直播", 4 to "影视", 1 to "频道源", 2 to "代理", 3 to "设置") else listOf(0 to "直播", 1 to "频道源", 2 to "代理", 3 to "设置")
+
 @Composable internal fun atlasTv(): Boolean {
     val context = LocalContext.current
     return LocalTvMode.current ?: remember(context) {
@@ -107,7 +110,7 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
 @Composable internal fun AtlasBottomNavigation(selected: Int, onSelect: (Int) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = .95f)) {
         Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("直播", "频道源", "代理", "设置").forEachIndexed { index, label ->
+            atlasNavigationItems.forEach { (index, label) ->
                 TextButton(onClick = { onSelect(index) }, modifier = Modifier.weight(1f).fillMaxHeight()
                     .semantics { this.selected = selected == index }, contentPadding = PaddingValues(2.dp)) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {

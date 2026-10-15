@@ -85,7 +85,11 @@ import com.tvatlas.player.update.*
                 Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
             }
             if (category == 0) playbackContent()
-            if (category == 1) SettingsCard {
+            if (category == 1 && BuildConfig.BUILD_TYPE == "preview") SettingsCard {
+                Text("独立预览版", style = MaterialTheme.typography.titleMedium)
+                Text("可与正式版共存，数据相互独立。此版本不连接正式版更新通道。")
+            }
+            if (category == 1 && BuildConfig.BUILD_TYPE != "preview") SettingsCard {
                 Text("应用更新", style = MaterialTheme.typography.titleMedium)
                 Text("当前版本：${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

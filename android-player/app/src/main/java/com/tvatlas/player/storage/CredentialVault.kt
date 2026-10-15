@@ -14,9 +14,8 @@ import java.nio.ByteBuffer
 @kotlinx.serialization.Serializable data class Credentials(val username: String, val password: String)
 
 /** Both username and password remain in non-backed-up app storage, encrypted by a device-local key. */
-class CredentialVault(context: Context) {
-    private val preferences = context.getSharedPreferences("proxy_credentials", Context.MODE_PRIVATE)
-    private val alias = "tvatlas.proxy.v1"
+class CredentialVault(context: Context, namespace: String = "proxy_credentials", private val alias: String = "tvatlas.proxy.v1") {
+    private val preferences = context.getSharedPreferences(namespace, Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(alias, null) as? SecretKey)?.let { return it }

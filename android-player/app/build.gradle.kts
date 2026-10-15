@@ -15,8 +15,9 @@ val releaseSigning = Properties().apply {
 }
 android {
     namespace = "com.tvatlas.player"
+    testBuildType = providers.gradleProperty("tvatlasTestBuildType").orElse("debug").get()
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("42").get().toInt(); versionName = "0.1.40"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("42").get().toInt(); versionName = "0.1.40"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; manifestPlaceholders["appLabel"] = "TVAtlas Player" }
     defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {
@@ -29,11 +30,23 @@ android {
         }
     }
     buildTypes {
+        create("preview") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-next"
+            manifestPlaceholders["appLabel"] = "TVAtlas Preview"
+            matchingFallbacks += listOf("debug")
+            if (signingFile != null) signingConfig = signingConfigs.getByName("tvatlasRelease")
+        }
         getByName("release") {
             isDebuggable = false
             isMinifyEnabled = false
             if (signingFile != null) signingConfig = signingConfigs.getByName("tvatlasRelease")
         }
+    }
+    sourceSets.getByName("preview") {
+        java.srcDir("src/debug/java")
+        manifest.srcFile("src/debug/AndroidManifest.xml")
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_21; targetCompatibility = JavaVersion.VERSION_21; isCoreLibraryDesugaringEnabled = true }
     kotlinOptions { jvmTarget = "21" }

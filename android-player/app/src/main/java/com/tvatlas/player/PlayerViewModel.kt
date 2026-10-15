@@ -34,6 +34,27 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val pool = ProxyClientPool(vault, core, traffic)
     private val playlistClient = pool.direct.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
+    private var cloudActive: com.tvatlas.player.cloud.CloudLibraryController? = null
+    val cloudLibrary by lazy {
+        com.tvatlas.player.cloud.CloudLibraryController(viewModelScope,
+            { com.tvatlas.player.cloud.CloudShareStore(application) },
+            com.tvatlas.player.cloud.CloudShareClient(playlistClient)) {
+            requireNetwork(options.value)
+            require(!needsConsent()) { "读取网盘目录需要移动网络确认，请点击重新读取并确认" }
+        }.also { cloudActive = it }
+    }
+    private val _pendingCloudConsent = MutableStateFlow(false)
+    val pendingCloudConsent = _pendingCloudConsent.asStateFlow()
+    private var pendingCloudAction: (() -> Unit)? = null
+    fun cloudNetworkAction(action: () -> Unit) {
+        if (!allowCurrentNetwork(options.value)) { _message.value = networkPolicyMessage(); return }
+        if (needsConsent()) { pendingCloudAction = action; _pendingCloudConsent.value = true; return }
+        action()
+    }
+    fun openCloudWebsite(share: com.tvatlas.core.cloud.CloudShare) = cloudNetworkAction {
+        try { getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(share.webUrl())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (_: Exception) { _message.value = "未找到浏览器，无法打开网盘官方页面" }
+    }
     private val repository = PlayerRepository(database, playlistClient, debugLog) { url -> resourceBytes(url, 8 * 1024 * 1024, "PLAYLIST").toString(Charsets.UTF_8) }
     private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core, debugLog) { url ->
         requireNetwork(settings.options.first())
@@ -88,6 +109,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val coreInfo = _coreInfo.asStateFlow()
     fun refreshCoreInfo() { viewModelScope.launch { _coreInfo.value = withContext(Dispatchers.IO) { core.info() } } }
     fun checkUpdate() {
+        if (BuildConfig.BUILD_TYPE == "preview") { _message.value = "预览版不连接正式版更新通道"; return }
         debugLog.event("INFO", "UPDATE", "check requested")
         if (_update.value.checking || _update.value.downloading) return
         downloadedApk = null
@@ -124,6 +146,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openUpdateDownload() {
+        if (BuildConfig.BUILD_TYPE == "preview") return
         val release = _update.value.release ?: return
         if (!allowCurrentNetwork(options.value)) { _message.value = networkPolicyMessage(); return }
         if (needsConsent()) { _pendingDownload.value = true; return }
@@ -154,6 +177,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun installUpdate() {
+        if (BuildConfig.BUILD_TYPE == "preview") return
         val file = downloadedApk ?: return
         if (!_update.value.apkReady || !file.isFile) { _message.value = "安装包已清理，请重新下载"; return }
         val app = getApplication<Application>()
@@ -224,6 +248,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             val key = connectivity.activeNetwork to mobile
             if (key != networkIdentity) { networkIdentity = key; latency.invalidate() }
             if (!mobile) meteredAllowed = false
+            if (!allowCurrentNetwork(options.value) || needsConsent()) cloudActive?.cancelReading("网络已切换，请确认网络使用范围后重新读取")
             val status = playback.status.value
             if ((status.loading || playback.player.value != null) && (!allowCurrentNetwork(options.value) || needsConsent())) {
                 stopPlayback()
@@ -257,12 +282,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         return true
     }
     fun approveMetered() {
+        val cloud = pendingCloudAction; pendingCloudAction = null; _pendingCloudConsent.value = false
         val request = _pendingPlay.value; val download = _pendingDownload.value
         _pendingPlay.value = null; _pendingDownload.value = false; meteredAllowed = true
         request?.let { (id, stream) -> library.value.channels.firstOrNull { it.id == id }?.let { play(it, stream) } }
         if (download) openUpdateDownload()
+        cloud?.invoke()
     }
-    fun dismissMetered() { _pendingPlay.value = null; _pendingDownload.value = false }
+    fun dismissMetered() { _pendingPlay.value = null; _pendingDownload.value = false; pendingCloudAction = null; _pendingCloudConsent.value = false }
     fun editOptions(edit: (UserOptions) -> UserOptions) = preferenceAction { settings.editOptions(edit) }
     fun toggleFavorite(channel: Channel) = editOptions { it.copy(favorites = if (channel.id in it.favorites) it.favorites - channel.id else it.favorites + channel.id) }
     fun refreshGuide() { guideJob?.cancel(); guideJob = viewModelScope.launch { epg.refresh(settings.options.first().epgUrl) } }
