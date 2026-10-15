@@ -10,7 +10,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tvatlas.core.cloud.*
 import com.tvatlas.player.BuildConfig
@@ -20,7 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class CloudLibraryPageTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
     @Test fun previewHasSeparatePackageAndEncryptedShareStorage() {
         org.junit.Assume.assumeTrue(BuildConfig.BUILD_TYPE == "preview")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
