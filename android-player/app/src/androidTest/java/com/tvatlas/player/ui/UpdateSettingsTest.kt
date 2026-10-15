@@ -22,7 +22,7 @@ class UpdateSettingsTest {
         compose.setContent { MaterialTheme { SettingsPage(false, {}, update, {}, {}, onRepository = { opened = true }) } }
         compose.onNodeWithText("更新与诊断").performScrollTo().performClick()
         compose.onNodeWithText("连接 GitHub 失败").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("返回设置").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("返回设置").performScrollTo().performClick()
         compose.onNodeWithText("隐私与关于").performScrollTo().performClick()
         compose.onNodeWithText("打开 GitHub 仓库").performScrollTo().performClick()
         compose.runOnIdle { assertTrue(opened) }

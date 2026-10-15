@@ -1,9 +1,9 @@
 {
-  "versionCode": 42,
-  "versionName": "0.1.40",
+  "versionCode": 43,
+  "versionName": "1.0.0",
   "minSdk": 23,
-  "notes": "修复透明深色页面继承黑色文字的问题：品牌、主标题、频道浮层及顶部图标使用浅色前景；CCTV 台标改用深色底，避免白色图案无法辨识。更新 Arirang TV 为验证通过的 HTTPS 1080p 线路，保留大陆及香港现有播放记录，其他未通过核验的地区候选不导入。",
+  "notes": "稳定版 1.0.0：设置子页使用紧凑的标题栏返回入口；台标容器统一使用主题底色，取消白色底块。修复每日频道构建将 CCTV 多线路误判为重复的问题。更新项目定位、架构、订阅定制、地区限制与免责声明。网盘点播仍在独立预览分支，不包含在本稳定版中。",
   "signingCertificateSha256": "7de8ec4d38a6c7854981b73fe34161c17d97fd93555358bd11f46fecde4ab878",
-  "releaseTag": "v0.1.40-beta.1",
+  "releaseTag": "v1.0.0",
   "coreVersion": "v1.19.32"
 }

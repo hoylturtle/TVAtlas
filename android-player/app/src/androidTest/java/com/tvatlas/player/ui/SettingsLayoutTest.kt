@@ -41,7 +41,7 @@ class SettingsLayoutTest {
         }
         val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        compose.onNodeWithText("返回设置").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("返回设置").performScrollTo().performClick()
         compose.onNodeWithText("隐私与关于").performScrollTo().performClick()
         compose.onNodeWithText("操作帮助").performScrollTo().performClick()
         compose.onNodeWithText("直播：点频道播放", substring = true).performScrollTo().assertIsDisplayed()

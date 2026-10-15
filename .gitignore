@@ -17,3 +17,6 @@ __pycache__/
 # Keep review reports and screenshots local.
 docs/audit-*/
 android-player/docs/*audit*.md
+
+# Kotlin incremental compilation state is local.
+**/.kotlin/

@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -60,7 +61,22 @@ import com.tvatlas.player.update.*
         }
         Column(Modifier.padding(start = if (tv) 210.dp else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (!tv) AtlasHeader("设置", "播放、网络与应用偏好")
+            if (!tv) {
+                if (category == null) AtlasHeader("设置", "播放、网络与应用偏好")
+                else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { category = null }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回设置",
+                            tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(categories[category!!], style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        Text("设置", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
             if (category == null) {
                 categories.forEachIndexed { index, title ->
                     Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).tvFocusOutline(),
@@ -81,8 +97,7 @@ import com.tvatlas.player.update.*
                 }
                 Text("TVAtlas ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
-                if (!tv) TvTextButton(onClick = { category = null }) { Text("返回设置") }
-                Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
+                if (tv) Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
             }
             if (category == 0) playbackContent()
             if (category == 1 && BuildConfig.BUILD_TYPE == "preview") SettingsCard {
@@ -165,7 +180,7 @@ import com.tvatlas.player.update.*
             }
             if (category == 3) SettingsCard {
                 Text("帮助与关于", style = MaterialTheme.typography.titleMedium)
-                Text("TVAtlas · 测试版 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
+                Text("TVAtlas · 稳定版 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
                 TvOutlinedButton(onClick = onRepository, modifier = Modifier.fillMaxWidth()) { Text("打开 GitHub 仓库") }
                 TvTextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (repositoryCopied) "仓库链接已复制" else "复制仓库链接")

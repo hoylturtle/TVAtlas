@@ -141,7 +141,7 @@ jobs:
           path: |
             android-player/app/build/reports/androidTests/
             !android-player/app/build/reports/androidTests/**/*.png
-  publish-testing-release:
+  publish-release:
     needs: [verify, native-smoke]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.verify.outputs.signed == 'true'
     runs-on: ubuntu-latest
@@ -154,7 +154,7 @@ jobs:
         with:
           name: ${{ needs.verify.outputs.artifact_name }}
           path: android-player/dist/
-      - name: Publish verified public testing APK and update manifest
+      - name: Publish verified APK and update manifest
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 android-player/scripts/publish_release.py
