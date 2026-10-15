@@ -112,8 +112,17 @@ class CloudLibraryPageTest {
         fun capture(name: String) {
             val image = compose.onNodeWithTag("cloud-preview").captureToImage().asAndroidBitmap()
             val context = InstrumentationRegistry.getInstrumentation().targetContext
-            val dir = java.io.File(context.getExternalFilesDir(null), "ui-previews").apply { mkdirs() }
-            java.io.File(dir, name).outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            // connectedAndroidTest uninstalls its target, removing app-specific external files.
+            // MediaStore screenshots survive that cleanup, matching the stable UI test workflow.
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/TVAtlas-next")
+            }
+            val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+            requireNotNull(context.contentResolver.openOutputStream(uri)).use {
+                check(image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it))
+            }
         }
         capture("cloud-phone.png")
         compose.runOnIdle { tv = true }
