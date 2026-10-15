@@ -21,6 +21,7 @@ import com.tvatlas.core.model.*
 import androidx.compose.ui.input.key.*
 import com.tvatlas.player.playback.PlaybackStatus
 import com.tvatlas.player.storage.Library
+import kotlinx.coroutines.launch
 
 /** TV navigation occupies its own column; programme cards never push navigation off screen. */
 @Composable internal fun TvChannelBrowser(library: Library, status: PlaybackStatus, modifier: Modifier,
@@ -34,6 +35,7 @@ import com.tvatlas.player.storage.Library
     var search by rememberSaveable { mutableStateOf(false) }
     var lastFocused by rememberSaveable { mutableStateOf<String?>(null) }
     val grid = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
     val restoreFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
     val input = LocalInputModeManager.current
@@ -57,17 +59,17 @@ import com.tvatlas.player.storage.Library
         LazyColumn(Modifier.width(128.dp).fillMaxHeight().focusGroup().testTag("channel-categories"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item {
                 listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
-                    TvTextButton(onClick = { mode = index }, modifier = Modifier.fillMaxWidth().selectionOutline(mode == index)
+                    TvTextButton(onClick = { mode = index; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().selectionOutline(mode == index)
                         .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)) { Text(label) }
                 }
             }
             if (mode == 0) regions.forEach { label ->
                 item(key = "region:$label") {
-                    TvTextButton(onClick = { region = label; type = null; query = "" }, modifier = Modifier.fillMaxWidth().selectionOutline(label == selectedRegion)) { Text(label) }
+                    TvTextButton(onClick = { region = label; type = null; query = ""; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().selectionOutline(label == selectedRegion)) { Text(label) }
                 }
                 if (label == selectedRegion) types.forEach { category ->
                     item(key = "type:$label:$category") {
-                        TvTextButton(onClick = { type = category }, modifier = Modifier.fillMaxWidth().padding(start = 10.dp).selectionOutline(category == selectedType)) {
+                        TvTextButton(onClick = { type = category; query = ""; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().padding(start = 10.dp).selectionOutline(category == selectedType)) {
                             Text(category, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                         }
                     }
