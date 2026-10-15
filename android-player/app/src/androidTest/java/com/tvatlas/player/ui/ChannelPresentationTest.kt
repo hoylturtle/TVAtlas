@@ -4,6 +4,7 @@ package com.tvatlas.player.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
@@ -38,6 +39,15 @@ class ChannelPresentationTest {
         }
     }
 
+    @Test fun longChannelTitlesCannotExpandIntoOversizedCards() {
+        val name = "频道名称很长".repeat(40)
+        val channel = Channel("long", name, "中国大陆 · 卫视", streams = listOf(first))
+        compose.setContent { AtlasTheme {
+            ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()), PlaybackStatus(), false,
+                Modifier, {}, {}, {}, autoExpand = true)
+        } }
+        assertTrue(compose.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.height <= compose.density.run { 56.dp.toPx() })
+    }
     @Test fun defaultBrowseShowsArtworkAndCanSwitchRegion() {
         val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(first))
         compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel, channel.copy(id = "cctv", name = "CCTV1", group = "中国大陆 · 央视")), emptyList(), RuleConfig()),

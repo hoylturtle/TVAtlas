@@ -16,7 +16,7 @@ val releaseSigning = Properties().apply {
 android {
     namespace = "com.tvatlas.player"
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("43").get().toInt(); versionName = "1.0.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("44").get().toInt(); versionName = "1.0.1"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {

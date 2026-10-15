@@ -13,6 +13,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 
 /** A visible focus ring independent of the subtle Material touch state layer. */
 internal fun Modifier.tvFocusOutline(): Modifier = composed {
@@ -20,8 +22,7 @@ internal fun Modifier.tvFocusOutline(): Modifier = composed {
     onFocusChanged { focused = it.hasFocus }
         .border(if (focused) 3.dp else 0.dp,
             if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
-        .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f) else Color.Transparent,
-            RoundedCornerShape(12.dp))
+
 }
 
 
@@ -31,7 +32,8 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     val tv = LocalTvMode.current ?: ((context.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
     var focused by remember { mutableStateOf(false) }
     onFocusChanged { focused = it.hasFocus }
-        .background(if (selected || focused) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
+        .semantics { this.selected = selected }
+        .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
         .border(if (tv && focused) 3.dp else 0.dp,
             if (tv && focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
 }

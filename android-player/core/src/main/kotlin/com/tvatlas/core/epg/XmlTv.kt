@@ -21,11 +21,14 @@ import javax.xml.parsers.SAXParserFactory
 }
 object XmlTv {
     const val MAX_BYTES = 16 * 1024 * 1024
+    private val timePattern = Regex("""^(\d{14})(?:\s+([+-]\d{4}|Z))?$""", RegexOption.IGNORE_CASE)
+    private val timeFormatter = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.ROOT).apply { isLenient = false }
+    }
     fun time(value: String?): Long? {
         if (value == null) return null
-        val parts = Regex("^(\\d{14})(?:\\s+([+-]\\d{4}|Z))?$", RegexOption.IGNORE_CASE).matchEntire(value.trim()) ?: return null
-        return runCatching { SimpleDateFormat("yyyyMMddHHmmss Z", Locale.ROOT).apply { isLenient = false }
-            .parse(parts.groupValues[1] + " " + parts.groupValues[2].takeUnless { it.isBlank() || it == "Z" }.orEmpty().ifBlank { "+0000" })?.time }.getOrNull()
+        val parts = timePattern.matchEntire(value.trim()) ?: return null
+        return runCatching { requireNotNull(timeFormatter.get()).parse(parts.groupValues[1] + " " + parts.groupValues[2].takeUnless { it.isBlank() || it == "Z" }.orEmpty().ifBlank { "+0000" })?.time }.getOrNull()
     }
     fun parse(bytes: ByteArray): Guide {
         require(bytes.size <= MAX_BYTES) { "节目单超过 16 MiB" }

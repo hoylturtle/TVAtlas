@@ -208,7 +208,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
-    val epg = com.tvatlas.player.epg.EpgStore(java.io.File(application.noBackupFilesDir, "epg/cache.json"), viewModelScope) { url ->
+    val epg = com.tvatlas.player.epg.EpgStore(java.io.File(application.noBackupFilesDir, "epg/cache.json"), viewModelScope, channels = { library.value.channels }) { url ->
         resourceBytes(url, com.tvatlas.core.epg.XmlTv.MAX_BYTES, "EPG")
     }
     private val backup = BackupManager(database, vault, settings)
@@ -305,7 +305,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         try {
             val now = System.currentTimeMillis(); val interval = prefs.refreshHours * 3600000L
             repository.library.first().playlists.filter { it.enabled && now - (it.lastUpdatedAt ?: 0) >= interval }.forEach { playlist ->
-                try { repository.refresh(playlist) } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
+                try { repository.refresh(playlist); epg.invalidateLibrary() } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
             }
             database.dao().subscriptions().first().filter { now - it.lastUpdatedAt >= interval }.forEach { sub ->
                 try { subscriptionRepository.refresh(sub.id); routeChanges.withLock { synchronizeSubscriptionClients() } }
@@ -316,7 +316,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     init {
         initializationJob = viewModelScope.launch { repository.initializeDefaults(); autoRefreshJob = viewModelScope.launch { refreshDue() } }
-        guideJob = viewModelScope.launch { val prefs = settings.options.first(); epg.load(prefs.epgUrl); if (!isMetered()) epg.refresh(prefs.epgUrl) }
+        guideJob = viewModelScope.launch { library.first { it.channels.isNotEmpty() }; val prefs = settings.options.first(); epg.load(prefs.epgUrl); if (!isMetered() && epg.needsRefresh()) epg.refresh(prefs.epgUrl) }
         viewModelScope.launch { while (isActive) { delay(900000); autoRefreshJob?.cancelAndJoin(); autoRefreshJob = viewModelScope.launch { refreshDue() } } }
         viewModelScope.launch {
             while (isActive) {
@@ -379,24 +379,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshBuiltIn() = action {
         _playlistFeedback.value = "正在刷新 TVAtlas 频道订阅…"
         val result = repository.refreshBuiltIn()
+        epg.invalidateLibrary()
         _playlistFeedback.value = result
         _message.value = result
     }
-    fun refresh(playlist: Playlist) = action("播放列表已更新") { debugLog.event("INFO", "PLAYLIST", "refresh ${playlist.name}"); repository.refresh(playlist) }
+    fun refresh(playlist: Playlist) = action("播放列表已更新") { debugLog.event("INFO", "PLAYLIST", "refresh ${playlist.name}"); repository.refresh(playlist); epg.invalidateLibrary() }
     fun editPlaylist(playlist: Playlist, name: String, url: String) = action("频道源已保存") {
         require(name.isNotBlank()) { "请输入频道源名称" }
         resumeAroundChange { repository.refresh(playlist.copy(name = name.trim(), url = url.trim())) }
+        epg.invalidateLibrary()
     }
     fun enablePlaylist(playlist: Playlist) = action("频道源状态已更新") {
         resumeAroundChange { repository.enablePlaylist(playlist.id, !playlist.enabled) }
+        epg.invalidateLibrary()
     }
     fun deletePlaylist(id: String) = action("频道源已删除") {
         require(DefaultPlaylists.entries.none { it.id == id }) { "内置来源不可删除" }
         resumeAroundChange { repository.removePlaylist(id) }
+        epg.invalidateLibrary()
     }
     fun addPlaylist(name: String, url: String) = action("播放列表已添加") {
         require(name.isNotBlank()) { "请输入播放列表名称" }
         repository.refresh(Playlist(stableId(url.trim()), name.trim(), url.trim()))
+        epg.invalidateLibrary()
     }
     fun play(channel: Channel, streamId: String? = null) {
         if (!guardPlaybackNetwork(channel, streamId)) return

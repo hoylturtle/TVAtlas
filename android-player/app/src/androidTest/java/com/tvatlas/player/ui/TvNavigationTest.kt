@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material3.Text
 import androidx.test.platform.app.InstrumentationRegistry
 import android.graphics.Bitmap
@@ -63,6 +65,22 @@ class TvNavigationTest {
         } else {
             File(context.cacheDir, "tv-layout.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
+    }
+    @Test fun selectedPageAndRemoteFocusHaveDifferentFillColors() {
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            val input = androidx.compose.ui.platform.LocalInputModeManager.current
+            LaunchedEffect(Unit) { input.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+            TvNavigation(3, {})
+        } } }
+        compose.onNodeWithText("直播").performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNodeWithText("直播").assertIsFocused().assertIsNotSelected()
+        compose.onNodeWithText("设置").assertIsSelected().assertIsNotFocused()
+        fun background(label: String): Int {
+            val pixels = compose.onNodeWithText(label).captureToImage().toPixelMap()
+            return pixels[pixels.width - 12, pixels.height / 2].toArgb()
+        }
+        assertEquals(colors.primary.toArgb(), background("设置"))
+        org.junit.Assert.assertNotEquals(colors.primary.toArgb(), background("直播"))
     }
     @Test fun remoteCanMoveAndConfirmWithoutTouch() {
         var selected = 0

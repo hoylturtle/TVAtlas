@@ -362,14 +362,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         }
                         if (open(typeKey)) items(channels, key = { it.id }) { channel ->
                         var focused by remember { mutableStateOf(false) }
-                        ListItem(headlineContent = { Text(channel.name, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
+                        ListItem(headlineContent = { Text(channel.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = if (status.channelId == channel.id) FontWeight.Bold else FontWeight.Normal) },
                             leadingContent = { ChannelArtwork(channel, status.channelId == channel.id && status.successAt != null, allowArtworkNetwork) },
                             supportingContent = { programme(channel) },
                             trailingContent = { TvTextButton(onClick = { onFavorite(channel) }) {
-                                Text(if (channel.id in favorites) "★" else "☆", color = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                Text(if (channel.id in favorites) "★" else "☆", color = if (status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
-                            colors = ListItemDefaults.colors(containerColor = if (focused) MaterialTheme.colorScheme.primary else if (status.channelId == channel.id) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceContainer, headlineColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                supportingColor = if (focused || status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
+                            colors = ListItemDefaults.colors(containerColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.primary else if (focused) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer, headlineColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                supportingColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
                             modifier = Modifier.padding(start = if (autoExpand) 0.dp else 16.dp, bottom = 2.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).onFocusChanged { focused = it.isFocused }
                                 .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
