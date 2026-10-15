@@ -67,6 +67,21 @@ class PhoneTransferSessionTest {
             assertFalse(transfer.state.value.active)
         }
     }
+    @Test fun videoTransferRejectsSharePagesAndDoesNotEchoTemporaryToken() {
+        PhoneTransferSession(InetAddress.getByName("127.0.0.1"), TransferKind.VIDEO).use { transfer ->
+            assertEquals(400, post(transfer.pageUrl, "https://pan.quark.cn/s/example"))
+            assertNull(transfer.state.value.received)
+            val value = "https://media.example/video.mp4?token=private-fixture"
+            client.newCall(Request.Builder().url(transfer.pageUrl).post(FormBody.Builder()
+                .add("name", "测试视频").add("url", value).build()).build()).execute().use {
+                assertEquals(200, it.code)
+                assertFalse(it.body!!.string().contains("private-fixture"))
+            }
+            await { transfer.state.value.received != null }
+            assertEquals(value, transfer.state.value.received!!.url)
+            assertFalse(transfer.state.value.active)
+        }
+    }
     private fun await(predicate: () -> Boolean) {
         val end = System.nanoTime() + 2_000_000_000
         while (!predicate() && System.nanoTime() < end) Thread.sleep(10)

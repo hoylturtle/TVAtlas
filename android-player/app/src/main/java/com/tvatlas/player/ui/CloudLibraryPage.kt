@@ -19,7 +19,13 @@ import com.tvatlas.player.transfer.TransferKind
 @Composable internal fun CloudLibraryPage(state: CloudLibraryState,
     onImport: (String, String, String, () -> Unit) -> Unit, onOpen: (CloudShare) -> Unit,
     onEnter: (CloudFile) -> Unit, onBack: () -> Unit, onRefresh: () -> Unit, onMore: () -> Unit,
-    onRemove: (CloudShare) -> Unit, onWebsite: (CloudShare) -> Unit, importRequest: Int = 0) {
+    onRemove: (CloudShare) -> Unit, onWebsite: (CloudShare) -> Unit, importRequest: Int = 0,
+    onDirectVideo: (String, String) -> Unit = { _, _ -> }) {
+    var videoPhoneInput by remember { mutableStateOf(false) }
+    var directVideo by remember { mutableStateOf(false) }
+    var videoUrl by remember { mutableStateOf("") }
+    var videoTitle by remember { mutableStateOf("") }
+    var videoError by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
     LaunchedEffect(importRequest) { if (importRequest > 0) importing = true }
     var phoneInput by remember { mutableStateOf(false) }
@@ -32,15 +38,16 @@ import com.tvatlas.player.transfer.TransferKind
     var videosOnly by remember { mutableStateOf(false) }
     val directoryScroll = remember { LinkedHashMap<String, LazyListState>() }
     var selectedFile by remember { mutableStateOf<CloudFile?>(null) }
-    BackHandler(state.selected != null && !importing && !phoneInput && deleting == null && selectedFile == null && !showAuthorization, onBack)
+    BackHandler(state.selected != null && !importing && !phoneInput && deleting == null && selectedFile == null && !showAuthorization && !directVideo && !videoPhoneInput, onBack)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         AtlasHeader("影视 · 网盘分享", "独立预览 · 夸克 / 百度网盘 / 115")
-        if (state.selected == null) Text("本阶段提供分享保存与目录浏览。账号授权、原生取流和断点续播尚在开发；目录可见不代表可以播放。",
+        if (state.selected == null) Text("网盘支持分享保存与目录浏览，账号授权和原生取流尚未接入；目录可见不代表可以播放。已有视频直链可通过点播入口播放与续播。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.selected == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TvButton(onClick = { importing = true }) { Text("导入分享") }
             TvOutlinedButton(onClick = { phoneInput = true }) { Text("手机扫码") }
             TvTextButton(onClick = { showAuthorization = true }) { Text("账号授权") }
+            TvOutlinedButton(onClick = { directVideo = true }) { Text("视频直链点播") }
         }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -101,6 +108,27 @@ import com.tvatlas.player.transfer.TransferKind
                 if (state.nextOffset != null) item { TvOutlinedButton(onClick = onMore, enabled = !state.loading) { Text(if (state.error != null) "重试加载更多" else "加载更多") } }
             }
         }
+    }
+    if (directVideo) AlertDialog(onDismissRequest = { directVideo = false; videoUrl = ""; videoTitle = ""; videoError = null },
+        title = { Text("视频直链点播") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("用于已取得的视频直链，不会把网盘分享网页当作视频。本阶段使用直连，支持拖动、音轨／字幕和本机续播。", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(videoTitle, { videoTitle = it.take(80) }, label = { Text("视频名称（可选）") }, singleLine = true)
+                OutlinedTextField(videoUrl, { videoUrl = it.take(8192) }, label = { Text("HTTP(S) 视频直链") }, maxLines = 3)
+                Text("地址只保留在本次播放内存中，不加入直播频道、不保存完整地址或登录信息。再次输入相同地址可恢复本机进度。", style = MaterialTheme.typography.bodySmall)
+                TvOutlinedButton(onClick = { directVideo = false; videoPhoneInput = true; videoUrl = "" }) { Text("手机扫码输入视频直链") }
+                videoError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        }, confirmButton = { TvButton(onClick = {
+            try {
+                val item = com.tvatlas.core.vod.VodItem.direct(videoUrl, videoTitle)
+                onDirectVideo(item.url, item.title)
+                directVideo = false; videoUrl = ""; videoTitle = ""; videoError = null
+            } catch (error: IllegalArgumentException) { videoError = error.message }
+        }, enabled = videoUrl.isNotBlank()) { Text("打开视频") } },
+        dismissButton = { TvTextButton(onClick = { directVideo = false; videoUrl = ""; videoTitle = ""; videoError = null }) { Text("取消") } })
+    if (videoPhoneInput) PhoneTransferDialog(TransferKind.VIDEO, { videoPhoneInput = false }) { input ->
+        videoPhoneInput = false; videoUrl = input.url; videoTitle = input.name; directVideo = true
     }
     if (showAuthorization) AlertDialog(onDismissRequest = { showAuthorization = false },
         title = { Text("官方账号授权 · 接入状态") }, text = {

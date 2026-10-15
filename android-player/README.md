@@ -58,13 +58,13 @@ gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 
 Release 输出：`app/build/outputs/apk/release/app-release.apk`。可分发安装包需要固定发布签名；签名准备与配置见 [docs/signing.md](docs/signing.md)。密钥和密码不得提交到仓库。
 
-以下命令仅适用于 `feature/tvatlas-next-vod` 预览分支，稳定分支不包含该构建类型：
+以下命令仅适用于 `feature/tvatlas-next-browser` 预览分支，稳定分支不包含该构建类型：
 
 ```sh
 gradle -PtvatlasTestBuildType=preview :core:test :app:testPreviewUnitTest :app:lintPreview :app:assemblePreview
 ```
 
-预览包名为 `com.tvatlas.player.preview`，与正式版数据隔离，可并行安装。预览包不使用正式版的应用内更新通道。网盘模块支持分享识别、加密保存、部分目录读取、当前已加载文件搜索、视频筛选与目录返回位置保留。分页失败可重试，目录缓存仅在内存中保留并限制大小。不能作为三家网盘均可原生播放的证明。
+预览包名为 `com.tvatlas.player.preview`，与正式版数据隔离，可并行安装。预览包不使用正式版的应用内更新通道。网盘模块支持分享识别、加密保存、部分目录读取、当前已加载文件搜索、视频筛选与目录返回位置保留。分页失败可重试，目录缓存仅在内存中保留并限制大小。另有视频直链点播入口，支持手机扫码输入、暂停、拖动、音轨／字幕选择和相同地址续播；视频地址仅在内存保留，最多 200 条续播位置使用设备密钥加密保存。直链点播目前只走直连，并遵守网络限制及移动数据确认。不能作为三家网盘均可原生播放的证明。
 
 授权优先采用官方扫码／OAuth。当前未配置百度和 115 经登记的应用身份及回调，夸克适用的授权／分享取流接口仍待核实，因此不展示可用的登录二维码或声称已登录。官方能力参考：[百度网盘开放平台](https://yun.baidu.com/union/openAbility)、[115 开发者平台](https://open.115.com/)。账号授权不等于具有读取任意分享的权限；不自动转存分享，也不要求用户粘贴 Cookie。
 

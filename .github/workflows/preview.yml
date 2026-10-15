@@ -45,7 +45,7 @@ jobs:
           script: |
             adb shell wm size 1280x960
             adb shell wm density 160
-            gradle -PtvatlasTestBuildType=preview :core:test :app:testPreviewUnitTest :app:lintPreview :app:assemblePreview :app:connectedPreviewAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.tvatlas.player.ui.CloudLibraryPageTest --stacktrace
+            gradle -PtvatlasTestBuildType=preview :core:test :app:testPreviewUnitTest :app:lintPreview :app:assemblePreview :app:connectedPreviewAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.tvatlas.player.ui.CloudLibraryPageTest,com.tvatlas.player.ui.PreviewVodPlayerTest --stacktrace
             adb pull /sdcard/Pictures/TVAtlas-next app/build/next-ui-previews
       - uses: actions/upload-artifact@v4
         with:

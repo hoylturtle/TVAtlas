@@ -34,6 +34,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val pool = ProxyClientPool(vault, core, traffic)
     private val playlistClient = pool.direct.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
+    private var vodActive: com.tvatlas.player.vod.VodPlaybackController? = null
+    val vod by lazy {
+        com.tvatlas.player.vod.VodPlaybackController(getApplication(), viewModelScope, pool.direct,
+            { com.tvatlas.player.vod.VodProgressStore(getApplication()) },
+            { allowCurrentNetwork(options.value) && !needsConsent() }).also { vodActive = it }
+    }
+    fun openVod(url: String, title: String) {
+        if (BuildConfig.BUILD_TYPE != "preview") return
+        val item = try { com.tvatlas.core.vod.VodItem.direct(url, title) }
+            catch (_: IllegalArgumentException) { _message.value = "请输入有效的视频直链"; return }
+        cloudNetworkAction { stopPlayback(false); vod.open(item) }
+    }
+    fun toggleVod() {
+        if (vod.state.value.playing || vod.state.value.player?.playWhenReady == true) vod.pause()
+        else cloudNetworkAction { vod.toggle() }
+    }
+    fun restartVod() = cloudNetworkAction { vod.restart() }
     private var cloudActive: com.tvatlas.player.cloud.CloudLibraryController? = null
     val cloudLibrary by lazy {
         com.tvatlas.player.cloud.CloudLibraryController(viewModelScope,
@@ -196,7 +213,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val connectivity = application.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
     private val television = (application.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
-    private var meteredAllowed = false
+    @Volatile private var meteredAllowed = false
     private val _pendingDownload = MutableStateFlow(false)
     val pendingDownload = _pendingDownload.asStateFlow()
     private val _restoring = MutableStateFlow(false)
@@ -248,7 +265,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             val key = connectivity.activeNetwork to mobile
             if (key != networkIdentity) { networkIdentity = key; latency.invalidate() }
             if (!mobile) meteredAllowed = false
-            if (!allowCurrentNetwork(options.value) || needsConsent()) cloudActive?.cancelReading("网络已切换，请确认网络使用范围后重新读取")
+            if (!allowCurrentNetwork(options.value) || needsConsent()) {
+                cloudActive?.cancelReading("网络已切换，请确认网络使用范围后重新读取")
+                vodActive?.pause()
+            }
             val status = playback.status.value
             if ((status.loading || playback.player.value != null) && (!allowCurrentNetwork(options.value) || needsConsent())) {
                 stopPlayback()
@@ -431,6 +451,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         epg.invalidateLibrary()
     }
     fun play(channel: Channel, streamId: String? = null) {
+        vodActive?.close()
         if (!guardPlaybackNetwork(channel, streamId)) return
         playIntent++
         val refreshing = autoRefreshJob; refreshing?.cancel()
@@ -463,7 +484,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun stopPlayback(showMessage: Boolean = true) { playIntent++; playJob?.cancel(); playback.stop(showMessage) }
+    fun stopPlayback(showMessage: Boolean = true) { playIntent++; playJob?.cancel(); playback.stop(showMessage); vodActive?.pause() }
     private suspend fun synchronizeSubscriptionClients() = withContext(Dispatchers.IO) {
         // Read the committed database snapshot rather than a possibly stale StateFlow value.
         latency.invalidate()
@@ -587,6 +608,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { connectivity.unregisterNetworkCallback(networkCallback) }
         updateJob?.cancel()
         downloadJob?.cancel()
+        vodActive?.close()
         stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close(); traffic.close()
     }
 }

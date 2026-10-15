@@ -213,7 +213,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             { share -> model.cloudNetworkAction { controller.open(share) } },
                             { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
                             { model.cloudNetworkAction { controller.refresh() } },
-                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest)
+                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest, model::openVod)
                     }
                     1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
                         { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id })
@@ -247,8 +247,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             }
         }, confirmButton = { TvTextButton(onClick = { pageMenuOpen = false }) { Text("关闭") } })
         if (exitPrompt) ExitConfirmation({ exitPrompt = false }) { model.stopPlayback(); (context as? android.app.Activity)?.finish() }
+        if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview") {
+            val vod by model.vod.state.collectAsStateWithLifecycle()
+            if (vod.item != null) VodPlaybackDialog(vod, model.vod, model::toggleVod, model::restartVod)
+        }
         if (pendingPlay != null || pendingDownload || pendingCloud) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为移动数据网络") },
-            text = { Text(if (pendingDownload) "下载 APK 会消耗移动数据。确认继续？" else "直播可能消耗较多移动数据。继续后，本次运行允许使用移动数据。") },
+            text = { Text(if (pendingDownload) "下载 APK 会消耗移动数据。确认继续？" else "播放及网盘访问可能消耗较多移动数据。继续后，本次运行允许使用移动数据。") },
             confirmButton = { TvTextButton(onClick = model::approveMetered) { Text("继续播放") } },
             dismissButton = { TvTextButton(onClick = model::dismissMetered) { Text("取消") } })
         if (logsOpen) {

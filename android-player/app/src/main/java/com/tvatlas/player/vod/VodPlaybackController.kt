@@ -1,0 +1,140 @@
+package com.tvatlas.player.vod
+
+import android.content.Context
+import androidx.media3.common.*
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.tvatlas.core.vod.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import okhttp3.OkHttpClient
+
+data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
+    val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
+    val error: String? = null, val resumeWarning: String? = null)
+
+/** All player commands run on the main thread. Source URLs never enter logs or persistence. */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+class VodPlaybackController(private val context: Context, private val scope: CoroutineScope,
+    client: OkHttpClient, private val storeFactory: () -> VodProgressStorage, private val canPlay: () -> Boolean) {
+    private val _state = MutableStateFlow(VodState())
+    val state = _state.asStateFlow()
+    private var active: ExoPlayer? = null
+    private var generation = 0L
+    private var openJob: Job? = null
+    private val historyLock = Mutex()
+    private var store: VodProgressStorage? = null
+    private var lastSaved: Pair<String, VodBookmark>? = null
+    private val mediaClient = client.newBuilder().callTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).addNetworkInterceptor { chain ->
+            if (!canPlay()) throw java.io.IOException("Network policy does not allow playback")
+            chain.proceed(chain.request())
+        }.build()
+    init { scope.launch { while (isActive) { delay(5000); checkpoint() } } }
+    fun open(item: VodItem) {
+        close()
+        val token = ++generation
+        _state.value = VodState(item = item)
+        openJob = scope.launch {
+            var warning: String? = null
+            val saved = try { historyLock.withLock { withContext(Dispatchers.IO) {
+                (store ?: storeFactory().also { store = it }).load(item.key)
+            } } } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { warning = "续播记录暂不可用，本次从头播放"; null }
+            if (token != generation) return@launch
+            if (!canPlay()) { _state.value = _state.value.copy(error = "网络条件已变化，请确认后继续播放"); return@launch }
+            val player = ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(
+                OkHttpDataSource.Factory(mediaClient).setUserAgent("TVAtlas-VOD"))).build()
+            active = player
+            var restored = false
+            player.setAudioAttributes(AudioAttributes.DEFAULT, true)
+            player.setHandleAudioBecomingNoisy(true)
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (active !== player) return
+                    if (playbackState == Player.STATE_READY && !restored) {
+                        restored = true
+                        if (!player.isCurrentMediaItemLive && player.isCurrentMediaItemSeekable) {
+                            val position = VodResume.position(saved, player.duration)
+                            if (position > 0) player.seekTo(position)
+                        }
+                    }
+                    if (playbackState == Player.STATE_ENDED) checkpoint(finished = true)
+                    publish(player)
+                }
+                override fun onIsPlayingChanged(isPlaying: Boolean) { publish(player) }
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (active !== player) return
+                    if (playWhenReady && !canPlay()) {
+                        player.pause()
+                        _state.value = _state.value.copy(error = "请使用上方播放按钮确认当前网络后继续")
+                    } else if (!playWhenReady) checkpoint()
+                }
+                override fun onPlayerError(error: PlaybackException) {
+                    if (active !== player) return
+                    _state.value = _state.value.copy(playing = false, error = when (error.errorCode) {
+                        2004 -> "视频地址暂不可用或已过期，请重新获取地址后重试"
+                        3001, 3002, 3003, 3004 -> "地址没有返回可识别的视频，网页地址不能当作视频直链"
+                        else -> "点播未成功（${error.errorCode}），可重试或更换视频地址"
+                    })
+                    checkpoint()
+                }
+            })
+            _state.value = _state.value.copy(player = player, resumeWarning = warning)
+            player.setMediaItem(MediaItem.fromUri(item.url)); player.prepare(); player.play()
+        }
+    }
+    private fun publish(player: ExoPlayer) {
+        if (active === player) _state.value = _state.value.copy(playing = player.isPlaying,
+            ready = player.playbackState == Player.STATE_READY, live = player.isCurrentMediaItemLive)
+    }
+    fun toggle() {
+        val p = active ?: run { _state.value.item?.let(::open); return }
+        if (p.isPlaying || p.playWhenReady) pause() else if (canPlay()) {
+            _state.value = _state.value.copy(error = null)
+            if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
+                if (p.playbackState == Player.STATE_ENDED) p.seekTo(0)
+                p.prepare()
+            }
+            p.play()
+        }
+    }
+    fun pause() {
+        if (active == null && _state.value.item != null) {
+            generation++; openJob?.cancel()
+            _state.value = _state.value.copy(error = "已暂停，点击播放继续")
+        } else { active?.pause(); checkpoint() }
+    }
+    fun seekBy(delta: Long) {
+        active?.takeIf { it.isCurrentMediaItemSeekable && !it.isCurrentMediaItemLive }?.let {
+            it.seekTo((it.currentPosition + delta).coerceIn(0, it.duration.coerceAtLeast(0)))
+        }
+    }
+    fun restart() { active?.let { it.seekTo(0); if (canPlay()) it.play() }; checkpoint() }
+    private fun checkpoint(finished: Boolean = false) {
+        val p = active ?: return
+        val item = _state.value.item ?: return
+        if (p.isCurrentMediaItemLive || !p.isCurrentMediaItemSeekable || p.duration <= 0) return
+        val bookmark = VodBookmark(if (finished) 0 else p.currentPosition.coerceAtLeast(0), p.duration)
+        val token = generation
+        scope.launch {
+            try { historyLock.withLock { withContext(Dispatchers.IO) {
+                if (lastSaved != (item.key to bookmark)) {
+                    (store ?: storeFactory().also { store = it }).save(item.key, bookmark)
+                    lastSaved = item.key to bookmark
+                }
+            } } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { if (token == generation) _state.value = _state.value.copy(resumeWarning = "续播记录保存失败，播放不受影响") }
+        }
+    }
+    fun close() {
+        checkpoint(); generation++; openJob?.cancel()
+        val old = active; active = null; old?.release()
+        _state.value = VodState()
+    }
+}
