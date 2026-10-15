@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import com.tvatlas.core.model.*
 import com.tvatlas.core.routing.RuleConfig
@@ -21,7 +21,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class RoutingPageTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
     private val hk = ProxyProfile("hk", "香港节点", ProxyType.MIHOMO, "private.example", 443, subscriptionId = "sub")
     private val us = hk.copy(id = "us", name = "美国节点")
     private val library = Library(emptyList(), emptyList(), listOf(hk, us), RuleConfig())
@@ -39,7 +39,7 @@ class RoutingPageTest {
         } } }
         compose.onNodeWithText("节点详情").assertDoesNotExist()
         compose.onNodeWithText("美国节点").performClick()
-        compose.onAllNodesWithText("美国节点").assertCountEquals(2)
+        compose.onNode(hasText("美国节点") and hasAnyAncestor(isDialog())).assertIsDisplayed()
         compose.onNodeWithText("暂无同地区备用节点").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("private.example", substring = true).assertDoesNotExist()
     }

@@ -116,9 +116,10 @@ class PreviewVodPlayerTest {
             override fun save(key: String, bookmark: VodBookmark) {}
         }
         lateinit var controller: VodPlaybackController
+        val item = VodItem.direct(server.url("/page?token=private-fixture").toString())
         compose.runOnIdle {
             controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
-            controller.open(VodItem.direct(server.url("/page?token=private-fixture").toString()))
+            controller.open(item)
         }
         try {
             compose.waitUntil(20000) { controller.state.value.error != null }
