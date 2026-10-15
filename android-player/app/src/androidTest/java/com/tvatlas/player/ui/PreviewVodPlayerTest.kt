@@ -21,6 +21,7 @@ class PreviewVodPlayerTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
 
     @Test fun nativePlayerSeeksResumesAndHonoursNetworkPolicy() {
+        compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("vod-fixture.mp4").use { it.readBytes() }
         val server = MockWebServer()
@@ -71,11 +72,14 @@ class PreviewVodPlayerTest {
     }
 
     @Test fun pauseDuringResumeLookupDoesNotStartPlaybackLater() {
+        compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val gate = java.util.concurrent.CountDownLatch(1)
         val completed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val started = java.util.concurrent.atomic.AtomicBoolean(false)
         val storage = object : VodProgressStorage {
             override fun load(key: String): VodBookmark? {
+                started.set(true)
                 gate.await(5, java.util.concurrent.TimeUnit.SECONDS)
                 completed.set(true)
                 return null
@@ -89,6 +93,7 @@ class PreviewVodPlayerTest {
             controller.open(VodItem.direct("https://media.example/movie.mp4"))
         }
         try {
+            compose.waitUntil(5000) { started.get() }
             compose.runOnIdle { controller.pause() }
             gate.countDown()
             compose.waitUntil(5000) { completed.get() }
@@ -97,6 +102,30 @@ class PreviewVodPlayerTest {
                 assertEquals("已暂停，点击播放继续", controller.state.value.error)
             }
         } finally { gate.countDown(); compose.runOnIdle { controller.close() }; scope.cancel() }
+    }
+
+    @Test fun webpageResponseShowsSafePlaybackError() {
+        compose.setContent { AtlasTheme {} }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val server = MockWebServer()
+        repeat(5) { server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody("<html>login required</html>")) }
+        server.start()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        lateinit var controller: VodPlaybackController
+        compose.runOnIdle {
+            controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+            controller.open(VodItem.direct(server.url("/page?token=private-fixture").toString()))
+        }
+        try {
+            compose.waitUntil(20000) { controller.state.value.error != null }
+            val error = controller.state.value.error!!
+            assertTrue(error.contains("可识别的视频"))
+            assertFalse(error.contains("private-fixture"))
+        } finally { compose.runOnIdle { controller.close() }; scope.cancel(); server.shutdown() }
     }
 
     @Test fun encryptedResumeStorageKeepsDamagedRecordsForRecovery() {
