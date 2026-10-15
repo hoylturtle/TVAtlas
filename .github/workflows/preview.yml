@@ -43,10 +43,7 @@ jobs:
           disable-animations: true
           working-directory: android-player
           script: |
-            trap 'adb pull /sdcard/Pictures/TVAtlas-next app/build/next-ui-previews || true' EXIT
-            adb shell wm size 1280x960
-            adb shell wm density 160
-            gradle -PtvatlasTestBuildType=preview :core:test :app:testPreviewUnitTest :app:lintPreview :app:assemblePreview :app:connectedPreviewAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.tvatlas.player.ui.CloudLibraryPageTest,com.tvatlas.player.ui.PreviewVodPlayerTest,com.tvatlas.player.ui.RemoteContinuityTest,com.tvatlas.player.ui.TvSplitLayoutsTest,com.tvatlas.player.ui.RoutingPageTest --stacktrace
+            bash scripts/verify_preview.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
