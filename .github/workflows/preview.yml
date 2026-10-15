@@ -2,7 +2,7 @@ name: TVAtlas Next Preview
 on:
   workflow_dispatch:
   push:
-    branches: [feature/tvatlas-next-vod]
+    branches: ['feature/tvatlas-next-*']
     paths: ['android-player/**', '.github/workflows/preview.yml']
 permissions:
   contents: read

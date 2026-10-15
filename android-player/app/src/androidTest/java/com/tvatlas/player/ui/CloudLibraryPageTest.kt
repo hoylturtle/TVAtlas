@@ -63,6 +63,32 @@ class CloudLibraryPageTest {
         compose.onNodeWithText("导入分享").performClick()
         compose.onNodeWithText("完整分享文字或链接").assertIsDisplayed()
     }
+    @Test fun directorySearchAndVideoFilterKeepFoldersAccessible() {
+        val share = CloudShare(CloudProvider.PAN115, "sExampleShare", name = "测试合集")
+        compose.setContent { AtlasTheme {
+            CloudLibraryPage(CloudLibraryState(selected = share, folders = listOf(CloudFolder("0", "分享根目录")),
+                files = listOf(CloudFile("folder", "第一季", true), CloudFile("video", "E01.mp4", false), CloudFile("text", "notes.txt", false))),
+                { _, _, _, _ -> }, {}, {}, {}, {}, {}, {}, {})
+        } }
+        compose.onNodeWithText("搜索当前已加载文件").performTextInput("E01")
+        compose.onNodeWithText("E01.mp4").assertExists()
+        compose.onNodeWithText("第一季").assertDoesNotExist()
+        compose.onNodeWithText("清除").performClick()
+        compose.onNodeWithText("只看视频和文件夹").performClick()
+        compose.onNodeWithText("第一季").assertExists()
+        compose.onNodeWithText("E01.mp4").assertExists()
+        compose.onNodeWithText("notes.txt").assertDoesNotExist()
+    }
+    @Test fun authorizationStatusDoesNotPretendUserIsLoggedIn() {
+        compose.setContent { AtlasTheme {
+            CloudLibraryPage(CloudLibraryState(), { _, _, _, _ -> }, {}, {}, {}, {}, {}, {}, {})
+        } }
+        compose.onNodeWithText("账号授权").performClick()
+        compose.onNodeWithText("官方账号授权 · 接入状态").assertIsDisplayed()
+        compose.onNodeWithText("目前未登录任何网盘账号。打开官网登录不会自动授权 TVAtlas。").assertIsDisplayed()
+        compose.onNodeWithText("知道了").performClick()
+        compose.onNodeWithText("官方账号授权 · 接入状态").assertDoesNotExist()
+    }
     @Test fun tvCanEnterDirectoryWithRemoteAndCapturePreviewScreens() {
         val share = CloudShare(CloudProvider.PAN115, "sExampleShare", name = "测试电影合集")
         var tv by mutableStateOf(false)
@@ -71,6 +97,8 @@ class CloudLibraryPageTest {
             folders = listOf(CloudFolder("0", "分享根目录")),
             files = listOf(CloudFile("folder", "第一季", true), CloudFile("video", "E01.mp4", false, 1024)))
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides tv) {
+            val input = androidx.compose.ui.platform.LocalInputModeManager.current
+            LaunchedEffect(tv) { if (tv) input.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
             Scaffold(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 780.dp).atlasBackdrop().testTag("cloud-preview"),
                 containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -91,6 +119,7 @@ class CloudLibraryPageTest {
         compose.runOnIdle { tv = true }
         compose.waitForIdle(); capture("cloud-tv.png")
         compose.onNodeWithText("第一季").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        compose.onNodeWithText("第一季").assertIsFocused()
         compose.onNodeWithText("第一季").performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertTrue(entered) }
     }

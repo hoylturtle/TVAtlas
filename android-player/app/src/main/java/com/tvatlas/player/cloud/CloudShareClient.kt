@@ -10,10 +10,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
+fun interface CloudDirectoryReader {
+    suspend fun list(share: CloudShare, parent: String, offset: Int): CloudDirectory
+}
+
 /** Read-only share listing. No transfer/save/delete endpoints, scripts or third-party parsers. */
-class CloudShareClient(private val client: OkHttpClient) {
+class CloudShareClient(private val client: OkHttpClient) : CloudDirectoryReader {
     private val json = Json { ignoreUnknownKeys = true }
-    suspend fun list(share: CloudShare, parent: String = "0", offset: Int = 0): CloudDirectory {
+    suspend fun list(share: CloudShare): CloudDirectory = list(share, "0", 0)
+    override suspend fun list(share: CloudShare, parent: String, offset: Int): CloudDirectory {
         require(offset in 0..200000)
         return try {
             when (share.provider) {

@@ -64,7 +64,9 @@ Release 输出：`app/build/outputs/apk/release/app-release.apk`。可分发安�
 gradle -PtvatlasTestBuildType=preview :core:test :app:testPreviewUnitTest :app:lintPreview :app:assemblePreview
 ```
 
-预览包名为 `com.tvatlas.player.preview`，与正式版数据隔离，可并行安装。预览包不使用正式版的应用内更新通道。网盘模块目前只完成分享识别、加密保存和部分目录读取，不能作为三家网盘均可原生播放的证明。
+预览包名为 `com.tvatlas.player.preview`，与正式版数据隔离，可并行安装。预览包不使用正式版的应用内更新通道。网盘模块支持分享识别、加密保存、部分目录读取、当前已加载文件搜索、视频筛选与目录返回位置保留。分页失败可重试，目录缓存仅在内存中保留并限制大小。不能作为三家网盘均可原生播放的证明。
+
+授权优先采用官方扫码／OAuth。当前未配置百度和 115 经登记的应用身份及回调，夸克适用的授权／分享取流接口仍待核实，因此不展示可用的登录二维码或声称已登录。官方能力参考：[百度网盘开放平台](https://yun.baidu.com/union/openAbility)、[115 开发者平台](https://open.115.com/)。账号授权不等于具有读取任意分享的权限；不自动转存分享，也不要求用户粘贴 Cookie。
 
 JVM 测试与模拟器检查用于验证解析、路由、错误处理和界面行为，不能代替真实网络、遥控器和 Widevine 设备验收，参见 [DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md)。
 

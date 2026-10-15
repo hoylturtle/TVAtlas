@@ -180,7 +180,7 @@ import com.tvatlas.player.update.*
             }
             if (category == 3) SettingsCard {
                 Text("帮助与关于", style = MaterialTheme.typography.titleMedium)
-                Text("TVAtlas · 稳定版 ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
+                Text("TVAtlas · ${if (BuildConfig.BUILD_TYPE == "preview") "独立预览版" else "稳定版"} ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
                 TvOutlinedButton(onClick = onRepository, modifier = Modifier.fillMaxWidth()) { Text("打开 GitHub 仓库") }
                 TvTextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (repositoryCopied) "仓库链接已复制" else "复制仓库链接")
