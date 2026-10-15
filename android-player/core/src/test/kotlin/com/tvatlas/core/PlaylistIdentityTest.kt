@@ -6,6 +6,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlaylistIdentityTest {
+    @Test fun strayDurationCommaCannotTurnMetadataIntoChannelName() {
+        val text = """#EXTM3U
+#EXTINF:-1 tvg-id="河北卫视" group-title="中国大陆 · 卫视",河北卫视
+https://fixture.test/first
+#EXTINF:-1,tvg-id="河北卫视" tvg-name="河北卫视" tvg-logo="https://fixture.test/logo?x=1,2" group-title="中国大陆 · 卫视",河北卫视
+https://fixture.test/second
+"""
+        val channel = M3uParser.parse(text, "p").single()
+        assertEquals("河北卫视", channel.name)
+        assertEquals("中国大陆 · 卫视", channel.group)
+        assertEquals("https://fixture.test/logo?x=1,2", M3uParser.parse(text.substringAfter("https://fixture.test/first"), "p").single().logo)
+        assertEquals(2, channel.streams.size)
+    }
+    @Test fun titleCommasAndQuotedMetadataCommasRemainIntact() {
+        val text = """#EXTINF:0 group-title="News, World",News, English
+https://fixture.test/live
+"""
+        val channel = M3uParser.parse(text, "p").single()
+        assertEquals("News, English", channel.name)
+        assertEquals("News, World", channel.group)
+    }
+
     @Test fun sameNamedChannelsFromDifferentRegionsRemainSeparate() {
         val text = "#EXTM3U\n#EXTINF:-1 group-title=\"中国大陆\",新闻\nhttps://example.test/cn\n#EXTINF:-1 group-title=\"日本\",新闻\nhttps://example.test/jp\n"
         val channels = M3uParser.parse(text, "p")

@@ -1,6 +1,10 @@
 package com.tvatlas.player.epg
 
 import com.tvatlas.core.model.Channel
+import com.tvatlas.core.epg.Guide
+import com.tvatlas.core.epg.Programme
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -9,6 +13,28 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class EpgStoreTest {
+    @Test fun loadingLargeLegacyCacheRemovesUnrelatedProgrammesWithoutNetwork() = runBlocking {
+        val file = File.createTempFile("epg-large", ".json")
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val now = System.currentTimeMillis()
+        val channel = Channel("hebei", "河北卫视", "中国大陆 · 卫视", tvgId = "Hebei", streams = emptyList())
+        val programmes = listOf(Programme("Hebei", now - 1000, now + 600000, "当前节目")) +
+            (0 until 15000).map { Programme("Unrelated", now + it * 1000, now + it * 1000 + 1000, "无关节目$it") }
+        file.writeText(Json.encodeToString(CachedGuide("https://fixture.test/epg", now,
+            Guide(mapOf("Hebei" to listOf("河北卫视"), "Unrelated" to listOf("其他")), programmes))))
+        try {
+            val store = EpgStore(file, scope, channels = { listOf(channel) }) { error("fresh cache must not fetch") }
+            store.load("https://fixture.test/epg")
+            assertEquals(1, store.state.value.channelCount)
+            assertEquals(listOf("当前节目"), store.state.value.guide.programmes.map { it.title })
+            assertTrue(file.length() < 5000)
+            assertFalse(store.needsRefresh())
+            store.invalidateLibrary()
+            assertTrue(store.needsRefresh())
+            assertEquals(1, store.state.value.guide.programmes.size)
+        } finally { scope.cancel(); file.delete() }
+    }
+
     private fun xml(title: String) = """<tv><channel id="Other"><display-name>Other</display-name></channel><programme channel="Other" start="20990101000000 +0000" stop="20990101010000 +0000"><title>$title</title></programme></tv>""".toByteArray()
     @Test fun officialSupplementSurvivesXmlRefreshAndDiskReload() = runBlocking {
         val file = File.createTempFile("epg", ".json").apply { delete() }

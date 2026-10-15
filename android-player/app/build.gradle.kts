@@ -17,7 +17,7 @@ android {
     namespace = "com.tvatlas.player"
     testBuildType = providers.gradleProperty("tvatlasTestBuildType").orElse("debug").get()
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("43").get().toInt(); versionName = "1.0.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; manifestPlaceholders["appLabel"] = "TVAtlas Player" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("44").get().toInt(); versionName = "1.0.1"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; manifestPlaceholders["appLabel"] = "TVAtlas Player" }
     defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {

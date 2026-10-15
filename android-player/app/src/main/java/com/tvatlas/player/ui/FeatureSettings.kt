@@ -48,7 +48,7 @@ import com.tvatlas.player.storage.NetworkAccess
     }
     if (section == "all" || section == "playback") FeatureCard("节目单") {
         Text("XMLTV + TVB、ViuTV 官方节目表补充；地址留空可停用 XMLTV", style = MaterialTheme.typography.bodySmall)
-        Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "已缓存 ${guide.guide.programmes.size} 个节目", style = MaterialTheme.typography.bodySmall)
+        Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "节目单缓存：${guide.channelCount} 个频道的 ${guide.guide.programmes.size} 条节目安排（不是直播频道数）", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TvOutlinedButton(onClick = { epgEdit = true }, modifier = Modifier.weight(1f)) { Text("节目单来源") }
             TvTextButton(onClick = model::refreshGuide, enabled = !guide.loading, modifier = Modifier.weight(1f)) { Text("刷新节目单") }

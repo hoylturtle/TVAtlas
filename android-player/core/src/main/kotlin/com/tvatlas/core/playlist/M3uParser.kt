@@ -4,6 +4,7 @@ import com.tvatlas.core.model.*
 
 object M3uParser {
     private val attribute = Regex("""([\w-]+)\s*=\s*"([^"]*)"""")
+    private val strayAttributeComma = Regex("""^(#EXTINF:\s*-?\d+(?:\.\d+)?)\s*,\s*(?=(?:tvg-id|tvg-name|tvg-logo|group-title)\s*=\s*")""", RegexOption.IGNORE_CASE)
     /** Only known credentials/expiry parameters rotate; retain channel/quality/business parameters. */
     fun streamIdentity(url: String): String {
         val uri = httpUri(url) ?: return url
@@ -32,15 +33,17 @@ object M3uParser {
             val line = raw.trim()
             when {
                 line.startsWith("#EXTINF:", ignoreCase = true) -> {
+                    // Recover a stray duration comma only when quoted metadata follows it.
+                    val normalized = strayAttributeComma.find(line)?.let { line.replaceRange(it.range, it.groupValues[1] + " ") } ?: line
                     // The title separator may follow quoted attributes containing commas.
                     var quoted = false
-                    val separator = line.indexOfFirst { ch ->
+                    val separator = normalized.indexOfFirst { ch ->
                         if (ch == '"') quoted = !quoted
                         ch == ',' && !quoted
                     }
                     headers = emptyMap()
                     metadata = if (separator >= 0) {
-                        line.substring(separator + 1).trim() to attribute.findAll(line.substring(0, separator))
+                        normalized.substring(separator + 1).trim() to attribute.findAll(normalized.substring(0, separator))
                             .associate { it.groupValues[1].lowercase() to it.groupValues[2] }
                     } else null
                 }

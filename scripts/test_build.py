@@ -8,6 +8,27 @@ import build
 
 
 class PlaylistHealthTest(unittest.TestCase):
+    def test_rewrite_repairs_duration_comma_and_preserves_quoted_commas(self):
+        malformed = '#EXTINF:-1,tvg-id="河北卫视" tvg-logo="https://fixture.test/logo?size=1,2" group-title="旧分类",河北卫视'.encode()
+        result = build.rewrite_extinf(malformed, '河北卫视', '中国大陆 · 卫视')
+        metadata, title = build.split_extinf(result)
+        self.assertTrue(result.startswith(b'#EXTINF:-1 tvg-id='))
+        self.assertEqual('河北卫视'.encode(), title)
+        self.assertIn(b'https://fixture.test/logo?size=1,2', metadata)
+        self.assertIn('group-title="中国大陆 · 卫视"'.encode(), metadata)
+        valid = b'#EXTINF:0 group-title="News, World",News, English'
+        self.assertEqual(b'News, English', build.get_name(valid))
+        self.assertEqual(b'News, English', build.split_extinf(build.rewrite_extinf(valid, 'News, English', 'News'))[1])
+
+    def test_validation_rejects_unrepaired_metadata_as_channel_title(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'list.m3u'
+            path.write_text('#EXTM3U\n#EXTINF:-1,CCTV-1 综合\nhttps://fixture.test/cctv\n'
+                '#EXTINF:-1,tvg-id="河北卫视" group-title="中国大陆",河北卫视\nhttps://fixture.test/hebei\n', encoding='utf-8')
+            with patch.object(build, 'OUTPUT', path), patch.object(build, 'ORANGE_OUTPUT', path), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    build.validate()
+
     def test_validate_allows_cctv_backups_but_rejects_missing_or_excessive(self):
         with tempfile.TemporaryDirectory() as directory:
             standard = Path(directory) / 'standard.m3u'

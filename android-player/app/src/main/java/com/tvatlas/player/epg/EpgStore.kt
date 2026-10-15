@@ -2,6 +2,7 @@ package com.tvatlas.player.epg
 
 import com.tvatlas.core.epg.*
 import com.tvatlas.core.model.Channel
+import com.tvatlas.core.model.stableId
 import com.tvatlas.core.model.httpUri
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,26 +16,30 @@ import java.util.*
 
 @Serializable data class OfficialSupplement(val updated: Long, val name: String, val programmes: List<Programme>)
 @Serializable data class CachedGuide(val source: String = "", val updated: Long = 0, val guide: Guide = Guide(),
-    val supplements: Map<String, OfficialSupplement> = emptyMap())
-data class GuideIndex(val channels: Map<String, List<Programme>>, val names: Map<String, String>) {
+    val supplements: Map<String, OfficialSupplement> = emptyMap(), val libraryKeys: Set<String>? = null)
+data class GuideIndex(val channels: Map<String, List<Programme>>, val names: Map<String, String>, val prefixes: Map<String, String>) {
     companion object { fun build(guide: Guide) = GuideIndex(guide.programmes.groupBy { it.channel },
-        guide.names.flatMap { (id, labels) -> labels.map { Guide.normalize(it) to id } }.toMap()) }
+        guide.names.flatMap { (id, labels) -> labels.map { Guide.normalize(it) to id } }.toMap(),
+        guide.programmes.asSequence().map { it.channel }.distinctBy { it.substringBefore('@') }.associateBy { it.substringBefore('@') }) }
 }
 data class EpgState(val guide: Guide = Guide(), val loading: Boolean = false, val error: String? = null, val updated: Long = 0, val source: String = "", val officialIds: Set<String> = emptySet(), private val index: GuideIndex = GuideIndex.build(guide)) {
+    val channelCount: Int get() = index.channels.size
     private val byChannel get() = index.channels
     private val names get() = index.names
     fun entries(channel: Channel): List<Programme> {
-        val id = channel.tvgId?.takeIf { it in byChannel } ?: byChannel.keys.firstOrNull { it.substringBefore('@') == channel.tvgId }
+        val id = channel.tvgId?.let { if (it in byChannel) it else index.prefixes[it] }
             ?: names[Guide.normalize(channel.name)] ?: channel.id.takeIf { it in byChannel }
         return byChannel[id].orEmpty()
     }
 }
-class EpgStore(private val file: File, private val scope: CoroutineScope, private val fetch: suspend (String) -> ByteArray) {
+class EpgStore(private val file: File, private val scope: CoroutineScope, private val channels: (() -> List<Channel>)? = null, private val fetch: suspend (String) -> ByteArray) {
     private val _state = MutableStateFlow(EpgState()); val state = _state.asStateFlow()
     private val mutex = kotlinx.coroutines.sync.Mutex()
     private val requests = java.util.concurrent.atomic.AtomicLong()
     private var source = ""
     private var xmlUpdated = 0L
+    private var libraryRevision = 0L
+    private fun libraryKeys() = channels?.invoke()?.map { stableId("${it.id}\u0000${it.tvgId}\u0000${it.name}") }?.toSet()
     private var base = Guide()
     private var supplements = emptyMap<String, OfficialSupplement>()
     fun needsRefresh() = System.currentTimeMillis() - xmlUpdated >= 21600000L
@@ -56,10 +61,17 @@ class EpgStore(private val file: File, private val scope: CoroutineScope, privat
             val old = withContext(Dispatchers.IO) { runCatching { if (file.isFile && file.length() < 48 * 1024 * 1024)
                 Json.decodeFromString<CachedGuide>(file.readText()) else null }.getOrNull() }
             if (old != null && old.source == url) {
-                source = url; xmlUpdated = old.updated; base = old.guide; supplements = old.supplements; publish()
+                source = url; xmlUpdated = if (old.libraryKeys != null && old.libraryKeys != libraryKeys()) 0 else old.updated
+                base = withContext(Dispatchers.Default) { channels?.let { GuideCachePolicy.retain(old.guide, it(), System.currentTimeMillis()) } ?: old.guide }
+                val now = System.currentTimeMillis()
+                supplements = old.supplements.mapValues { (_, value) -> value.copy(programmes = value.programmes
+                    .filter { it.end > now && it.start < now + 86400000L }.take(GuideCachePolicy.MAX_PER_CHANNEL)) }
+                publish()
+                if (base != old.guide || supplements != old.supplements) save()
             }
         } finally { mutex.unlock() }
     }
+    fun invalidateLibrary() { libraryRevision++; xmlUpdated = 0 }
     suspend fun reset(url: String) {
         requests.incrementAndGet(); mutex.lock()
         try { source = url; xmlUpdated = 0; base = Guide(); supplements = emptyMap(); publish() }
@@ -68,15 +80,19 @@ class EpgStore(private val file: File, private val scope: CoroutineScope, privat
     }
     suspend fun refresh(url: String) {
         val token = requests.incrementAndGet()
+        val revision = libraryRevision
         mutex.lock()
         try {
             if (token != requests.get()) return
             if (url.isBlank()) { base = Guide(); source = ""; xmlUpdated = 0; publish(); save(); return }
             require(httpUri(url) != null)
             _state.value = _state.value.copy(loading = true, error = null)
-            val guide = withContext(Dispatchers.Default) { XmlTv.parse(fetch(url)) }
+            val guide = withContext(Dispatchers.Default) {
+                val parsed = XmlTv.parse(fetch(url))
+                channels?.let { GuideCachePolicy.retain(parsed, it(), System.currentTimeMillis()) } ?: parsed
+            }
             if (token != requests.get()) return
-            source = url; xmlUpdated = System.currentTimeMillis(); base = guide; publish(); save()
+            source = url; xmlUpdated = if (revision == libraryRevision) System.currentTimeMillis() else 0; base = guide; publish(); save()
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { _state.value = _state.value.copy(loading = false, error = "节目单更新失败，已保留缓存") }
         finally { if (token == requests.get()) _state.value = _state.value.copy(loading = false); mutex.unlock() }
@@ -85,7 +101,11 @@ class EpgStore(private val file: File, private val scope: CoroutineScope, privat
         mutex.lock()
         try {
             val bytes = fetch(url)
-            val items = withContext(Dispatchers.Default) { OfficialGuide.parse(bytes.toString(Charsets.UTF_8), channel.tvgId ?: channel.id, tvb) }
+            val items = withContext(Dispatchers.Default) {
+                val now = System.currentTimeMillis()
+                OfficialGuide.parse(bytes.toString(Charsets.UTF_8), channel.tvgId ?: channel.id, tvb)
+                    .filter { it.end > now && it.start < now + 86400000L }.take(GuideCachePolicy.MAX_PER_CHANNEL)
+            }
             if (items.isEmpty()) return false
             val id = channel.tvgId ?: channel.id
             supplements = supplements + (id to OfficialSupplement(System.currentTimeMillis(), channel.name, items))
@@ -96,7 +116,7 @@ class EpgStore(private val file: File, private val scope: CoroutineScope, privat
     }
     private suspend fun save() = withContext(Dispatchers.IO) {
         runCatching { file.parentFile?.mkdirs(); val part = File(file.path + ".tmp")
-            part.writeText(Json.encodeToString(CachedGuide(source, xmlUpdated, base, supplements)))
+            part.writeText(Json.encodeToString(CachedGuide(source, xmlUpdated, base, supplements, libraryKeys())))
             if (!part.renameTo(file)) part.delete()
         }
     }
