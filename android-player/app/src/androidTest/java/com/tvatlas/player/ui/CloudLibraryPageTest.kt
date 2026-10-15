@@ -4,6 +4,9 @@ package com.tvatlas.player.ui
 import android.content.Context
 import androidx.compose.runtime.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
@@ -68,9 +71,14 @@ class CloudLibraryPageTest {
             folders = listOf(CloudFolder("0", "分享根目录")),
             files = listOf(CloudFile("folder", "第一季", true), CloudFile("video", "E01.mp4", false, 1024)))
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides tv) {
-            Column(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 780.dp).atlasBackdrop().testTag("cloud-preview")) {
-                Box(Modifier.weight(1f)) { CloudLibraryPage(state, { _, _, _, done -> done() }, {}, { entered = true }, {}, {}, {}, {}, {}) }
-                if (!tv) AtlasBottomNavigation(4) {}
+            Scaffold(Modifier.requiredSize(if (tv) 960.dp else 360.dp, if (tv) 540.dp else 780.dp).atlasBackdrop().testTag("cloud-preview"),
+                containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                topBar = { if (!tv) AtlasAppBar({}, {}) }, bottomBar = { if (!tv) AtlasBottomNavigation(4) {} }) { padding ->
+                Row(Modifier.fillMaxSize().padding(padding)) {
+                    if (tv) TvNavigation(4, {}, Modifier.fillMaxHeight())
+                    Box(Modifier.weight(1f)) { CloudLibraryPage(state, { _, _, _, done -> done() }, {}, { entered = true }, {}, {}, {}, {}, {}) }
+                }
             }
         } } }
         fun capture(name: String) {
