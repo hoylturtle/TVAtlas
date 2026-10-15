@@ -24,6 +24,17 @@ class UpdateRepositoryTest {
     private fun repository(server: MockWebServer) = UpdateRepository(OkHttpClient(),
         server.url("/api").toString(), server.url("/web").toString())
 
+    @Test fun stableReleaseCanUpgradeExistingBetaInstallations() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("[${release(server, "1.0.0").replace("-beta.1", "").replace("\"prerelease\":true", "\"prerelease\":false")}]"))
+            server.enqueue(MockResponse().setBody(manifest("1.0.0", 43).replace("-beta.1", "")))
+            val result = repository(server).latest()
+            assertEquals(43, result.versionCode)
+            assertEquals("1.0.0", result.versionName)
+            assertEquals(server.url("/web/releases/download/v1.0.0/TVAtlas-Player-v1.0.0-release.apk").toString(), result.downloadUrl)
+        }
+    }
+
     @Test fun publishedPrereleaseReturnsDirectPublicApkWithoutActionsOrRawRequests() {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("[${release(server)}]"))

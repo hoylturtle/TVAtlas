@@ -1,115 +1,81 @@
-# TVAtlas Player v0.1.4
+# TVAtlas Player
 
-面向 Android 手机、平板与 Android TV 的 IPTV 播放器。Android 6.0（API 23）及以上。
+面向 Android 手机、平板和电视的直播播放器，最低 Android 6.0（API 23）。项目缘起、订阅定制、地区限制与使用边界见 [项目说明](../README.md) 和 [免责声明](../DISCLAIMER.md)。
 
-## 使用
+目标是在合法观看条件下提高稳定性。APP 不提供账号或内容权限，不保证所有频道在所有地区可播。
 
-1. 首次启动自动加入「TVAtlas 频道订阅」和「翡翠台官方（实验）」。正式频道订阅使用 `https://raw.githubusercontent.com/hoylturtle/TVAtlas/main/tvatlas.m3u`，也可在「播放列表」添加其他 HTTP(S) M3U 地址。覆盖更新会补齐缺少的默认项，不改已有路由；下载失败时保留列表入口，可手动更新或下次启动重试。
-2. 在「路由」选择「添加 Clash/Mihomo 订阅」，填写名称，粘贴订阅 URL（支持长按粘贴和「粘贴订阅地址」按钮）并下载导入。也可手动添加 HTTP / SOCKS5 代理；没有代理时仍可直连播放。
-3. 可选从系统文件选择器导入 JSON 规则。参考 `examples/routes-v1.json`。
-4. 在「直播」选择频道。长按频道查看线路、修改频道或单线路路由。
-5. 「恢复规则」删除手动覆盖；AUTO 使用命中规则的策略和成功历史。
-6. 在「设置」启用诊断可查看脱敏地址、路由、命中规则和失败类别。
+## 安装与基本使用
 
-同名频道合并，URL 去重。更新列表保留频道手动路由、仍存在的线路设置和成功历史；无效或空列表不会覆盖原有数据。
+1. 从 [GitHub Releases](https://github.com/hoylturtle/TVAtlas/releases) 下载 APK。其他源码、许可证及校验附件无需安装。
+2. 在「频道源」管理统一展示的默认频道订阅，或添加自己的 HTTP(S) M3U 地址。
+3. 需要时，在「代理」导入 Clash/Mihomo 节点订阅，或配置 HTTP/SOCKS5 代理。频道订阅和代理套餐相互独立。
+4. 按地区、频道类型选择频道；播放信息可查看当前线路、具体节点和网络状态。失败时可重试或切换线路。
+5. 按实际需求配置网络使用偏好，注意移动数据费用。
 
-手机竖屏显示频道列表和播放区，横屏进入全屏。电视采用深色左侧导航，频道面板和播放预览并排显示；按钮与频道的遥控焦点使用明显实底和边框。选台后进入全屏；返回、播放器上的 OK / 左键可打开频道面板。电视方向键选择频道，OK 播放，长按 OK 打开线路菜单；播放器区域上下键换台。所有表单与菜单提供可聚焦按钮。
+电视使用方向键、确认和返回操作；手机／平板支持横屏全屏。节目单依赖有效 EPG 来源及正确的频道匹配。
 
-频道分组默认折叠，点击组名展开；搜索直接展示匹配频道，清空搜索恢复原展开状态。线路选择器使用播放列表名称，同一列表中的多条线路按序号区分；代理选择器只显示节点名称，不显示内部 ID 或地址。线路菜单改为紧凑下拉选择，保留自动选线、频道代理与单线路代理。视觉方向参考 [OpenIPTV 的界面说明](https://github.com/shayanline/OpenIPTV/blob/master/docs/design.md)，没有复制其业务实现。
+## 模块结构
+
+| 路径 | 职责 |
+| --- | --- |
+| `core/` | M3U 解析、规则格式与匹配、回退规划、节目单及共享模型 |
+| `app/.../ui/` | Compose 界面、手机／电视适配与遥控焦点 |
+| `app/.../playback/` | Media3 播放协调、错误分类、DRM 请求处理 |
+| `app/.../source/` | 官方服务入口与动态播放配置适配 |
+| `app/.../proxy/` | Mihomo 运行时、HTTP/SOCKS5、客户端与节点测速 |
+| `app/.../storage/` | Room、订阅与偏好管理、凭证加密及备份 |
+| `app/.../traffic/`、`epg/`、`update/` | 流量、节目单和签名更新 |
+| `app/.../cloud/` | 独立预览分支中的网盘分享接入，尚未完成原生播放 |
+
+表中的 `app/.../` 指 `app/src/main/java/com/tvatlas/player/`。
+
+## 路由、代理与播放边界
+
+默认策略为大陆直连，港澳匹配香港节点，台湾、日本、韩国匹配对应地区节点。用户可选择一个自定义规则文件，配合频道或线路手动设置；同地区候选可用于故障回退。默认策略不是地区限制的绕过保证，具体行为以当前生效规则和实际播放日志为准。
+
+支持包含 `proxies` 列表的 Clash/Mihomo YAML，节点参数由固定版本内核校验。订阅中的代理组、规则、外部控制器、TUN 和监听配置不会整体执行；APP 使用自己的路由管理。规则格式示例见 [examples/routes-v1.json](examples/routes-v1.json)。
+
+内核仅为本应用提供本地转发，不创建系统 VPN，外部浏览器也不会自动使用 APP 内节点。内核随签名 APK 更新，不以下载任意可执行文件的方式独立更新。
+
+官方源按服务协议获取会话、清单和必要的 Widevine 授权，不提取密钥。是否可播仍取决于内容权限、地区、设备和官方服务状态。网络或节点回退无法修复所有源格式、授权或设备问题。
+
+## 隐私与诊断
+
+代理订阅和凭证使用 Android Keystore 加密保存。规则导出不包含代理密码或完整节点配置，迁移后需重新导入相关订阅。
+
+调试日志用于定位入口、清单、分片、授权和网络阶段，不自动上传。避免记录完整 URL、Token、Cookie 和正文；分享日志前仍需检查设备、频道和节点名称等信息。不要把真实订阅或账号写入 Issue、测试代码和截图。
+
+流量统计为应用请求数据的统计值，不等于底层全部网络开销；套餐余量以服务商返回及结算为准。
 
 ## 构建与验证
 
-需要 JDK 21、Gradle 8.11.1、Android SDK platform 35 / build-tools 35.0.0。打开此目录作为 Android Studio 工程，或执行：
+需要 **JDK 21、Gradle 8.11.1、Android SDK platform 35 / build-tools 35.0.0**。在本目录执行：
 
 ```sh
 python3 scripts/fetch_mihomo.py
 gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 ```
 
-发布包输出：`app/build/outputs/apk/release/app-release.apk`。从 v0.1.9 起，GitHub Actions 使用固定私有发布密钥并上传 `TVAtlas-Player-v0.1.9-release`。首次设置 repository secret `TVATLAS_SIGNING_BUNDLE`，本地签名则通过 `TVATLAS_SIGNING_PROPERTIES` 指定私有 properties 文件，详见 [固定签名说明](docs/signing.md)。未设置密钥时只生成不可安装的待签名输入，不提供更新下载；签名不匹配时构建失败。密钥与密码不进入仓库。
+Release 输出：`app/build/outputs/apk/release/app-release.apk`。可分发安装包需要固定发布签名；签名准备与配置见 [docs/signing.md](docs/signing.md)。密钥和密码不得提交到仓库。
 
-v0.1.8 及更早版本使用无法恢复的临时 debug 密钥，需要迁移卸载一次，迁移前保存播放列表/订阅地址并导出路由。安装 v0.1.9 固定签名版后，后续相同签名、更高 versionCode 的版本可覆盖安装并保留数据。CI 会实际执行一次同签名 `adb install -r`，验证私有文件和节点偏好保留。
+以下命令仅适用于 `feature/tvatlas-next-vod` 预览分支，稳定分支不包含该构建类型：
 
-Android 模拟器测试验证内置 Mihomo 的配置检查、订阅更新保留节点 ID、失败更新保留旧数据，以及本地 SOCKS 监听到节点的实际转发。
+```sh
+gradle -PtvatlasTestBuildType=preview :core:test :app:testPreviewUnitTest :app:lintPreview :app:assemblePreview
+```
 
-核心 JVM 模块无需 Android 设备，测试 M3U/中文/BOM、JSON 校验、规则优先级、手动覆盖、历史顺序、故障分类、AUTO 与成功门槛。应用 JVM 测试模拟 HTTP 跳转路由、HLS 子请求继承和 SOCKS5 认证/远程 DNS。
+预览包名为 `com.tvatlas.player.preview`，与正式版数据隔离，可并行安装。预览包不使用正式版的应用内更新通道。网盘模块目前只完成分享识别、加密保存和部分目录读取，不能作为三家网盘均可原生播放的证明。
 
-## 订阅代理
+JVM 测试与模拟器检查用于验证解析、路由、错误处理和界面行为，不能代替真实网络、遥控器和 Widevine 设备验收，参见 [DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md)。
 
-设置页提供「更新网络」，可指定已导入且启用的节点用于连接 GitHub 更新接口，选择保存在本机。直连失败时选择可访问 GitHub 的节点后重新检查。「打开 GitHub 仓库」和「复制仓库链接」始终可用，包括更新检查失败时；外部浏览器使用系统网络/VPN，不会自动使用 APP 内的代理。
+## 发布与第三方许可
 
-支持包含 `proxies` 列表的 Clash/Mihomo YAML，包括 SS、SSR、VMess、VLESS、Trojan、Hysteria/Hysteria2、TUIC、AnyTLS、HTTP、SOCKS5、Snell；具体节点参数由内置 Mihomo v1.19.32 校验。订阅中的规则、代理组、外部控制器、TUN 和监听配置不会导入。provider-only 配置、URI/base64 订阅和本地证书文件暂不支持。
+正式更新使用 GitHub Releases 元数据，并校验 APK 大小、SHA-256、包名、版本和签名。下载后仍由用户确认安装；固定签名的更高版本可覆盖更新。开发分支与正式发布分开管理，1.0.0 为稳定版，未完成的网盘模块留在独立预览分支。
 
-导入后，在频道或线路路由中选择节点，也可选择 AUTO。订阅卡片提供手动更新和删除，节点可单独启停。相同订阅 URL 和节点名称保持稳定 ID，因此更新后保留路由引用；删除或改名的节点需要重新选择。最多启用 200 个订阅节点，单次下载上限 2 MB。更新下载或校验失败时保留原配置。
+Mihomo 使用 GPL-3.0。许可证和对应源码随发布提供，生成对应源码包可执行：
 
-订阅 URL 和节点完整配置使用 Android Keystore 加密保存；导出规则不包含订阅凭证或节点配置。在另一台设备先导入同一订阅，再导入引用节点的规则。内核只为本应用提供经过认证的本地 SOCKS 转发，不创建系统 VPN。
+```sh
+python3 scripts/fetch_mihomo.py --source
+```
 
-Mihomo 使用 GPL-3.0；许可和声明随应用提供。构建产物同时包含固定版本的对应源码及依赖，使用 `python3 scripts/fetch_mihomo.py --source` 可重新生成源码包。
-
-## 检查更新
-
-「设置 → 检查更新」读取本仓库公开 GitHub Releases，包含 beta 测试版；忽略草稿与缺少 APK/签名元数据的版本。按整数 versionCode 比较，并核对 Release tag、构建提交、固定签名证书与 APK 资产名称。更新失败可切换「更新网络」后重试；不影响播放，不在后台自动安装。
-
-「下载新版 APK」通过所选更新网络在 APP 内下载公开 Release 的 APK，无需 GitHub 登录或解压；检查版本在后台线程执行。校验包大小、SHA-256、包名、版本和固定签名后，点击「安装更新」并在 Android 系统确认即可覆盖安装。电视可「复制下载链接」，在其他设备下载后传入安装。
-
-主分支 push 的签名包通过 JVM 测试、lint、Android 模拟器测试和覆盖安装验证后，CI 自动发布 `releaseTag` 指定的 beta Release，附 APK、`release-info.json`、SHA256 校验文件、构建信息及 Mihomo 对应源码/许可证。先上传草稿，全部附件成功后才公开。已公开版本不会被覆盖；新版本需同步增加 Gradle/release-info 的 versionCode/versionName 和 beta tag。签名密钥不进入发布附件。
-
-## 规则语义
-
-`schemaVersion: 1`。支持 channel / channelRegex / group / url / urlContains / domain / domainSuffix / playlistId。一个 match 中多个字段按 AND 匹配。优先级依次为线路手动、频道手动、精确 URL、精确域名、域名后缀/URL 关键词、精确频道、频道正则、分组、播放列表、默认路由。同一级显式 priority 越小越优先；相同 priority 按 JSON 顺序，未指定 priority 排在指定值后。
-
-AUTO 的 `try` 可指定 `["DIRECT", "US", "HK"]`。未指定时为 DIRECT 加启用的代理。仅当历史成功线路和路由仍在当前允许的尝试集合中时才优先使用。强制 DIRECT/PROXY 不会被历史改写。没有命中规则时默认 DIRECT；手动选择 AUTO 可尝试配置的代理。
-
-HLS master、variant、分片和 key 共用播放会话路由；URL/域名规则可覆盖子请求，并对每一次 HTTP 跳转重新判断。单线路或频道的强制路由同样覆盖子请求。
-
-播放器持续 READY/播放推进至少 3 秒，且 READY 后获得新的媒体数据，才写入成功记录。网络/403/451/分片错误尝试下个路由；404/410、清单解析和解码错误跳到下条线路。播放等待超过 20 秒触发切换；用户暂停、停止或离开应用不记录失败。
-
-## 安全与边界
-
-代理用户名和密码通过 Android Keystore AES-GCM 加密，只保存在应用私有目录；关闭备份和设备转移。规则 JSON 不接受 password/token 等未知敏感字段，导出不包含凭证。诊断不显示 URL 路径或查询参数，错误记录仅保存受控类别和 HTTP 状态码。HTTP 与 SOCKS5 使用独立客户端，SOCKS5 认证不使用全局 Authenticator。
-
-v0.1.4 提供 HTTP(S) 直播/HLS、手动列表刷新和规则文件导入/导出。自动后台刷新、二维码、EPG、收藏、远程规则及正式签名发布不在此版本内。UDP/RTP、DRM、付费/授权绕过和系统 VPN 不支持。
-
-CI 编译与模拟网络测试不能替代家庭网络和电视实机验收，参见 `DEVICE_ACCEPTANCE.md`。
-
-### v0.1.5：官方翡翠台实验接入
-
-在「播放列表」点击「添加官方翡翠台（实验）」，再从频道设置为该线路选择服务允许地区的节点。
-内置列表只保存官方网页入口；每次播放通过所选线路建立访客会话，解析 checkout 的自动画质 DASH 地址，
-由 Android Widevine 请求官方许可证。HTTP 401/403 每个播放路由最多重新建立一次会话，随后按原计划切换。
-会话、视频与 DRM 请求使用同一具体线路；官方源不应用分片域名覆盖规则。token/Cookie/签名地址不写入数据库或日志。
-仅支持免费 Jade（ott_J_h264/cenc_m）；不提取密钥、不绕过 DRM、不接入付费频道。
-
-这是基于用户提供的网页网络请求制作的原型，不是官方 SDK 集成。checkout 使用网页接口，许可证声明 Android 客户端；
-平台可能拒绝跨平台会话，需要支持 Widevine 的真实设备实测。CI 的模拟响应及构建检查不代表官方直播验证成功。
-官方 API、认证策略或签名过期可能导致失败；不承诺永久可用。失败时可用官方 App/网页观看。
-
-### v0.1.6：失败诊断修复
-
-所有线路耗尽后仍显示最后错误，诊断开关可查看最后路由；官方 API 错误区分访客会话与播放配置。
-截图中的两字节 mlicense POST 可能仅用于服务证书，实际密钥许可证接口仍需确认；不宣称实播已修复。
-
-### v0.1.7：调试日志
-
-设置 → 调试日志，可查看、复制、导出 TXT、清空。默认记录最近 500 条（磁盘最多 512 KB），
-存放于应用私有 noBackupFilesDir，重启后保留；单线程后台写入并合并待写操作。
-记录应用/Android 版本、设备型号、频道/线路/节点名称、路由规则、播放状态、
-官方会话和 checkout 请求状态码/耗时、DRM 请求状态、播放器错误码及异常类型/少量栈帧。
-只记录请求域名；不记录完整 URL、请求/响应标头、正文、token、Cookie、订阅内容、Mihomo 原始输出。
-所有文本额外脱敏 URL、凭据字段和长 token，不自动上传。日志仍可能含频道/节点名和设备型号，分享前可以检查。
-失败后打开日志 → 导出 TXT，发送该文件即可定位阶段；日志功能不代表官方播放问题已修复。
-
-### v0.1.8：访客初始化补救
-
-来自真实设备的日志显示：香港代理下会话请求 HTTP 200，但没有可解析的 token，尚未进入 checkout/DRM。
-现增加一次受限的官方页面访问（仅 www.mytvsuper.com 的 HTTPS 跳转），共享选定路由和内存 Cookie 后重新请求会话。
-只在地区被接受但凭据缺失时触发；最多一次，仍缺失给出明确提示。地区不被接受不触发此流程。
-日志记录 country/supported_country、token 在已支持位置是否存在、auth Cookie 是否存在；不记录值。
-这是针对缺失初始化的补救，不是已验证的官方访客创建 API；若必须执行网页脚本创建访客，还需确认真实请求并接入。
-
-测试版更新：设置中选择更新节点，检查更新，再下载 APK。检测与下载均使用该节点；APP 核对公开 Release 的版本、文件大小、SHA-256、包名及固定签名证书后提供“安装更新”。首次安装需按系统提示允许 TVAtlas 安装应用，然后返回点击安装。覆盖安装保留配置；无需 GitHub 登录或解压 Actions 产物。首次从旧版升级到 0.1.13 请下载公开 Release APK 安装，此后使用新的更新流程。
-
-电视扫码输入：在“添加播放列表”或“添加 Clash / Mihomo 订阅”选择“手机扫码输入”。手机与电视连接同一局域网，扫码打开电视提供的临时页面，粘贴地址并发送，返回电视确认导入。接收端仅绑定 Wi-Fi/网线的局域网 IPv4 地址；随机二维码 5 分钟有效、只接收一次，关闭窗口或 APP 进入后台即停止。不上传到云端，不在日志或临时文件中记录订阅地址。手机页面无第三方资源，若路由器启用了访客隔离需改用能互通的局域网。
-
-
-0.1.16 电视与官方频道更新：默认播放列表加入明珠台（84/P）、TVB Plus（82/B）及 ViuTV（99）官方实验入口。TVB 各频道分别获取访客播放配置和授权；ViuTV 使用独立官方 getLiveURL 和 wrapperWV 请求协议。会话、视频及授权使用所选线路节点，动态 URL/Token 不落盘。ViuTV 官网公开脚本协议已核对，开发环境官方返回 GEO_CHECK_FAIL，香港节点及真实 Widevine 设备播放仍须实测。播放器画面使用 FIT 保留比例。
+不要为了精简 Release 附件删除当前更新依赖的 `release-info.json`，或省略第三方许可证与对应源码分发义务。

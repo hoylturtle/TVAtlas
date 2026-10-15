@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 
 class PublishingTest(unittest.TestCase):
-    def execute(self, bad_certificate=False, published=False):
+    def execute(self, bad_certificate=False, published=False, stable=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
@@ -22,7 +22,7 @@ class PublishingTest(unittest.TestCase):
             script.write_text(Path(__file__).with_name("publish_release.py").read_text())
             certificate = "a" * 64
             commit = "b" * 40
-            info = dict(versionName="0.1.13", versionCode=14, releaseTag="v0.1.13-beta.1",
+            info = dict(versionName="0.1.13", versionCode=14, releaseTag="v0.1.13" if stable else "v0.1.13-beta.1",
                 minSdk=23, notes="test", coreVersion="v1.19.32", signingCertificateSha256=certificate)
             (root / "mihomo-lock.json").write_text(json.dumps(dict(version="v1.19.32")))
             (root / "release-info.json").write_text(json.dumps(info))
@@ -52,12 +52,13 @@ class PublishingTest(unittest.TestCase):
                 elif method == "POST":
                     payload = json.loads(request.data)
                     self.assertTrue(payload["draft"])
-                    self.assertTrue(payload["prerelease"])
+                    self.assertEqual(not stable, payload["prerelease"])
                     result = dict(id=1, assets=[], target_commitish=commit)
                 else:
                     self.assertEqual(method, "PATCH")
                     self.assertEqual(4, len(uploads))
                     self.assertFalse(json.loads(request.data)["draft"])
+                    self.assertEqual(not stable, json.loads(request.data)["prerelease"])
                     result = {"html_url": "https://github.com/hoylturtle/TVAtlas/releases/tag/v0.1.13-beta.1"}
                 return io.BytesIO(json.dumps(result).encode())
             env = dict(GITHUB_REF="refs/heads/main", GITHUB_REPOSITORY="hoylturtle/TVAtlas",
@@ -81,6 +82,8 @@ class PublishingTest(unittest.TestCase):
                     manifest = json.loads((dist / "release-info.json").read_text())
                     self.assertEqual(digest, manifest["apkSha256"])
                     self.assertEqual(commit, manifest["commit"])
+    def test_stable_release_is_not_marked_prerelease(self):
+        self.execute(stable=True)
     def test_publish_after_all_verified_assets_uploaded(self):
         self.execute()
     def test_unverified_signer_never_starts_publication(self):

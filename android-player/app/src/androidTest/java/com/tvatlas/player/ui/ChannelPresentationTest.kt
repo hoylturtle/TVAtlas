@@ -4,6 +4,9 @@ package com.tvatlas.player.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -20,6 +23,20 @@ class ChannelPresentationTest {
     private val first = Stream("s1", "https://private.example/stream?token=fixture", "p1")
     private val second = Stream("s2", "https://private.example/other?token=fixture", "p2")
     private val profile = ProxyProfile("sub_internal_identifier", "香港节点", ProxyType.MIHOMO, "private.example", 443)
+
+    @Test fun everyChannelLogoUsesThemeSurfaceInsteadOfWhiteTiles() {
+        val names = listOf("CCTV1", "湖南卫视", "翡翠台", "ViuTV")
+        compose.setContent { AtlasTheme {
+            Row { names.forEachIndexed { index, name ->
+                ChannelArtwork(Channel("logo$index", name, "综合", streams = listOf(first)))
+            } }
+        } }
+        names.forEach { name ->
+            val pixels = compose.onNodeWithContentDescription("${name}频道标识", useUnmergedTree = true)
+                .captureToImage().toPixelMap()
+            assertEquals("$name logo background", colors.surface.toArgb(), pixels[pixels.width / 2, 1].toArgb())
+        }
+    }
 
     @Test fun defaultBrowseShowsArtworkAndCanSwitchRegion() {
         val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(first))

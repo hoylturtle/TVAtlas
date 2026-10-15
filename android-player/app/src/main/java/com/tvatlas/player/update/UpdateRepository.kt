@@ -86,7 +86,7 @@ class UpdateRepository(
             val verified = candidate.copy(assetApiUrl = if (apkId != null && apkId > 0) "$api/releases/assets/$apkId" else "")
             if (newest == null || verified.versionCode > newest.versionCode) newest = verified
         }
-        newest?.copy(checkComplete = complete) ?: throw UpdateException("暂未找到公开的测试版安装包，请打开仓库查看 Releases")
+        newest?.copy(checkComplete = complete) ?: throw UpdateException("暂未找到公开的安装包，请打开仓库查看 Releases")
     }
     private suspend fun read(url: String, optional: Boolean = false, stage: String, accept: String = "application/json"): JsonElement? {
         val request = Request.Builder().url(url).header("User-Agent", "TVAtlas-UpdateChecker")

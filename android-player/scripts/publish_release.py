@@ -1,4 +1,4 @@
-"""Publish a verified CI package atomically as a public GitHub testing release."""
+"""Publish a verified CI package atomically as a public GitHub release."""
 import hashlib
 import json
 import os
@@ -13,7 +13,8 @@ dist = root / "dist"
 info = json.loads((root / "release-info.json").read_text())
 assert info["coreVersion"] == json.loads((root / "mihomo-lock.json").read_text())["version"]
 tag = info["releaseTag"]
-assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+", tag)
+assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[0-9]+)?", tag)
+prerelease = "-beta." in tag
 assert tag.split("-beta.")[0] == "v" + info["versionName"]
 assert os.environ["GITHUB_REF"] == "refs/heads/main"
 repo = os.environ["GITHUB_REPOSITORY"]
@@ -67,13 +68,13 @@ if release and not release["draft"]:
         assert existing[key] == manifest[key], "Published version differs; increment version before publishing"
     assert re.fullmatch(r"[a-f0-9]{64}", existing["apkSha256"])
     assert existing["apkSize"] > 0
-    print("Existing public testing release verified:", release["html_url"])
+    print("Existing public release verified:", release["html_url"])
 else:
     if release is None:
         release = request("POST", api + "/releases", {
             "tag_name": tag, "target_commitish": commit,
-            "name": f"TVAtlas {info['versionName']} 测试版", "draft": True, "prerelease": True,
-            "body": info["notes"] + "\n\n直接下载 APK 安装，无需 GitHub 登录或解压。固定签名版可覆盖更新并保留配置。\n"
+            "name": f"TVAtlas {info['versionName']} {'测试版' if prerelease else '稳定版'}", "draft": True, "prerelease": prerelease,
+            "body": f"[下载 APK](https://github.com/{repo}/releases/download/{tag}/{apk.name})\n\n" + info["notes"] + "\n\n直接下载 APK 安装，无需 GitHub 登录或解压。固定签名版可覆盖更新并保留配置。\n"
                 "旧临时 debug 签名版本需要一次迁移安装。翡翠台官方线路仍为实验功能，受官方地区及 DRM 授权限制。\n\n"
                 f"APK SHA-256: `{digest}`\n\n签名、单元测试、Android 模拟器测试及覆盖安装检查通过后发布。",
         })
@@ -87,5 +88,5 @@ else:
         kind = "application/vnd.android.package-archive" if path.suffix == ".apk" else "application/octet-stream"
         request("POST", url, path.read_bytes(), kind)
         print("Uploaded release asset:", path.name)
-    published = request("PATCH", api + f"/releases/{release['id']}", {"draft": False, "prerelease": True})
-    print("Published public testing release:", published["html_url"])
+    published = request("PATCH", api + f"/releases/{release['id']}", {"draft": False, "prerelease": prerelease, "make_latest": "false" if prerelease else "true"})
+    print("Published public release:", published["html_url"])

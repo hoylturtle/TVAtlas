@@ -1199,8 +1199,10 @@ def validate():
     orange_cctv1 = orange.count("CCTV-1 综合")
     print(f"Standard CCTV-1 lines: {standard_cctv1}")
     print(f"Orange CCTV-1 lines  : {orange_cctv1}")
-    if standard_cctv1 != 1 or orange_cctv1 < 1:
-        print("ERROR: CCTV-1 primary missing/duplicated")
+    # build_playlist deliberately retains up to four CCTV routes in both outputs.
+    # Repeated channel names represent alternate streams, not duplicate primaries.
+    if not (1 <= standard_cctv1 <= 4 and 1 <= orange_cctv1 <= 4):
+        print("ERROR: CCTV-1 missing or exceeds four-stream limit")
         sys.exit(1)
     if orange_cctv1 < 2:
         print("WARN: no tested CCTV-1 backup available this run")

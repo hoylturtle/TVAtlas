@@ -1,11 +1,32 @@
 import contextlib
 import io
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 import build
 
 
 class PlaylistHealthTest(unittest.TestCase):
+    def test_validate_allows_cctv_backups_but_rejects_missing_or_excessive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            standard = Path(directory) / 'standard.m3u'
+            orange = Path(directory) / 'orange.m3u'
+            with patch.object(build, 'OUTPUT', standard), patch.object(build, 'ORANGE_OUTPUT', orange):
+                for count in (1, 2, 4, 0, 5):
+                    text = '#EXTM3U\n' + ''.join(
+                        f'#EXTINF:-1,CCTV-1 综合\nhttps://fixture.test/{n}\n' for n in range(count))
+                    if count == 0:
+                        text += '#EXTINF:-1,其他频道\nhttps://fixture.test/other\n'
+                    standard.write_text(text, encoding='utf-8')
+                    orange.write_text(text, encoding='utf-8')
+                    with self.subTest(count=count), contextlib.redirect_stdout(io.StringIO()):
+                        if count in (0, 5):
+                            with self.assertRaises(SystemExit):
+                                build.validate()
+                        else:
+                            build.validate()
+
     def entry(self, url, priority=1):
         return {"url": url.encode(), "source_id": "fixture", "priority": priority,
                 "extinf": b"#EXTINF:-1,fixture", "extras": []}
