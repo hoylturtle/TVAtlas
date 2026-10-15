@@ -303,15 +303,10 @@ def download_source(source):
 
 
 def get_name(extinf):
-
-    if b"," not in extinf:
+    try:
+        return split_extinf(extinf)[1].strip()
+    except ValueError:
         return b""
-
-    return (
-        extinf
-        .rsplit(b",", 1)[1]
-        .strip()
-    )
 
 
 def clean_text(value):
@@ -956,71 +951,33 @@ def probe_candidates(results):
     return results
 
 
-def rewrite_extinf(
-    extinf,
-    name,
-    group
-):
-
+def split_extinf(extinf):
+    # Some upstreams put a stray comma between duration and quoted attributes.
+    # Repair that precise form; commas inside quoted values belong to metadata.
     extinf = re.sub(
-        rb"(?i)cctv",
-        b"CCTV",
-        extinf
-    )
+        rb'(?i)^(#EXTINF:\s*-?\d+(?:\.\d+)?)\s*,\s*(?=(?:tvg-id|tvg-name|tvg-logo|group-title)\s*=\s*")',
+        rb'\1 ', extinf)
+    quoted = False
+    for index, value in enumerate(extinf):
+        if value == ord('"'):
+            quoted = not quoted
+        elif value == ord(',') and not quoted:
+            return extinf[:index], extinf[index + 1:]
+    raise ValueError("EXTINF is missing its title separator")
 
-    group_bytes = (
-        group.encode("utf-8")
-    )
 
-    name_bytes = (
-        name.encode("utf-8")
-    )
-
-    if re.search(
-        rb'group-title="[^"]*"',
-        extinf
-    ):
-
-        extinf = re.sub(
-            rb'group-title="[^"]*"',
-            (
-                b'group-title="'
-                + group_bytes
-                + b'"'
-            ),
-            extinf
-        )
-
+def rewrite_extinf(extinf, name, group):
+    metadata, _ = split_extinf(extinf)
+    group_attribute = b'group-title="' + group.encode("utf-8") + b'"'
+    if re.search(rb'group-title="[^"]*"', metadata):
+        metadata = re.sub(rb'group-title="[^"]*"', lambda _: group_attribute, metadata)
     else:
-
-        extinf = extinf.replace(
-            b"#EXTINF:-1",
-            (
-                b'#EXTINF:-1 '
-                b'group-title="'
-                + group_bytes
-                + b'"'
-            ),
-            1
-        )
-
-    metadata = (
-        extinf
-        .rsplit(b",", 1)[0]
-    )
-
-    # Upstream EPG metadata can be wrong even when the display name matches
-    # (we observed CCTV-1 carrying CCTV12 metadata). Prefer the curated TVAtlas
-    # display name over poisoned upstream tvg-name/tvg-id fields.
+        metadata += b" " + group_attribute
+    # Prefer curated CCTV names over conflicting upstream EPG IDs.
     if name.upper().startswith("CCTV-"):
         metadata = re.sub(rb'\s+tvg-name="[^"]*"', b"", metadata)
         metadata = re.sub(rb'\s+tvg-id="[^"]*"', b"", metadata)
-
-    return (
-        metadata
-        + b","
-        + name_bytes
-    )
+    return metadata + b"," + name.encode("utf-8")
 
 
 def match_channels(config, entries):
@@ -1174,7 +1131,10 @@ def validate():
             if line.startswith("#EXTINF:"):
                 if current is not None:
                     raise ValueError(f"missing URL after EXTINF: {path.name}")
-                current = line.rsplit(",", 1)[-1].strip()
+                metadata, title = split_extinf(line.encode("utf-8"))
+                if metadata + b"," + title != line.encode("utf-8"):
+                    raise ValueError(f"stray comma before EXTINF attributes: {path.name}")
+                current = title.decode("utf-8").strip()
             elif line.startswith("#"):
                 continue
             else:
