@@ -213,10 +213,17 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             { share -> model.cloudNetworkAction { controller.open(share) } },
                             { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
                             { model.cloudNetworkAction { controller.refresh() } },
-                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest, model::openVod)
+                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest, model::openVod, { tab = 1 })
                     }
-                    1 -> PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
-                        { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id })
+                    1 -> {
+                        val cloudCount = if (BuildConfig.BUILD_TYPE == "preview") {
+                            val cloud by model.cloudLibrary.state.collectAsStateWithLifecycle()
+                            cloud.shares.size
+                        } else null
+                        PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
+                        { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id }, cloudCount,
+                        { tab = 4; cloudImportRequest++ }, { tab = 4 })
+                    }
                     2 -> {
                         val target by model.playback.networkTarget.collectAsStateWithLifecycle()
                         val speed by model.playback.speed.collectAsStateWithLifecycle()
@@ -240,7 +247,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (tab == 1) TvTextButton(onClick = { pageMenuOpen = false; addPlaylist = true }) { Text("添加频道源 / 手机扫码") }
                 if (tab == 2) TvTextButton(onClick = { pageMenuOpen = false; addSubscription = true }) { Text("添加代理订阅") }
-                if (tab == 4) TvTextButton(onClick = { pageMenuOpen = false; cloudImportRequest++ }) { Text("导入网盘分享") }
+                if (tab == 4) TvTextButton(onClick = { pageMenuOpen = false; tab = 1 }) { Text("管理来源") }
                 if (tab == 3) TvTextButton(onClick = { pageMenuOpen = false; logsOpen = true }) { Text("调试日志") }
                 TvTextButton(onClick = { pageMenuOpen = false; tab = 0 }) { Text("返回直播") }
                 TvTextButton(onClick = { pageMenuOpen = false; exitPrompt = true }) { Text("退出应用") }

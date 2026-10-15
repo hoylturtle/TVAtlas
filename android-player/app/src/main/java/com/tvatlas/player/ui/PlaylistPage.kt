@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.layout.*
@@ -25,7 +26,8 @@ import com.tvatlas.player.storage.*
 
 @Composable internal fun PlaylistPage(library: Library, busy: Boolean, onAdd: () -> Unit,
     onRefresh: (Playlist) -> Unit, onRefreshBuiltIn: () -> Unit, feedback: String? = null,
-    onEdit: (Playlist) -> Unit = {}, onEnable: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {}) {
+    onEdit: (Playlist) -> Unit = {}, onEnable: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {},
+    cloudShareCount: Int? = null, onImportCloud: () -> Unit = {}, onBrowseCloud: () -> Unit = {}) {
     var details by remember { mutableStateOf(false) }
     var inspected by remember { mutableStateOf<String?>(null) }
     val tv = atlasTv()
@@ -37,7 +39,7 @@ import com.tvatlas.player.storage.*
     val timestamps = builtIn.filter { it.enabled }.map { it.lastUpdatedAt }
     val updatedAt = if (timestamps.isNotEmpty() && timestamps.all { it != null }) timestamps.filterNotNull().minOrNull() else null
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        AtlasHeader("频道源", "默认频道与自己的订阅，统一管理") {
+        AtlasHeader("频道源", if (cloudShareCount != null) "频道订阅与网盘分享，统一管理" else "默认频道与自己的订阅，统一管理") {
             if (tv) TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -63,6 +65,16 @@ import com.tvatlas.player.storage.*
                                 TvTextButton(onClick = onRefreshBuiltIn, enabled = !busy) { Text(if (busy) "处理中…" else "刷新订阅", style = MaterialTheme.typography.labelMedium) }
                             }
                             if (feedback != null) Text(feedback, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                if (cloudShareCount != null) item(key = "cloud-shares") {
+                    AtlasPanel(Modifier.fillMaxWidth()) {
+                        Text("网盘分享", style = MaterialTheme.typography.titleMedium)
+                        Text("已导入 $cloudShareCount 个分享 · 在影视页浏览文件夹", style = MaterialTheme.typography.bodySmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TvOutlinedButton(onClick = onImportCloud) { Text("导入网盘分享 / 手机扫码") }
+                            TvTextButton(onClick = onBrowseCloud) { Text("打开影视") }
                         }
                     }
                 }

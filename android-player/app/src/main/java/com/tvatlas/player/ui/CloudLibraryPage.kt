@@ -3,6 +3,10 @@ package com.tvatlas.player.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +24,7 @@ import com.tvatlas.player.transfer.TransferKind
     onImport: (String, String, String, () -> Unit) -> Unit, onOpen: (CloudShare) -> Unit,
     onEnter: (CloudFile) -> Unit, onBack: () -> Unit, onRefresh: () -> Unit, onMore: () -> Unit,
     onRemove: (CloudShare) -> Unit, onWebsite: (CloudShare) -> Unit, importRequest: Int = 0,
-    onDirectVideo: (String, String) -> Unit = { _, _ -> }) {
+    onDirectVideo: (String, String) -> Unit = { _, _ -> }, onManageSources: () -> Unit = {}) {
     var videoPhoneInput by remember { mutableStateOf(false) }
     var directVideo by remember { mutableStateOf(false) }
     var videoUrl by remember { mutableStateOf("") }
@@ -38,77 +42,129 @@ import com.tvatlas.player.transfer.TransferKind
     var videosOnly by remember { mutableStateOf(false) }
     val directoryScroll = remember { LinkedHashMap<String, LazyListState>() }
     var selectedFile by remember { mutableStateOf<CloudFile?>(null) }
-    BackHandler(state.selected != null && !importing && !phoneInput && deleting == null && selectedFile == null && !showAuthorization && !directVideo && !videoPhoneInput, onBack)
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        AtlasHeader("影视 · 网盘分享", "独立预览 · 夸克 / 百度网盘 / 115")
-        if (state.selected == null) Text("网盘支持分享保存与目录浏览，账号授权和原生取流尚未接入；目录可见不代表可以播放。已有视频直链可通过点播入口播放与续播。",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (state.selected == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvButton(onClick = { importing = true }) { Text("导入分享") }
-            TvOutlinedButton(onClick = { phoneInput = true }) { Text("手机扫码") }
-            TvTextButton(onClick = { showAuthorization = true }) { Text("账号授权") }
-            TvOutlinedButton(onClick = { directVideo = true }) { Text("视频直链点播") }
+    val current = state.selected
+    var pathOpen by remember(current?.key) { mutableStateOf(false) }
+    BackHandler(state.selected != null && !importing && !phoneInput && deleting == null && selectedFile == null && !showAuthorization && !directVideo && !videoPhoneInput && !pathOpen, onBack)
+    BoxWithConstraints(Modifier.fillMaxSize().padding(16.dp)) {
+        val split = maxWidth >= 700.dp && maxWidth > maxHeight
+        val sidebarWidth = (maxWidth * .29f).coerceIn(220.dp, 300.dp)
+        val navigation: @Composable ColumnScope.() -> Unit = {
+            AtlasHeader("影视 · 网盘分享", "夸克 / 百度网盘 / 115")
+            if (state.shares.isNotEmpty()) {
+                Text("已导入分享", style = MaterialTheme.typography.labelLarge)
+                state.shares.forEach { share ->
+                    TvTextButton(onClick = { onOpen(share) }, modifier = Modifier.fillMaxWidth()
+                        .selectionOutline(share.key == current?.key)) {
+                        Text(share.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            if (current != null) {
+                Text(current.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(state.folders.joinToString(" / ") { it.name }, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TvTextButton(onClick = { pathOpen = true }) { Text("查看完整路径") }
+                TvOutlinedButton(onClick = onBack) { Text(if (state.folders.size > 1) "上一级" else "返回分享") }
+                TvTextButton(onClick = onRefresh, enabled = !state.loading) { Text("重新读取") }
+                TvTextButton(onClick = { onWebsite(current) }) { Text("打开官网") }
+                TvTextButton(onClick = onManageSources) { Text("管理来源") }
+            }
         }
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        val current = state.selected
         if (current == null) {
-            if (state.shares.isEmpty()) Text("还没有分享，粘贴完整分享文字即可识别链接和提取码。", style = MaterialTheme.typography.bodyMedium)
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.shares, key = { it.key }) { share ->
-                    AtlasPanel(Modifier.fillMaxWidth()) {
-                        Text(share.name, style = MaterialTheme.typography.titleMedium)
-                        Text("${share.provider.label} · 保存在本机", style = MaterialTheme.typography.bodySmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val overview: @Composable ColumnScope.() -> Unit = {
+                AtlasHeader("影视 · 网盘分享", "已导入的分享与文件夹")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TvOutlinedButton(onClick = onManageSources) { Text("管理来源") }
+                    TvTextButton(onClick = { showAuthorization = true }) { Text("账号授权") }
+                    TvOutlinedButton(onClick = { directVideo = true }) { Text("视频直链点播") }
+                }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (state.shares.isEmpty()) Text("暂无已导入分享，请到频道源添加网盘分享。", style = MaterialTheme.typography.bodyMedium)
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(state.shares, key = { it.key }) { share ->
+                        AtlasPanel(Modifier.fillMaxWidth()) {
+                            Text(share.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(share.provider.label, style = MaterialTheme.typography.bodySmall)
                             TvTextButton(onClick = { onOpen(share) }) { Text(if (share.provider == CloudProvider.BAIDU) "查看接入状态" else "浏览目录") }
-                            TvTextButton(onClick = { onWebsite(share) }) { Text("打开官网") }
                             TvTextButton(onClick = { deleting = share }) { Text("移除记录") }
                         }
                     }
                 }
             }
+            if (split) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(Modifier.width(sidebarWidth).fillMaxHeight().focusGroup(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp), content = overview)
+                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("文件夹内容", style = MaterialTheme.typography.titleLarge)
+                    Text("从左侧选择已导入分享，读取后在这里浏览文件。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp), content = overview)
         } else {
-            Text(current.name, style = MaterialTheme.typography.titleMedium)
-            Text(state.folders.joinToString(" / ") { it.name }, style = MaterialTheme.typography.bodySmall, maxLines = 2)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TvTextButton(onClick = onBack) { Text(if (state.folders.size > 1) "上一级" else "返回分享") }
-                TvTextButton(onClick = onRefresh, enabled = !state.loading) { Text("重新读取") }
-                TvTextButton(onClick = { onWebsite(current) }) { Text("打开官网") }
-                TvTextButton(onClick = { importing = true }) { Text("导入分享") }
-            }
-            val visibleFiles = remember(state.files, query, videosOnly) {
-                state.files.filter { (it.directory || !videosOnly || it.video) && it.name.contains(query.trim(), ignoreCase = true) }
-            }
-            OutlinedTextField(query, { query = it.take(120) }, modifier = Modifier.fillMaxWidth(),
-                label = { Text("搜索当前已加载文件") }, singleLine = true,
-                trailingIcon = { if (query.isNotEmpty()) TvTextButton(onClick = { query = "" }) { Text("清除") } })
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("${visibleFiles.size} 项 / 已加载 ${state.files.size} 项", style = MaterialTheme.typography.bodySmall)
-                TvTextButton(onClick = { videosOnly = !videosOnly }) { Text(if (videosOnly) "显示全部文件" else "只看视频和文件夹") }
-            }
-            val scrollKey = current.key + ":" + state.folders.joinToString("/") { it.id }
-            val scroll = directoryScroll.getOrPut(scrollKey) { LazyListState() }
-            while (directoryScroll.size > 12) directoryScroll.remove(directoryScroll.keys.first())
-            LazyColumn(Modifier.weight(1f), state = scroll, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!state.loading && state.error == null && visibleFiles.isEmpty()) item {
-                    Text(if (state.files.isEmpty()) "这个文件夹暂未返回文件" else "已加载文件中没有匹配项；可清除筛选或加载更多")
+            val browser: @Composable ColumnScope.() -> Unit = {
+                Text(state.folders.lastOrNull()?.name ?: "分享根目录", style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                val visibleFiles = remember(state.files, query, videosOnly) {
+                    state.files.filter { (it.directory || !videosOnly || it.video) && it.name.contains(query.trim(), ignoreCase = true) }
                 }
-                items(visibleFiles, key = { "${it.directory}:${it.id}" }) { file ->
-                    TvTextButton(onClick = { if (file.directory) onEnter(file) else selectedFile = file }, enabled = !state.loading,
-                        modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.weight(1f)) {
-                            Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(if (file.directory) "文件夹" else if (file.video) "视频 · 原生播放待接入" else "文件",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text(if (file.directory) "›" else "详情")
+                OutlinedTextField(query, { query = it.take(120) }, modifier = Modifier.fillMaxWidth(),
+                    label = { Text("搜索当前已加载文件") }, singleLine = true,
+                    trailingIcon = { if (query.isNotEmpty()) TvTextButton(onClick = { query = "" }) { Text("清除") } })
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("${visibleFiles.size} 项 / 已加载 ${state.files.size} 项", style = MaterialTheme.typography.bodySmall)
+                    TvTextButton(onClick = { videosOnly = !videosOnly }) { Text(if (videosOnly) "显示全部文件" else "只看视频和文件夹") }
+                }
+                val scrollKey = current.key + ":" + state.folders.joinToString("/") { it.id }
+                val scroll = directoryScroll.getOrPut(scrollKey) { LazyListState() }
+                while (directoryScroll.size > 12) directoryScroll.remove(directoryScroll.keys.first())
+                LazyColumn(Modifier.weight(1f).testTag("cloud-files"), state = scroll, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!state.loading && state.error == null && visibleFiles.isEmpty()) item {
+                        Text(if (state.files.isEmpty()) "这个文件夹暂未返回文件" else "已加载文件中没有匹配项；可清除筛选或加载更多")
                     }
+                    items(visibleFiles, key = { "${it.directory}:${it.id}" }) { file ->
+                        TvTextButton(onClick = { if (file.directory) onEnter(file) else selectedFile = file }, enabled = !state.loading,
+                            modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.weight(1f)) {
+                                Text(file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(if (file.directory) "文件夹" else if (file.video) "视频 · 原生播放待接入" else "文件",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(if (file.directory) "›" else "详情")
+                        }
+                    }
+                    if (state.nextOffset != null) item { TvOutlinedButton(onClick = onMore, enabled = !state.loading) { Text(if (state.error != null) "重试加载更多" else "加载更多") } }
                 }
-                if (state.nextOffset != null) item { TvOutlinedButton(onClick = onMore, enabled = !state.loading) { Text(if (state.error != null) "重试加载更多" else "加载更多") } }
+
+            }
+            if (split) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(Modifier.width(sidebarWidth).fillMaxHeight()
+                    .testTag("cloud-navigation").focusGroup().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp), content = navigation)
+                Column(Modifier.weight(1f).fillMaxHeight().testTag("cloud-browser").focusGroup(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp), content = browser)
+            } else Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(current.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TvTextButton(onClick = onBack) { Text(if (state.folders.size > 1) "上一级" else "返回分享") }
+                    TvTextButton(onClick = { pathOpen = true }) { Text("路径／操作") }
+                }
+                browser()
             }
         }
     }
+    if (pathOpen && current != null) AlertDialog(onDismissRequest = { pathOpen = false },
+        title = { Text("当前路径") }, text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(state.folders.joinToString(" / ") { it.name })
+                TvTextButton(onClick = { pathOpen = false; onRefresh() }, enabled = !state.loading) { Text("重新读取") }
+                TvTextButton(onClick = { pathOpen = false; onWebsite(current) }) { Text("打开官网") }
+                TvTextButton(onClick = { pathOpen = false; onManageSources() }) { Text("管理来源") }
+            }
+        }, confirmButton = { TvTextButton(onClick = { pathOpen = false }) { Text("关闭") } })
     if (directVideo) AlertDialog(onDismissRequest = { directVideo = false; videoUrl = ""; videoTitle = ""; videoError = null },
         title = { Text("视频直链点播") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -142,6 +198,7 @@ import com.tvatlas.player.transfer.TransferKind
         }, confirmButton = { TvTextButton(onClick = { showAuthorization = false }) { Text("知道了") } })
     if (importing) AlertDialog(onDismissRequest = { importing = false; text = ""; code = "" }, title = { Text("导入网盘分享") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TvOutlinedButton(onClick = { importing = false; phoneInput = true }) { Text("手机扫码导入") }
             OutlinedTextField(name, { name = it.take(80) }, label = { Text("名称（可选）") }, singleLine = true)
             OutlinedTextField(text, { text = it.take(8192) }, label = { Text("完整分享文字或链接") }, maxLines = 5)
             OutlinedTextField(code, { code = it.take(4) }, label = { Text("提取码（可选，用于修正识别结果）") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
