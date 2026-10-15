@@ -9,6 +9,11 @@ plugins {
 }
 val mihomoVersion = groovy.json.JsonSlurper().parse(file("../mihomo-lock.json"))
     .let { (it as Map<*, *>)["version"] as String }
+val previewRun = providers.environmentVariable("GITHUB_RUN_NUMBER").orElse("0").get().toInt()
+val previewAttempt = providers.environmentVariable("GITHUB_RUN_ATTEMPT").orElse("1").get()
+val previewRevision = providers.environmentVariable("GITHUB_SHA").orElse("local").get().take(7)
+require(previewRun in 0..2_000_000_000)
+val previewId = if (previewRun == 0) "local" else "$previewRun.$previewAttempt"
 val signingFile = System.getenv("TVATLAS_SIGNING_PROPERTIES")?.let { file(it) }
 val releaseSigning = Properties().apply {
     if (signingFile != null) signingFile.inputStream().use { load(it) }
@@ -18,7 +23,7 @@ android {
     testBuildType = providers.gradleProperty("tvatlasTestBuildType").orElse("debug").get()
     compileSdk = 35
     defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("44").get().toInt(); versionName = "1.0.1"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; manifestPlaceholders["appLabel"] = "TVAtlas Player" }
-    defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\"") }
+    defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\""); buildConfigField("String", "PREVIEW_ID", "\"\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {
             storeFile = file(requireNotNull(releaseSigning.getProperty("storeFile")))
@@ -33,8 +38,9 @@ android {
         create("preview") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".preview"
-            versionNameSuffix = "-next"
-            manifestPlaceholders["appLabel"] = "TVAtlas Preview"
+            versionNameSuffix = "-preview.$previewId-$previewRevision"
+            buildConfigField("String", "PREVIEW_ID", "\"$previewId\"")
+            manifestPlaceholders["appLabel"] = "TVAtlas Preview $previewId"
             matchingFallbacks += listOf("debug")
             if (signingFile != null) signingConfig = signingConfigs.getByName("tvatlasRelease")
         }
@@ -97,4 +103,8 @@ dependencies {
 // Both variants export the same Room schema; serialize exports in combined CI builds.
 tasks.matching { it.name == "kspReleaseKotlin" }.configureEach {
     mustRunAfter("kspDebugKotlin")
+}
+
+androidComponents.onVariants(androidComponents.selector().withBuildType("preview")) { variant ->
+    variant.outputs.forEach { it.versionCode.set(1_000_000 + previewRun) }
 }

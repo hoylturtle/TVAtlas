@@ -42,8 +42,12 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
     Color(0xFF11101C), Color(0xFF1D172B), Color(0xFF10101A))))
 
 @Composable internal fun AtlasBrand(modifier: Modifier = Modifier) {
-    Text(buildAnnotatedString { append("TV"); withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Atlas") } },
-        modifier, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Column(modifier) {
+        Text(buildAnnotatedString { append("TV"); withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Atlas") } },
+            color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview") Text("预览 #${com.tvatlas.player.BuildConfig.PREVIEW_ID}",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
 }
 @Composable internal fun AtlasHeader(title: String, subtitle: String, actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {

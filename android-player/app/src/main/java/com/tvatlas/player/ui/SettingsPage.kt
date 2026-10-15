@@ -33,7 +33,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}, interfaceContent: @Composable () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -101,7 +101,9 @@ import com.tvatlas.player.update.*
             }
             if (category == 0) playbackContent()
             if (category == 1 && BuildConfig.BUILD_TYPE == "preview") SettingsCard {
-                Text("独立预览版", style = MaterialTheme.typography.titleMedium)
+                Text("独立预览版 #${BuildConfig.PREVIEW_ID}", style = MaterialTheme.typography.titleMedium)
+                Text("版本：${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）", style = MaterialTheme.typography.bodySmall)
+                Text("当前布局识别：${if (tv) "电视" else "手机／平板"}", style = MaterialTheme.typography.bodySmall)
                 Text("可与正式版共存，数据相互独立。此版本不连接正式版更新通道。")
             }
             if (category == 1 && BuildConfig.BUILD_TYPE != "preview") SettingsCard {
@@ -167,6 +169,7 @@ import com.tvatlas.player.update.*
                 Text("可查看、复制或导出日志，便于排查问题。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (category == 2) SettingsCard {
+                interfaceContent()
                 Text("遥控器操作", style = MaterialTheme.typography.titleMedium)
                 AtlasKeyRow("↑ ↓", "选择频道", "上下移动焦点；播放时上下换台")
                 AtlasKeyRow("← →", "切换区域", "在导航、列表与详情间移动")

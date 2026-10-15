@@ -87,12 +87,17 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 }
 
 @Composable fun PlayerApp(model: PlayerViewModel) {
+    val options by model.options.collectAsStateWithLifecycle()
+    val applicationContext = LocalContext.current
+    val systemTelevision = (applicationContext.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+        applicationContext.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
+        applicationContext.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION)
+    CompositionLocalProvider(LocalTvMode provides options.displayMode.television(systemTelevision)) {
     AtlasTheme {
         val pageMemory = rememberSaveableStateHolder()
         val channelMemory = rememberSaveableStateHolder()
         val library by model.library.collectAsStateWithLifecycle()
         val status by model.playback.status.collectAsStateWithLifecycle()
-        val options by model.options.collectAsStateWithLifecycle()
         val recent by model.recent.collectAsStateWithLifecycle()
         val pendingPlay by model.pendingPlay.collectAsStateWithLifecycle()
         val pendingDownload by model.pendingDownload.collectAsStateWithLifecycle()
@@ -113,7 +118,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val config = LocalConfiguration.current
-        val tv = (context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+        val tv = atlasTv()
         val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
         val wide = tv || (windowWidth >= 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -160,7 +165,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             }
         }
         PlaybackOrientation(immersive, tv)
-        PlaybackSystemBars(immersive)
+        PlaybackSystemBars(immersive || tv)
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
@@ -248,7 +253,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     }
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") })
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, interfaceContent = { DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
                 }
                 }
                 }
@@ -305,6 +310,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 RouteRecordSummary(detail, library, subscriptions, observations)
             })
     }
+}
 }
 
 @Composable internal fun ChannelList(library: Library, status: PlaybackStatus, tv: Boolean, modifier: Modifier,
