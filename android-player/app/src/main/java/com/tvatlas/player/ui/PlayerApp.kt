@@ -312,6 +312,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     favorites: Set<String> = emptySet(), recent: List<String> = emptyList(), onFavorite: (Channel) -> Unit = {},
     programme: @Composable (Channel) -> Unit = {}, autoExpand: Boolean = false,
     allowArtworkNetwork: () -> Boolean = { false }, searchRequest: Int = 0) {
+    if (tv) {
+        TvChannelBrowser(library, status, modifier, onPlay, onDetails, onAdd, favorites, recent, onFavorite, programme, allowArtworkNetwork, searchRequest)
+        return
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var expanded by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var mode by rememberSaveable { mutableIntStateOf(0) }

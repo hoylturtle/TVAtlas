@@ -37,10 +37,10 @@ class RoutingPageTest {
         compose.setContent { MaterialTheme { CompositionLocalProvider(LocalTvMode provides true) {
             RoutingPage(library, {}, {}, {}, {}, subscriptions, false, {}, {}, {}, {})
         } } }
-        compose.onNodeWithText("节点详情").assertIsDisplayed()
+        compose.onNodeWithText("节点详情").assertDoesNotExist()
         compose.onNodeWithText("美国节点").performClick()
         compose.onAllNodesWithText("美国节点").assertCountEquals(2)
-        compose.onNodeWithText("暂无同地区备用节点").assertIsDisplayed()
+        compose.onNodeWithText("暂无同地区备用节点").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("private.example", substring = true).assertDoesNotExist()
     }
     @Test fun phoneNodesAndSubscriptionManagementRemainReachable() {

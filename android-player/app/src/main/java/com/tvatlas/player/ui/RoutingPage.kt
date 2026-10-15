@@ -3,10 +3,15 @@ package com.tvatlas.player.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusChanged
@@ -32,6 +37,7 @@ import com.tvatlas.player.storage.*
     trafficContent: @Composable () -> Unit = {}, currentTarget: RouteTarget? = null, currentSpeed: Long = 0, currentUsage: Map<String, Long> = emptyMap()) {
     var section by rememberSaveable { mutableIntStateOf(if (library.profiles.isEmpty()) 0 else 1) }
     val tv = atlasTv()
+    val sectionMemory = rememberSaveableStateHolder()
     var inspectedNode by rememberSaveable { mutableStateOf<String?>(null) }
     var nodeDialog by remember { mutableStateOf(false) }
     var nodeRegion by rememberSaveable { mutableStateOf<String?>(null) }
@@ -46,13 +52,23 @@ import com.tvatlas.player.storage.*
         { val sample = nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
         { nodeHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    if (tv) Column(Modifier.width(154.dp).fillMaxHeight().focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("代理与路由", style = MaterialTheme.typography.titleMedium)
+        listOf("订阅", "节点", "规则", "流量", "内核").forEachIndexed { index, label ->
+            TvTextButton(onClick = { section = index; nodeSubscription = null; inspectedNode = null },
+                modifier = Modifier.fillMaxWidth().selectionOutline(section == index).testTag("routing-section:$index")) { Text(label) }
+        }
+        TvOutlinedButton(onClick = onSubscribe, enabled = !busy) { Text("添加订阅") }
+    }
     Column(Modifier.weight(1f)) {
         AtlasHeader("代理与路由", "地区自动匹配 · 低延迟优先 · 失败回退") {
             TvTextButton(onClick = onSubscribe, enabled = !busy) { Text("＋ 订阅") }
         }
-        AtlasTabs(listOf("订阅", "节点", "规则", "流量", "内核"), section) { section = it; nodeSubscription = null; inspectedNode = null }
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)) {
-        if (!tv || section != 1) item {
+        if (!tv) AtlasTabs(listOf("订阅", "节点", "规则", "流量", "内核"), section) { section = it; nodeSubscription = null; inspectedNode = null }
+        sectionMemory.SaveableStateProvider(section) {
+        LazyVerticalGrid(columns = if (tv && section == 1) GridCells.Adaptive(180.dp) else GridCells.Fixed(1),
+            modifier = Modifier.weight(1f).testTag("routing-content"), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)) {
+        if (!tv || section != 1) item(span = { GridItemSpan(maxLineSpan) }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("● 地区自动路由", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
@@ -61,8 +77,8 @@ import com.tvatlas.player.storage.*
             }
         }
         if (section == 0) {
-            if (subscriptions.isEmpty()) item { Text("还没有代理订阅\n添加 Clash / Mihomo YAML 订阅后，节点会显示在“节点”页。", style = MaterialTheme.typography.bodyMedium) }
-            items(subscriptions, key = { "subscription:${it.id}" }) { sub ->
+            if (subscriptions.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("还没有代理订阅\n添加 Clash / Mihomo YAML 订阅后，节点会显示在“节点”页。", style = MaterialTheme.typography.bodyMedium) }
+            gridItems(subscriptions, key = { "subscription:${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { sub ->
                 var menu by remember { mutableStateOf(false) }
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -91,7 +107,7 @@ import com.tvatlas.player.storage.*
                     }
                 }
             }
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("订阅下载网络", style = MaterialTheme.typography.titleMedium)
@@ -105,7 +121,7 @@ import com.tvatlas.player.storage.*
                 }
             }
         } else if (section == 1) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 if (nodeSubscription != null) {
                     Text(subscriptions.firstOrNull { it.id == nodeSubscription }?.name ?: "订阅节点", style = MaterialTheme.typography.titleMedium)
                     TvTextButton(onClick = { nodeSubscription = null }) { Text("查看所有订阅节点") }
@@ -121,27 +137,26 @@ import com.tvatlas.player.storage.*
                 }
                 if (nodeSearchOpen) OutlinedTextField(query, { query = it; inspectedNode = null }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索节点名称") })
             }
-            if (shownNodes.isEmpty()) item { Text("没有符合条件的节点") }
-            items(shownNodes, key = { it.id }) { p ->
-                val selectedNode = tv && (inspectedNode ?: shownNodes.firstOrNull()?.id) == p.id
-                val nodeColor = if (selectedNode) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer
-                Card(onClick = { inspectedNode = p.id; nodeDialog = !tv },
-                    modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.hasFocus) inspectedNode = p.id }.tvFocusOutline(),
-                    colors = CardDefaults.cardColors(containerColor = nodeColor)) {
-                    ListItem(colors = ListItemDefaults.colors(containerColor = nodeColor, supportingColor = if (selectedNode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
-                        headlineContent = { Text(p.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = { Column {
-                            Text("${subscriptions.firstOrNull { it.id == p.subscriptionId }?.name ?: "手动节点"} · ${p.type.name} · ${if (p.enabled) "已启用" else "已停用"}",
-                                style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val sample = nodeHealth[p.id]
-                            Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期测速 / 连接失败"; else -> "HTTPS 延迟：${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
-                        } },
-                        trailingContent = { Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) })
+            if (shownNodes.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("没有符合条件的节点") }
+            gridItems(shownNodes, key = { it.id }) { p ->
+                val active = currentTarget?.profile == p.id
+                Card(onClick = { inspectedNode = p.id; nodeDialog = true },
+                    modifier = Modifier.fillMaxWidth().then(if (tv) Modifier.height(152.dp) else Modifier)
+                        .testTag("proxy-node:${p.id}").tvFocusOutline(),
+                    colors = CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer)) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(p.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(subscriptions.firstOrNull { it.id == p.subscriptionId }?.name ?: "手动节点",
+                            style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${p.type.name} · ${if (p.enabled) "已启用" else "已停用"}${if (active) " · 使用中" else ""}", style = MaterialTheme.typography.labelSmall)
+                        val sample = nodeHealth[p.id]
+                        Text(when { sample == null -> "未测速"; !sample.fresh(System.currentTimeMillis()) -> "测速已过期"; sample.delayMs == null -> "近期连接失败"; else -> "延迟 ${sample.delayMs} ms" }, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
-            item { TvOutlinedButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
+            item(span = { GridItemSpan(maxLineSpan) }) { TvOutlinedButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
         } else if (section == 2) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Text("代理规则", style = MaterialTheme.typography.titleMedium)
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -161,7 +176,7 @@ import com.tvatlas.player.storage.*
                     TvOutlinedButton(onClick = onExport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导出当前规则") }
                 }
             }
-            items(ruleFiles, key = { "rulefile:${it.id}" }) { file ->
+            gridItems(ruleFiles, key = { "rulefile:${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { file ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp)) {
                         RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary), selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = if (tv) Modifier.tvFocusOutline() else Modifier)
@@ -174,43 +189,21 @@ import com.tvatlas.player.storage.*
                     }
                 }
             }
-            items(library.rules.rules, key = { "rule:${it.id}" }) { rule ->
+            gridItems(library.rules.rules, key = { "rule:${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { rule ->
                 ListItem(headlineContent = { Text(rule.id) }, supportingContent = { Text("匹配：${matchLabel(rule.match)}") },
                     trailingContent = { Text("路由：${routeLabel(rule.route, library.profiles)}") })
             }
         }
-        if (section == 3) item { trafficContent() }
-        if (section == 4) item {
+        if (section == 3) item(span = { GridItemSpan(maxLineSpan) }) { trafficContent() }
+        if (section == 4) item(span = { GridItemSpan(maxLineSpan) }) {
             CoreManagement(coreInfo, onCoreAppUpdate)
         }
 
     }
     }
-    if (tv) {
-        AtlasPanel(Modifier.width(280.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
-            when (section) {
-                1 -> NodeInspector(library.profiles.firstOrNull { it.id == inspectedNode }
-                    ?: shownNodes.firstOrNull(), library, subscriptions, nodeHealth, currentTarget, currentSpeed, currentUsage, busy, onEnable, onEdit)
-                2 -> {
-                    Text("当前规则", style = MaterialTheme.typography.titleLarge)
-                    Text(ruleFiles.firstOrNull { it.active }?.name ?: "内置地区规则", color = MaterialTheme.colorScheme.secondary)
-                    Text("大陆 → 直连\n港澳 → 香港\n台湾 → 台湾\n日本 → 日本\n韩国 → 韩国", style = MaterialTheme.typography.bodyMedium)
-                    HorizontalDivider()
-                    Text("只启用一个规则文件；自定义未匹配时保留内置规则。", style = MaterialTheme.typography.bodySmall)
-                }
-                else -> {
-                    Text("当前路由", style = MaterialTheme.typography.titleLarge)
-                    Text(currentTarget?.let { playbackRouteLabel(it, library.profiles, subscriptions) } ?: "尚未播放频道", style = MaterialTheme.typography.bodyMedium)
-                    Text("${subscriptions.size} 个订阅 · ${library.profiles.count { it.enabled }} 个已启用节点", style = MaterialTheme.typography.bodySmall)
-                    HorizontalDivider()
-                    Text("内核 ${BuildConfig.MIHOMO_VERSION}", style = MaterialTheme.typography.bodyMedium)
-                    Text("内核随签名 APK 更新", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
     }
     }
-    if (!tv && nodeDialog) AlertDialog(onDismissRequest = { nodeDialog = false },
+    if (nodeDialog) AlertDialog(onDismissRequest = { nodeDialog = false },
         title = { Text("节点详情") }, text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 NodeInspector(library.profiles.firstOrNull { it.id == inspectedNode }, library, subscriptions, nodeHealth, currentTarget, currentSpeed, currentUsage, busy, onEnable, onEdit)
