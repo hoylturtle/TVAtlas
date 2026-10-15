@@ -8,6 +8,9 @@ data class PlaybackFailure(val kind: FailureKind, val httpStatus: Int? = null) {
 }
 class FailoverSession(plan: RoutePlan) {
     private val remaining = plan.attempts.toMutableList()
+    val candidateCount = plan.attempts.size
+    var attemptCount = 0
+        private set
     var current: RouteAttempt? = null
         private set
     var stopped = false
@@ -15,6 +18,7 @@ class FailoverSession(plan: RoutePlan) {
     fun start(): RouteAttempt? = next()
     private fun next(): RouteAttempt? {
         current = if (stopped || remaining.isEmpty()) null else remaining.removeAt(0)
+        if (current != null) attemptCount++
         return current
     }
     fun fail(failure: PlaybackFailure): RouteAttempt? {

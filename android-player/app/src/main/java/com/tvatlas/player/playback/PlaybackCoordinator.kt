@@ -42,6 +42,7 @@ data class PlaybackStatus(
     val channelId: String? = null, val message: String = "添加播放列表后，选择频道开始观看",
     val attempt: RouteAttempt? = null, val lastAttempt: RouteAttempt? = null, val error: String? = null, val successAt: Long? = null,
     val loading: Boolean = false, val selectedStreamId: String? = null,
+    val attemptNumber: Int = 0, val candidateCount: Int = 0,
 )
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -60,6 +61,14 @@ class PlaybackCoordinator(
     val networkTarget = _networkTarget.asStateFlow()
     private val _status = MutableStateFlow(PlaybackStatus())
     val status = _status.asStateFlow()
+    private val observationSession = java.util.UUID.randomUUID().toString()
+    private val reliability = RouteReliabilityStore(java.io.File(context.noBackupFilesDir, "playback/route-observations.json"))
+    val routeRecords = reliability.state
+    private suspend fun observe(channelId: String, route: RouteAttempt, success: Boolean, failure: FailureKind? = null) {
+        try { reliability.record(RouteObservation(channelId, route.streamId, route.target, System.currentTimeMillis(), success, failure, "$observationSession:$generation:${session?.attemptCount}")) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { log?.event("WARN", "ROUTE_HISTORY", "local history unavailable; playback continues") }
+    }
     private var session: FailoverSession? = null
     private var watcher: Job? = null
     private var preparation: Job? = null
@@ -90,7 +99,12 @@ class PlaybackCoordinator(
             }.map { it.id }.toSet()
             val orderedChannel = channel.copy(streams = channel.streams.sortedBy { if (it.id in officialIds) 0 else 1 })
             val preferred = history?.takeIf { streamId != null || officialIds.isEmpty() || it.streamId in officialIds }
-            val plan = resolver.channelPlan(orderedChannel, preferred, streamId)
+            val basePlan = resolver.channelPlan(orderedChannel, preferred, streamId)
+            val observations = try { reliability.load() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { emptyList() }
+            if (token != generation) return@launch
+            val plan = RouteReliability.order(basePlan, observations, channel.id, System.currentTimeMillis())
             if (plan.attempts.isEmpty()) _status.value = _status.value.copy(error = "该地区没有启用的匹配节点，请导入对应地区节点或手动选择线路")
             val newSession = FailoverSession(plan)
             session = newSession
@@ -115,6 +129,7 @@ class PlaybackCoordinator(
         val official = MyTvSuperSource.recognizes(stream.url) || viu
         log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} proxy=${pool.label(route.target)} rule=${route.matchedRule} official=$official")
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null, loading = true,
+            attemptNumber = session?.attemptCount ?: 0, candidateCount = session?.candidateCount ?: 0,
             message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
         val source = if (official) try {
             if (viu) com.tvatlas.player.source.ViuTvSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
@@ -129,6 +144,7 @@ class PlaybackCoordinator(
             val failure = (e as? SourceResolutionException)?.failure ?: PlaybackFailure(
                 if (e is IOException) FailureKind.NETWORK else FailureKind.MANIFEST)
             if (failure.kind == FailureKind.NETWORK) onNodeFailure(route.target)
+            observe(channel.id, route, false, failure.kind)
             repository.recordFailure(channel.id, route, reason)
             if (token == generation) attempt(channel, resolver, session?.fail(failure), token)
             return
@@ -234,6 +250,7 @@ class PlaybackCoordinator(
             _status.value = _status.value.copy(message = "连接暂不可用，正在尝试其他线路", error = reason)
             preparation = scope.launch {
                 if (token != generation) return@launch
+                observe(channel.id, route, false, failure.kind)
                 repository.recordFailure(channel.id, route, reason)
                 if (token == generation) {
                     val refresh = official && failure.httpStatus in listOf(401, 403) && renewed.add(route)
@@ -298,6 +315,7 @@ class PlaybackCoordinator(
                 if (progressing || !instance.playWhenReady) waitingSince = now
                 if (gate.update(now, progressing, mediaBytes.get())) {
                     log?.event("INFO", "PLAY", "confirmed media bytes and progress channel=${channel.name}")
+                    observe(channel.id, route, true)
                     repository.recordSuccess(channel.id, route)
                     if (token == generation && instance === _player.value) {
                         _status.value = _status.value.copy(message = "正在播放 ${channel.name}", error = null, successAt = System.currentTimeMillis())

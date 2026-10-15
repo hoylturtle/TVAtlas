@@ -23,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
@@ -86,6 +88,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 
 @Composable fun PlayerApp(model: PlayerViewModel) {
     AtlasTheme {
+        val pageMemory = rememberSaveableStateHolder()
+        val channelMemory = rememberSaveableStateHolder()
         val library by model.library.collectAsStateWithLifecycle()
         val status by model.playback.status.collectAsStateWithLifecycle()
         val options by model.options.collectAsStateWithLifecycle()
@@ -175,6 +179,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             }) {
                 if (tv && !immersive && tab != 0) TvNavigation(tab, { tab = it; channelPanelOpen = true }, Modifier.fillMaxHeight())
                 Box(Modifier.weight(1f).fillMaxHeight()) {
+                pageMemory.SaveableStateProvider(tab) {
                 when (tab) {
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
@@ -196,14 +201,19 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             if (status.channelId != it.id || model.playback.player.value == null) model.play(it)
                             if (wide) { channelPanelOpen = false; tvBackArmed = false }
                         }
+                        val channels: @Composable (Modifier) -> Unit = { modifier ->
+                            channelMemory.SaveableStateProvider("channel-browser") {
+                                ChannelList(library, status, tv, modifier, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest)
+                            }
+                        }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
-                                channels = { ChannelList(library, status, tv, Modifier.fillMaxSize(), select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest) },
+                                channels = { channels(Modifier.fillMaxSize()) },
                                 picture = { video(Modifier.fillMaxSize()) },
                                 navigation = { if (tv) TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
-                                channels = { ChannelList(library, status, tv, it, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest) })
+                                channels = { channels(it) })
                         }
                     }
                     4 -> if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview") {
@@ -239,6 +249,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
                         trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") })
+                }
                 }
                 }
             }
@@ -289,7 +300,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         if (detail != null) ChannelDialog(detail, library.profiles, library.playlists, status, { detailId = null },
             { streamId, target -> model.setRoute(detail.id, streamId, target) },
             { streamId -> model.play(detail, streamId); detailId = null }, { model.resetChannelRoutes(detail.id) }, busy, guide = { ProgrammeInfo(model.epg, detail, true) }, favorite = {
-                TvTextButton(onClick = { model.toggleFavorite(detail) }, modifier = Modifier.fillMaxWidth().selectionOutline(detail.id in options.favorites)) { Text(if (detail.id in options.favorites) "取消收藏" else "收藏频道") } })
+                TvTextButton(onClick = { model.toggleFavorite(detail) }, modifier = Modifier.fillMaxWidth().selectionOutline(detail.id in options.favorites)) { Text(if (detail.id in options.favorites) "取消收藏" else "收藏频道") } }, history = {
+                val observations by model.playback.routeRecords.collectAsStateWithLifecycle()
+                RouteRecordSummary(detail, library, subscriptions, observations)
+            })
     }
 }
 
@@ -316,6 +330,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
     }
     val firstFocus = remember { FocusRequester() }
+    val channelFocus = remember { FocusRequester() }
+    var lastFocusedChannel by rememberSaveable { mutableStateOf<String?>(null) }
+    val listPosition = rememberLazyListState()
     val inputMode = LocalInputModeManager.current
     Column(modifier.padding(horizontal = 8.dp)) {
         if (autoExpand && library.channels.isNotEmpty()) {
@@ -361,7 +378,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 if (mode != 0) collapsed = if (key in collapsed) collapsed - key else collapsed + key
                 else expanded = if (key in expanded) expanded - key else expanded + key
             }
-            LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), contentPadding = PaddingValues(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(Modifier.fillMaxSize().testTag("channel-list"), state = listPosition, contentPadding = PaddingValues(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 grouped.forEach { (region, types) ->
                     val regionKey = "region:$region"
                     if (!autoExpand || mode != 0 || query.isNotBlank()) item(key = regionKey) {
@@ -393,7 +410,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                                     modifier = Modifier.semantics { contentDescription = if (channel.id in favorites) "取消收藏 ${channel.name}" else "收藏 ${channel.name}" }) } },
                             colors = ListItemDefaults.colors(containerColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.primary else if (focused) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainer, headlineColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 supportingColor = if (status.channelId == channel.id) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant),
-                            modifier = Modifier.padding(start = if (autoExpand) 0.dp else 16.dp, bottom = 2.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).onFocusChanged { focused = it.isFocused }
+                            modifier = Modifier.testTag("channel:${channel.id}").padding(start = if (autoExpand) 0.dp else 16.dp, bottom = 2.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).then(if (channel.id == lastFocusedChannel) Modifier.focusRequester(channelFocus) else Modifier)
+                                .onFocusChanged { focused = it.isFocused; if (it.isFocused) lastFocusedChannel = channel.id }
                                 .border(3.dp, if (focused) Color.White else Color.Transparent)
                                 .onPreviewKeyEvent { event ->
                                     if (event.nativeKeyEvent.keyCode in listOf(AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER) &&
@@ -409,7 +427,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         if (tv && library.channels.isNotEmpty()) {
             inputMode.requestInputMode(InputMode.Keyboard)
             withFrameNanos { } // LazyColumn group buttons must be laid out before focus is requested.
-            runCatching { firstFocus.requestFocus() }
+            val visible = lastFocusedChannel != null && listPosition.layoutInfo.visibleItemsInfo.any { it.key == lastFocusedChannel }
+            val restored = visible && runCatching { channelFocus.requestFocus() }.getOrDefault(false)
+            if (!restored) runCatching { firstFocus.requestFocus() }
         }
     }
 }
@@ -440,7 +460,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     val controls: @Composable () -> Unit = {
         if (tv && pictureFocused && !immersive) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         val displayedAttempt = status.attempt ?: status.lastAttempt
-        VideoControls(if (compact && status.error != null && !status.loading) "播放未成功" else status.message, displayedAttempt?.let { attempt ->
+        VideoControls(if (compact && status.error != null && !status.loading) "播放未成功" else if (status.attempt != null && status.successAt == null && status.attemptNumber > 0) "第${status.attemptNumber}次／最多${status.candidateCount}条 · ${status.message}" else status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
         } ?: "线路", playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions),
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
@@ -580,7 +600,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 
 @Composable internal fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, playlists: List<Playlist>, status: PlaybackStatus, onDismiss: () -> Unit,
     onRoute: (String?, RouteTarget?) -> Unit, onPlay: (String?) -> Unit,
-    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false, guide: @Composable () -> Unit = {}, favorite: @Composable () -> Unit = {}) {
+    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false, guide: @Composable () -> Unit = {}, favorite: @Composable () -> Unit = {}, history: @Composable () -> Unit = {}) {
     var selectedStreamId by remember(channel.id) {
         mutableStateOf((status.attempt ?: status.lastAttempt)?.takeIf { status.channelId == channel.id }?.streamId)
     }
@@ -589,6 +609,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             favorite()
             guide()
+            history()
             Text("播放源", style = MaterialTheme.typography.labelLarge)
             var lineMenu by remember { mutableStateOf(false) }
             Box {
