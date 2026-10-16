@@ -130,12 +130,12 @@ import kotlinx.coroutines.launch
         }
         if (guideOpen) {
             Column(Modifier.widthIn(min = 180.dp, max = 240.dp).fillMaxHeight().testTag("channel-guide")
-                .focusRequester(guideFocus).focusGroup().onPreviewKeyEvent {
+                .focusGroup().onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
                         guideOpen = false; runCatching { restoreFocus.requestFocus() }; true
                     } else false
                 }.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TvTextButton(onClick = { guideOpen = false; runCatching { restoreFocus.requestFocus() } }) { Text("收起节目单") }
+                TvTextButton(onClick = { guideOpen = false; runCatching { restoreFocus.requestFocus() } }, modifier = Modifier.focusRequester(guideFocus)) { Text("收起节目单") }
                 library.channels.firstOrNull { it.id == guideChannel }?.let { channel ->
                     Text(channel.name, style = MaterialTheme.typography.titleMedium)
                     guide(channel)

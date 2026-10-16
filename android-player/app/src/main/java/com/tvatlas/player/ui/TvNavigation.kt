@@ -68,7 +68,8 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
             Column(Modifier.padding(12.dp)) {
                 var navigationOpen by remember { mutableStateOf(false) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text("TVAtlas · 直播", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    AtlasBrand(Modifier.weight(1f))
+                    Text("直播", style = MaterialTheme.typography.titleMedium)
                     TvTextButton(onClick = { navigationOpen = true }) { Text("导航") }
                 }
                 if (navigationOpen) androidx.compose.ui.window.Dialog(onDismissRequest = { navigationOpen = false }) {
