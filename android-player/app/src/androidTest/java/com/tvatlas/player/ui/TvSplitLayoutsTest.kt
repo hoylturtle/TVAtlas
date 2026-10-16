@@ -46,7 +46,7 @@ class TvSplitLayoutsTest {
     }
     @Test fun stoppedHomeExposesAllPagesAndPlaybackHidesNavigation() {
         val channels = listOf("翡翠台", "明珠台", "TVB Plus", "ViuTV", "ViuTVsix", "港台电视31").mapIndexed { index, name ->
-            Channel("hk$index", name, "香港 · TVB", streams = emptyList())
+            Channel("hk$index", name, "香港 · TVB", streams = listOf(Stream("sample$index", "https://fixture.invalid/live/$index", DefaultPlaylists.entries.first().id)))
         }
         val library = Library(DefaultPlaylists.entries, channels, emptyList(), RuleConfig())
         var page by mutableIntStateOf(0)
@@ -76,6 +76,10 @@ class TvSplitLayoutsTest {
             compose.onNodeWithTag("main-nav:$index").performKeyInput { pressKey(Key.Enter) }
             compose.runOnIdle { assertEquals(index, page) }
             compose.onNodeWithTag("main-navigation").assertIsDisplayed()
+            if (index == 3) {
+                compose.onNodeWithText("更新与诊断").performClick()
+                compose.onNodeWithText("诊断与日志").assertIsDisplayed()
+            }
             capture("tv-page-$index.png")
         }
         compose.onNodeWithText("重新播放").performClick()
