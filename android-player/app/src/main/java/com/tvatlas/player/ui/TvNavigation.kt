@@ -15,6 +15,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.PlayArrow
 
 /** A visible focus ring independent of the subtle Material touch state layer. */
 internal fun Modifier.tvFocusOutline(): Modifier = composed {
@@ -43,7 +46,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AtlasBrand(Modifier.padding(vertical = 16.dp))
         atlasNavigationItems.forEach { (index, label) ->
-            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectionOutline(selected == index),
+            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("main-nav:$index").selectionOutline(selected == index),
                 colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
                     MaterialTheme.colorScheme.primary else Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)) {
                 AppNavigationIcon(index)
@@ -54,12 +57,16 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     }
 }
 
+internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?> { null }
+
 /** Playback remains full size; navigation and channels float above it. */
 @Composable internal fun TvBrowseLayout(tv: Boolean, channelName: String?,
     channels: @Composable () -> Unit, picture: @Composable () -> Unit,
     navigation: @Composable () -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
-        val browserWidth = if (tv) (maxWidth * .62f).coerceIn(480.dp, 880.dp).coerceAtMost(maxWidth) else (maxWidth * .8f).coerceAtMost(760.dp)
+        var guideExpanded by remember { mutableStateOf(false) }
+        val browserWidth = if (guideExpanded) (maxWidth * .68f).coerceIn(600.dp, 940.dp).coerceAtMost(maxWidth)
+            else (maxWidth * .43f).coerceIn(360.dp, 620.dp).coerceAtMost(maxWidth)
         Box(Modifier.fillMaxSize()) { picture() }
 
         Surface(Modifier.align(androidx.compose.ui.Alignment.CenterStart)
@@ -77,8 +84,42 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
                 }
                 Text("方向键选择 · 确认播放 · 返回收起", Modifier.padding(horizontal = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Box(Modifier.weight(1f).testTag("live-channel-overlay")) {
+                    CompositionLocalProvider(LocalLiveGuideOpen provides { guideExpanded = it }) { channels() }
+                }
+            }
+        }
+    }
+}
+
+/** Visible top-level navigation lives outside this home surface; stopped video never covers it. */
+@Composable internal fun LiveHomeLayout(channelName: String?, message: String, onReplay: () -> Unit,
+    channels: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize().testTag("live-home")) {
+        val showSummary = maxWidth >= 800.dp
+        Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("直播频道", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    if (channelName != null) TvTextButton(onClick = onReplay) { Text("重新播放") }
+                }
                 Box(Modifier.weight(1f)) { channels() }
             }
+            if (showSummary) Column(Modifier.width(260.dp).fillMaxHeight().padding(16.dp),
+                verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(androidx.compose.material.icons.Icons.Default.PlayArrow, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(channelName ?: "选择频道开始观看", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 12.dp))
+                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable internal fun MainNavigationRail(wide: Boolean, immersive: Boolean, activePlayback: Boolean,
+    selected: Int, onSelect: (Int) -> Unit) {
+    if (wide && !immersive && (selected != 0 || !activePlayback)) {
+        CompositionLocalProvider(LocalTvMode provides true) {
+            TvNavigation(selected, onSelect, Modifier.fillMaxHeight().testTag("main-navigation"))
         }
     }
 }

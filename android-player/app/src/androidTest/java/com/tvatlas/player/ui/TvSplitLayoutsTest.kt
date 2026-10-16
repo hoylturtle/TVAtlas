@@ -37,6 +37,46 @@ class TvSplitLayoutsTest {
         val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
     }
+    @Test fun stoppedHomeExposesAllPagesAndPlaybackHidesNavigation() {
+        val channels = listOf("翡翠台", "明珠台", "TVB Plus", "ViuTV", "ViuTVsix", "港台电视31").mapIndexed { index, name ->
+            Channel("hk$index", name, "香港 · TVB", streams = emptyList())
+        }
+        val library = Library(DefaultPlaylists.entries, channels, emptyList(), RuleConfig())
+        var page by mutableIntStateOf(0)
+        var active by mutableStateOf(false)
+        var replayed = false
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            Row(Modifier.requiredSize(1280.dp, 720.dp).atlasBackdrop().testTag("tv-split-preview")) {
+                MainNavigationRail(true, false, active, page) { page = it }
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    when (page) {
+                        0 -> LiveHomeLayout("翡翠台", "已停止播放", { replayed = true; active = true }) {
+                            ChannelList(library, PlaybackStatus(), true, Modifier.fillMaxSize(), {}, {}, {},
+                                programme = { Text("正在播：示例节目", maxLines = 1) })
+                        }
+                        1 -> PlaylistPage(library, false, {}, {}, {})
+                        2 -> RoutingPage(library, {}, {}, {}, {}, emptyList(), false, {}, {}, {}, {})
+                        3 -> SettingsPage(false, {}, com.tvatlas.player.update.UpdateState(), {}, {})
+                        4 -> CloudLibraryPage(com.tvatlas.player.cloud.CloudLibraryState(), { _, _, _, _ -> }, {}, {}, {}, {}, {}, {}, {})
+                    }
+                }
+            }
+        } } }
+        compose.onNodeWithTag("main-navigation").assertIsDisplayed()
+        capture("tv-home-stopped.png")
+        for (index in listOf(4, 1, 2, 3, 0)) {
+            compose.onNodeWithTag("main-nav:$index").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+            compose.onNodeWithTag("main-nav:$index").performKeyInput { pressKey(Key.Enter) }
+            compose.runOnIdle { assertEquals(index, page) }
+            compose.onNodeWithTag("main-navigation").assertIsDisplayed()
+            capture("tv-page-$index.png")
+        }
+        compose.onNodeWithText("重新播放").performClick()
+        compose.runOnIdle { assertTrue(replayed) }
+        compose.onNodeWithTag("main-navigation").assertDoesNotExist()
+        compose.runOnIdle { active = false }
+        compose.onNodeWithTag("main-navigation").assertIsDisplayed()
+    }
     @Test fun proxyCardsHaveEqualSizesMultipleColumnsAndRemoteDetails() {
         val profiles = (0..15).map { ProxyProfile("p$it", "香港 ${it + 1} · 高速影音线路 BGP", ProxyType.HTTP, "127.0.0.1", 7890, subscriptionId = "sub") }
         val library = Library(emptyList(), emptyList(), profiles, RuleConfig())

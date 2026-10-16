@@ -98,6 +98,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val channelMemory = rememberSaveableStateHolder()
         val library by model.library.collectAsStateWithLifecycle()
         val status by model.playback.status.collectAsStateWithLifecycle()
+        val livePlayer by model.playback.player.collectAsStateWithLifecycle()
+        val activePlayback = status.loading || livePlayer != null
         val recent by model.recent.collectAsStateWithLifecycle()
         val pendingPlay by model.pendingPlay.collectAsStateWithLifecycle()
         val pendingDownload by model.pendingDownload.collectAsStateWithLifecycle()
@@ -129,7 +131,6 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         var exitPrompt by remember { mutableStateOf(false) }
         var tvBackArmed by remember { mutableStateOf(false) }
         var pageMenuOpen by remember { mutableStateOf(false) }
-        var remoteActivity by remember { mutableIntStateOf(0) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
@@ -148,14 +149,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val logExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { it?.let(model::exportLogs) }
         val snackbar = remember { SnackbarHostState() }
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
-        val immersive = tab == 0 && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
+        val immersive = tab == 0 && activePlayback && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
         val theater = tab == 0 && wide
         BackHandler(immersive) {
-            if (tv && tvBackArmed) { tvBackArmed = false; exitPrompt = true }
+            if (wide && tvBackArmed) { tvBackArmed = false; exitPrompt = true }
             else { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
         }
         BackHandler(tab == 0 && !immersive && !exitPrompt) {
-            if (tv && channelPanelOpen) { channelPanelOpen = false; fullscreen = true; tvBackArmed = true }
+            if (activePlayback && wide && channelPanelOpen) { channelPanelOpen = false; fullscreen = true; tvBackArmed = true }
             else exitPrompt = true
         }
         BackHandler(!immersive && tab != 0) { tab = 0 }
@@ -165,20 +166,20 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!tv && !immersive && !theater) AtlasAppBar({ tab = 0; channelSearchRequest++ }, { tab = 3 }, busy)
+                if (!wide && !immersive && !theater) AtlasAppBar({ tab = 0; channelSearchRequest++ }, { tab = 3 }, busy)
             }, bottomBar = {
-                if (!tv && !immersive && !theater) AtlasBottomNavigation(tab) { tab = it }
+                if (!wide && !immersive && !theater) AtlasBottomNavigation(tab) { tab = it }
             }) { padding ->
             Row(Modifier.fillMaxSize().padding(padding).onPreviewKeyEvent { event ->
-                if (tv && event.type == KeyEventType.KeyDown) remoteActivity++
-                if (tv && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
+                if (wide && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
                     if (tab == 0) { tvBackArmed = false; channelPanelOpen = !channelPanelOpen; fullscreen = !channelPanelOpen }
                     else pageMenuOpen = true
                     true
                 } else false
             }) {
-                if (tv && !immersive && tab != 0) TvNavigation(tab, { tab = it; channelPanelOpen = true }, Modifier.fillMaxHeight())
+                MainNavigationRail(wide, immersive, activePlayback, tab, { tab = it; channelPanelOpen = true })
                 Box(Modifier.weight(1f).fillMaxHeight()) {
+                CompositionLocalProvider(LocalTvMode provides (tv || wide)) {
                 pageMemory.SaveableStateProvider(tab) {
                 when (tab) {
                     0 -> {
@@ -208,6 +209,11 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         }
                         when {
                             immersive -> video(Modifier.fillMaxSize())
+                            wide && !activePlayback -> LiveHomeLayout(
+                                channelName = library.channels.firstOrNull { it.id == status.channelId }?.name,
+                                message = status.message,
+                                onReplay = { library.channels.firstOrNull { it.id == status.channelId }?.let(model::play) },
+                                channels = { channels(Modifier.fillMaxSize()) })
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
                                 channels = { channels(Modifier.fillMaxSize()) },
                                 picture = { video(Modifier.fillMaxSize()) },
@@ -249,6 +255,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
                         trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, interfaceContent = { LandscapePreference(options.alwaysLandscape) { enabled -> model.editOptions { it.copy(alwaysLandscape = enabled) } }; DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
+                }
                 }
                 }
                 }

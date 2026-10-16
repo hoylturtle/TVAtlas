@@ -43,12 +43,13 @@ import kotlinx.coroutines.launch
     var guideOpen by rememberSaveable { mutableStateOf(false) }
     var guideChannel by rememberSaveable { mutableStateOf<String?>(null) }
     val guideFocus = remember { FocusRequester() }
+    val guideVisibility = LocalLiveGuideOpen.current
 
     val scope = rememberCoroutineScope()
     val restoreFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
     BackHandler(guideOpen) { guideOpen = false; runCatching { restoreFocus.requestFocus() } }
-    LaunchedEffect(guideOpen) { if (guideOpen) { withFrameNanos { }; runCatching { guideFocus.requestFocus() } } }
+    LaunchedEffect(guideOpen) { guideVisibility?.invoke(guideOpen); if (guideOpen) { withFrameNanos { }; runCatching { guideFocus.requestFocus() } } }
     val input = LocalInputModeManager.current
     val sorted = remember(library.channels) { library.channels.hongKongFirst() }
     val regions = remember(sorted) { sorted.map { it.browseRegion() }.distinct() }
