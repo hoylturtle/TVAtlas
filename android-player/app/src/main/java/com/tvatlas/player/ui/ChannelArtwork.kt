@@ -111,8 +111,10 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
             .distinct().take(512).forEach { url ->
                 kotlin.coroutines.coroutineContext.ensureActive()
                 if (!allowNetwork()) return@LaunchedEffect
-                val cached = loader.diskCache?.openSnapshot(url)
-                if (cached != null) cached.close() else loader.execute(ImageRequest.Builder(context).data(url).size(156)
+                val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    loader.diskCache?.openSnapshot(url)?.use { true } ?: false
+                }
+                if (!cached) loader.execute(ImageRequest.Builder(context).data(url).size(156)
                     .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build())
             }
     }
