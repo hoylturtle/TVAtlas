@@ -37,6 +37,19 @@ class TvSplitLayoutsTest {
         val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
     }
+    @Test fun openChannelPanelKeepsItsControlStripVisible() {
+        var pinned by mutableStateOf(true)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { AtlasTheme {
+            ImmersivePlaybackLayout(true, false, Modifier.requiredSize(960.dp, 540.dp), picture = {}, controls = { Text("示例直播控制栏") }, keepControlsVisible = pinned)
+        } }
+        compose.mainClock.advanceTimeBy(7000)
+        compose.onNodeWithText("示例直播控制栏").assertIsDisplayed()
+        compose.runOnIdle { pinned = false }
+        compose.mainClock.advanceTimeBy(6000)
+        compose.onNodeWithText("示例直播控制栏").assertDoesNotExist()
+        compose.mainClock.autoAdvance = true
+    }
     @Test fun shortLandscapeNavigationCanScrollToSettings() {
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
             Box(Modifier.requiredSize(132.dp, 280.dp)) { MainNavigationRail(true, false, false, 0, {}) }
@@ -114,20 +127,27 @@ class TvSplitLayoutsTest {
         }
     }
     @Test fun channelCategoriesAndGridUseSeparateColumns() {
-        val channels = (1..18).map { Channel("c$it", "CCTV-$it", "中国大陆 · CCTV", streams = emptyList()) } +
-            Channel("jade", "翡翠台", "香港 · TVB", streams = emptyList())
+        val names = listOf("翡翠台", "明珠台", "TVB Plus", "TVB 新闻台", "ViuTV", "ViuTVsix", "港台电视31", "港台电视32")
+        val channels = names.mapIndexed { index, name -> Channel("c${index + 1}", name, "香港 · TVB", streams = emptyList()) } +
+            listOf("大陆", "台湾", "澳门", "日本", "韩国").mapIndexed { index, label -> Channel("other$index", "示例频道$index", "$label · 综合", streams = emptyList()) }
+        val now = System.currentTimeMillis()
+        val sampleGuide = listOf("新闻", "纪录片", "电影", "晚间新闻").mapIndexed { index, title ->
+            com.tvatlas.core.epg.Programme("sample", now - 600000 + index * 3600000, now - 600000 + (index + 1) * 3600000, title)
+        }
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
             Box(Modifier.requiredSize(1280.dp, 720.dp).testTag("tv-split-preview")) {
-                TvBrowseLayout(true, "CCTV-1", channels = {
+                TvBrowseLayout(true, "翡翠台", channels = {
                     ChannelList(library, PlaybackStatus(channelId = "c1"), true, Modifier.fillMaxSize(), {}, {}, {}, autoExpand = true,
-                        programme = { Text("正在播：示例节目", maxLines = 1) }, guide = {
-                            Text("今日节目")
-                            listOf("19:00 新闻", "19:30 纪录片", "20:30 电影", "22:30 晚间新闻").forEach { title ->
-                                Text(title, Modifier.padding(vertical = 12.dp))
-                            }
+                        programme = { Text("示例节目", maxLines = 1) }, guide = {
+                            ProgrammeSchedule(sampleGuide, now)
                         })
-                }, picture = { Box(Modifier.fillMaxSize().background(Color(0xFF244A50))) }, navigation = { TvNavigation(0, {}) })
+                }, picture = {
+                    ImmersivePlaybackLayout(true, true, Modifier.fillMaxSize(), picture = { Box(Modifier.fillMaxSize().background(Color(0xFF244A50))) }, controls = {
+                        VideoControls("正在播放", "官方线路", "香港代理 · 示例订阅 / 香港01", true, true, {}, {}, {}, immersive = true,
+                            fullscreenLabel = "收起", channel = channels.first(), tail = { Text("节点延迟 46 ms · 1.8 MB/s", style = MaterialTheme.typography.labelMedium) })
+                    }, keepControlsVisible = true)
+                }, navigation = { TvNavigation(0, {}) })
             }
         } } }
         val categories = compose.onNodeWithTag("channel-categories").fetchSemanticsNode().boundsInRoot
@@ -140,6 +160,13 @@ class TvSplitLayoutsTest {
         compose.onNodeWithTag("channel:c1").performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("channel-guide").assertIsDisplayed()
         compose.onNodeWithText("收起节目单").assertIsFocused()
+        compose.onNodeWithText("今日节目").assertIsDisplayed()
+        compose.onNodeWithTag("channel:c8").assertIsDisplayed()
+        val categoriesWithGuide = compose.onNodeWithTag("channel-categories").fetchSemanticsNode().boundsInRoot
+        val channelWithGuide = compose.onNodeWithTag("channel-list").fetchSemanticsNode().boundsInRoot
+        val guideBounds = compose.onNodeWithTag("channel-guide").fetchSemanticsNode().boundsInRoot
+        assertTrue(categoriesWithGuide.right < channelWithGuide.left)
+        assertTrue(channelWithGuide.right < guideBounds.left)
         capture("tv-channel-programme.png")
         compose.onNodeWithText("收起节目单").performKeyInput { pressKey(Key.DirectionLeft) }
         compose.onNodeWithTag("channel:c1").assertIsFocused()

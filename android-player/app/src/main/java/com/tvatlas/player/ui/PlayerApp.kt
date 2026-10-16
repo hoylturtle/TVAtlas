@@ -161,7 +161,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
         BackHandler(!immersive && tab != 0) { tab = 0 }
         PlaybackOrientation(immersive || options.alwaysLandscape, tv && !options.alwaysLandscape)
-        PlaybackSystemBars(immersive || tv)
+        PlaybackSystemBars(immersive || tv || (theater && activePlayback))
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
@@ -196,7 +196,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                                         val index = library.channels.indexOfFirst { it.id == status.channelId }.coerceAtLeast(0)
                                         model.play(library.channels[(index + offset + library.channels.size) % library.channels.size])
                                     }
-                                })
+                                }, panelLabel = if (wide) { if (immersive) "频道" else "收起" } else null)
                         }
                         val select: (Channel) -> Unit = {
                             if (status.channelId != it.id || model.playback.player.value == null) model.play(it)
@@ -448,7 +448,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean, immersive: Boolean, compact: Boolean,
-    onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit) {
+    onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit, panelLabel: String? = null) {
     val player by model.playback.player.collectAsStateWithLifecycle()
     val networkTarget by model.playback.networkTarget.collectAsStateWithLifecycle()
     val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
@@ -477,7 +477,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         } ?: "线路", playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions),
             status.channelId != null, player != null || status.loading, onDetails, onFullscreen, model::stopPlayback,
             canReplay = player == null && !status.loading && status.channelId != null, onReplay = replay,
-            fullscreenLabel = if (tv) "频道" else if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
+            fullscreenLabel = panelLabel ?: if (tv) "频道" else if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
             tail = {
                 PlaybackNetworkInfo(model, networkTarget ?: displayedAttempt?.target)
                 if (immersive) TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
@@ -496,7 +496,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
         }
     if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
-        onChannel, onDetails, picture, controls)
+        onChannel, onDetails, picture, controls, keepControlsVisible = panelLabel == "收起")
     else PlayerPaneLayout(fillPicture, modifier, picture, controls)
     if (tracksOpen && player != null) PlaybackTrackDialog(requireNotNull(player)) { tracksOpen = false }
 }
@@ -522,9 +522,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             channel?.let { ChannelArtwork(it, allowNetwork = artworkNetwork, modifier = Modifier.size(40.dp)) }
             TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
-                Text(listOf(line, fullscreenRoute).filter { it.isNotBlank() }.joinToString(" | "),
-                    Modifier.fillMaxWidth(), color = LocalContentColor.current, style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(Modifier.fillMaxWidth()) {
+                    Text(listOfNotNull(channel?.name, line.takeIf { it.isNotBlank() }).distinct().joinToString(" · "),
+                        color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(fullscreenRoute, color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (fullscreenLabel == "收起" && LocalConfiguration.current.screenWidthDp >= 1100) {
+                Text("上下选择 · 确认播放 · 右键节目单", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
             tail()
             TvTextButton(onClick = onFullscreen, colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text(fullscreenLabel, color = LocalContentColor.current, maxLines = 1) }

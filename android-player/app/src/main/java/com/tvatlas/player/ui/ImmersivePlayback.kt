@@ -87,16 +87,16 @@ private fun Context.activity(): Activity? = when (this) {
 @Composable internal fun ImmersivePlaybackLayout(
     playing: Boolean, tv: Boolean, modifier: Modifier = Modifier, contentKey: Any? = null,
     onChannel: (Int) -> Unit = {}, onDetails: () -> Unit = {},
-    picture: @Composable () -> Unit, controls: @Composable () -> Unit,
+    picture: @Composable () -> Unit, controls: @Composable () -> Unit, keepControlsVisible: Boolean = false,
 ) {
     var visible by remember(contentKey) { mutableStateOf(true) }
     var controlsRequest by remember { mutableIntStateOf(0) }
     var controlsFocused by remember { mutableStateOf(false) }
     val pictureFocus = remember { FocusRequester() }
     val controlsFocus = remember { FocusRequester() }
-    val shown = visible || !playing
-    LaunchedEffect(playing, visible, controlsFocused, contentKey) {
-        if (playing && visible && !controlsFocused) { delay(5000); visible = false }
+    val shown = keepControlsVisible || visible || !playing
+    LaunchedEffect(playing, visible, controlsFocused, contentKey, keepControlsVisible) {
+        if (playing && visible && !controlsFocused && !keepControlsVisible) { delay(5000); visible = false }
     }
     LaunchedEffect(shown, tv, controlsRequest, playing) {
         if (shown && tv && (controlsRequest > 0 || !playing)) controlsFocus.requestFocus()
@@ -121,7 +121,7 @@ private fun Context.activity(): Activity? = when (this) {
             .background(Color.Black.copy(alpha = 0.28f))
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
             .onPreviewKeyEvent { event ->
-                if (tv && event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp && playing) {
+                if (tv && event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp && playing && !keepControlsVisible) {
                     visible = false; pictureFocus.requestFocus(); true
                 } else false
             }

@@ -13,6 +13,9 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +62,14 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     }
 }
 
+internal fun Modifier.liveFocusOutline(): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    onFocusChanged { focused = it.hasFocus }
+        .border(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
+}
+
+internal val LocalLiveOverlay = staticCompositionLocalOf { false }
+
 internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?> { null }
 
 /** Playback remains full size; navigation and channels float above it. */
@@ -67,27 +78,25 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
     navigation: @Composable () -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         var guideExpanded by remember { mutableStateOf(false) }
-        val browserWidth = if (guideExpanded) (maxWidth * .68f).coerceIn(600.dp, 940.dp).coerceAtMost(maxWidth)
-            else (maxWidth * .43f).coerceIn(360.dp, 620.dp).coerceAtMost(maxWidth)
+        val browserWidth = if (guideExpanded) (maxWidth * .56f).coerceIn(620.dp, 900.dp).coerceAtMost(maxWidth)
+            else (maxWidth * .36f).coerceIn(360.dp, 560.dp).coerceAtMost(maxWidth)
         Box(Modifier.fillMaxSize()) { picture() }
 
         Surface(Modifier.align(androidx.compose.ui.Alignment.CenterStart)
-            .fillMaxHeight().width(browserWidth).padding(top = 12.dp, bottom = 76.dp, start = 12.dp),
-            color = MaterialTheme.colorScheme.background.copy(alpha = 0.68f), contentColor = MaterialTheme.colorScheme.onSurface, shape = MaterialTheme.shapes.large) {
-            Column(Modifier.padding(12.dp)) {
+            .fillMaxHeight().width(browserWidth).padding(bottom = 64.dp),
+            color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) {
+            Column(Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF11121D).copy(alpha = .84f), Color(0xFF11121D).copy(alpha = .72f), Color(0xFF11121D).copy(alpha = .50f))))) {
                 var navigationOpen by remember { mutableStateOf(false) }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    AtlasBrand(Modifier.weight(1f))
-                    Text("直播", style = MaterialTheme.typography.titleMedium)
-                    TvTextButton(onClick = { navigationOpen = true }) { Text("导航") }
+                Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AtlasBrand()
+                    Text("  |  直播", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { navigationOpen = true }) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "导航") }
                 }
                 if (navigationOpen) androidx.compose.ui.window.Dialog(onDismissRequest = { navigationOpen = false }) {
                     Surface { Column { TvTextButton(onClick = { navigationOpen = false }) { Text("返回直播") }; navigation() } }
                 }
-                Text("方向键选择 · 确认播放 · 返回收起", Modifier.padding(horizontal = 8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Box(Modifier.weight(1f).testTag("live-channel-overlay")) {
-                    CompositionLocalProvider(LocalLiveGuideOpen provides { guideExpanded = it }) { channels() }
+                    CompositionLocalProvider(LocalLiveOverlay provides true, LocalLiveGuideOpen provides { guideExpanded = it }) { channels() }
                 }
             }
         }

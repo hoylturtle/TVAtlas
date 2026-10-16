@@ -7,6 +7,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
@@ -33,6 +39,8 @@ import kotlinx.coroutines.launch
     onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit,
     favorites: Set<String>, recent: List<String>, onFavorite: (Channel) -> Unit,
     programme: @Composable (Channel) -> Unit, allowArtworkNetwork: () -> Boolean, searchRequest: Int, guide: @Composable (Channel) -> Unit = programme) {
+    val overlay = LocalLiveOverlay.current
+    var filtersOpen by remember { mutableStateOf(false) }
     var region by rememberSaveable { mutableStateOf<String?>(null) }
     var type by rememberSaveable { mutableStateOf<String?>(null) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
@@ -55,21 +63,21 @@ import kotlinx.coroutines.launch
     val regions = remember(sorted) { sorted.map { it.browseRegion() }.distinct() }
     val selectedRegion = region?.takeIf { it in regions } ?: sorted.firstOrNull { it.id == status.channelId }?.browseRegion() ?: regions.firstOrNull()
     val types = remember(sorted, selectedRegion) { sorted.filter { it.browseRegion() == selectedRegion }.map { it.browseType() }.distinct() }
-    val selectedType = type?.takeIf { it in types } ?: types.firstOrNull()
+    val selectedType = type?.takeIf { it in types || (overlay && it == "全部类型") } ?: if (overlay) "全部类型" else types.firstOrNull()
     val shown = remember(sorted, selectedRegion, selectedType, query, mode, favorites, recent) {
         val base = sorted.filter { channel ->
             when (mode) {
                 1 -> channel.id in favorites
                 2 -> channel.id in recent
-                else -> if (query.isBlank()) channel.browseRegion() == selectedRegion && channel.browseType() == selectedType else true
+                else -> if (query.isBlank()) channel.browseRegion() == selectedRegion && (selectedType == "全部类型" || channel.browseType() == selectedType) else true
             } && (query.isBlank() || channel.name.contains(query, true) || channel.browseRegion().contains(query, true) || channel.browseType().contains(query, true))
         }
         if (mode == 2) base.sortedBy { recent.indexOf(it.id) } else base.primaryChannelsFirst()
     }
     LaunchedEffect(searchRequest) { if (searchRequest > 0) { search = true; mode = 0 } }
-    Row(modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        LazyColumn(Modifier.width(100.dp).fillMaxHeight().focusGroup().testTag("channel-categories"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            item {
+    Row(modifier.padding(if (overlay) 0.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(if (overlay) 0.dp else 12.dp)) {
+        LazyColumn(Modifier.width(if (overlay) 88.dp else 100.dp).fillMaxHeight().focusGroup().testTag("channel-categories"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (!overlay) item {
                 listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
                     TvTextButton(onClick = { mode = index; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().selectionOutline(mode == index)
                         .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)) { Text(label) }
@@ -77,9 +85,10 @@ import kotlinx.coroutines.launch
             }
             if (mode == 0) regions.forEach { label ->
                 item(key = "region:$label") {
-                    TvTextButton(onClick = { region = label; type = null; query = ""; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().selectionOutline(label == selectedRegion)) { Text(label) }
+                    TvTextButton(onClick = { region = label; type = null; query = ""; mode = 0; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().height(if (overlay) 60.dp else 48.dp).selectionOutline(label == selectedRegion)
+                        .then(if (overlay && label == regions.firstOrNull()) Modifier.focusRequester(firstFocus) else Modifier)) { Text(label) }
                 }
-                if (label == selectedRegion) types.forEach { category ->
+                if (!overlay && label == selectedRegion) types.forEach { category ->
                     item(key = "type:$label:$category") {
                         TvTextButton(onClick = { type = category; query = ""; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().padding(start = 10.dp).selectionOutline(category == selectedType)) {
                             Text(category, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
@@ -87,25 +96,33 @@ import kotlinx.coroutines.launch
                     }
                 }
             }
-            item { TvTextButton(onClick = onAdd) { Text("管理来源") } }
+            if (!overlay) item { TvTextButton(onClick = onAdd) { Text("管理来源") } }
         }
+        if (overlay) VerticalDivider(Modifier.fillMaxHeight(), color = Color.White.copy(alpha = .16f))
         Column(Modifier.weight(1f).fillMaxHeight().focusGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(if (mode == 0 && query.isBlank() && selectedRegion != null) "$selectedRegion · $selectedType · ${shown.size} 个频道" else "${shown.size} 个频道", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                if (overlay) Box(Modifier.weight(1f)) {
+                    TvTextButton(onClick = { filtersOpen = true }) { Text(when (mode) { 1 -> "收藏"; 2 -> "最近"; else -> selectedType ?: "频道" }, style = MaterialTheme.typography.labelMedium) }
+                    DropdownMenu(expanded = filtersOpen, onDismissRequest = { filtersOpen = false }) {
+                        (listOf("全部类型") + types).forEach { category -> DropdownMenuItem(text = { Text(category) }, onClick = { type = category; mode = 0; query = ""; filtersOpen = false; scope.launch { grid.scrollToItem(0) } }) }
+                        listOf("收藏", "最近").forEachIndexed { index, label -> DropdownMenuItem(text = { Text(label) }, onClick = { mode = index + 1; filtersOpen = false; scope.launch { grid.scrollToItem(0) } }) }
+                        DropdownMenuItem(text = { Text("管理来源") }, onClick = { filtersOpen = false; onAdd() })
+                    }
+                } else Text(if (mode == 0 && query.isBlank() && selectedRegion != null) "$selectedRegion · $selectedType · ${shown.size} 个频道" else "${shown.size} 个频道", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
                 TvTextButton(onClick = { search = !search; if (!search) query = "" }) { Text(if (search) "收起" else "搜索") }
             }
             if (search) OutlinedTextField(query, { query = it.take(120) }, Modifier.fillMaxWidth(), label = { Text("搜索频道") }, singleLine = true)
             if (shown.isEmpty()) Text(if (library.channels.isEmpty()) "请先添加频道源" else "暂无匹配频道")
             LazyColumn(state = grid, modifier = Modifier.weight(1f).testTag("channel-list"),
-                verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(4.dp)) {
-                items(shown, key = { it.id }) { channel ->
+                verticalArrangement = Arrangement.spacedBy(if (overlay) 0.dp else 2.dp), contentPadding = PaddingValues(if (overlay) 0.dp else 4.dp)) {
+                itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     val playing = status.channelId == channel.id
                     Surface(color = if (playing) MaterialTheme.colorScheme.primary.copy(alpha = .22f) else Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().height(72.dp).testTag("channel:${channel.id}")
+                        shape = if (overlay) RoundedCornerShape(6.dp) else MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().height(if (overlay) 64.dp else 72.dp).testTag("channel:${channel.id}")
                             .then(if (lastFocused == channel.id) Modifier.focusRequester(restoreFocus) else Modifier)
-                            .onFocusChanged { if (it.isFocused) { lastFocused = channel.id; guideChannel = channel.id } }.tvFocusOutline()
+                            .onFocusChanged { if (it.isFocused) { lastFocused = channel.id; guideChannel = channel.id } }.then(if (overlay) Modifier.liveFocusOutline() else Modifier.tvFocusOutline())
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     guideChannel = channel.id; guideOpen = true; true
@@ -117,20 +134,29 @@ import kotlinx.coroutines.launch
                             .combinedClickable(onClick = { onPlay(channel) }, onLongClick = { onDetails(channel) })) {
                         Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ChannelArtwork(channel, playing && status.successAt != null, allowArtworkNetwork)
+                            if (overlay) Text("${index + 1}", Modifier.width(18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            ChannelArtwork(channel, !overlay && playing && status.successAt != null, allowArtworkNetwork,
+                                modifier = if (overlay) Modifier.width(52.dp).height(44.dp) else Modifier.width(64.dp).height(48.dp))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall,
-                                    color = if (playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = if (overlay) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
+                                    color = if (playing && !overlay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium)
                                 programme(channel)
                             }
-                            TvTextButton(onClick = { guideChannel = channel.id; guideOpen = true }) { Text("节目", style = MaterialTheme.typography.labelSmall) }
+                            if (overlay) IconButton(onClick = { guideChannel = channel.id; guideOpen = true }) {
+                                Icon(if (playing) Icons.Default.PlayArrow else Icons.AutoMirrored.Filled.List,
+                                    contentDescription = "${channel.name}节目单", tint = if (playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp))
+                            } else TvTextButton(onClick = { guideChannel = channel.id; guideOpen = true }) { Text("节目", style = MaterialTheme.typography.labelSmall) }
                         }
                     }
+                    if (overlay) HorizontalDivider(color = Color.White.copy(alpha = .14f))
                 }
             }
         }
         if (guideOpen) {
-            Column(Modifier.widthIn(min = 180.dp, max = 240.dp).fillMaxHeight().testTag("channel-guide")
+            if (overlay) VerticalDivider(Modifier.fillMaxHeight(), color = Color.White.copy(alpha = .16f))
+            Column(Modifier.widthIn(min = 180.dp, max = if (overlay) 260.dp else 240.dp).fillMaxHeight().testTag("channel-guide")
                 .focusGroup().onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
                         guideOpen = false; runCatching { restoreFocus.requestFocus() }; true
@@ -138,7 +164,7 @@ import kotlinx.coroutines.launch
                 }.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TvTextButton(onClick = { guideOpen = false; runCatching { restoreFocus.requestFocus() } }, modifier = Modifier.focusRequester(guideFocus)) { Text("收起节目单") }
                 library.channels.firstOrNull { it.id == guideChannel }?.let { channel ->
-                    Text(channel.name, style = MaterialTheme.typography.titleMedium)
+                    if (!overlay) Text(channel.name, style = MaterialTheme.typography.titleMedium)
                     guide(channel)
                     TvTextButton(onClick = { onFavorite(channel) }) { Text(if (channel.id in favorites) "取消收藏" else "收藏频道") }
                     TvTextButton(onClick = { onDetails(channel) }) { Text("线路详情") }
