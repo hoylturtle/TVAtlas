@@ -39,7 +39,7 @@ private fun clock(at: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).for
 /** Shared real-data renderer, also used by deterministic screenshot fixtures. */
 @Composable internal fun ProgrammeSchedule(programmes: List<com.tvatlas.core.epg.Programme>, now: Long, overlay: Boolean = LocalLiveOverlay.current) {
     Text(if (overlay) "今日节目" else "节目单", style = MaterialTheme.typography.titleMedium)
-    if (overlay) Text(SimpleDateFormat("MM月dd日 EEEE", Locale.getDefault()).format(Date(now)),
+    if (overlay) Text(SimpleDateFormat("MM月dd日 EEEE", Locale.SIMPLIFIED_CHINESE).format(Date(now)),
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val upcoming = programmes.filter { it.end > now }.take(8)
     if (upcoming.isEmpty()) Text("暂无匹配节目，可在设置中刷新节目单。", style = MaterialTheme.typography.bodySmall)

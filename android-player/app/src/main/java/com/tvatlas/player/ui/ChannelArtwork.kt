@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -44,8 +45,9 @@ import com.tvatlas.core.model.Channel
 
 /** Reserve a consistent logo tile even when a source has no usable artwork. */
 @Composable internal fun ChannelArtwork(channel: Channel, playing: Boolean = false,
-    allowNetwork: () -> Boolean = { false }, modifier: Modifier = Modifier.width(64.dp).height(48.dp)) {
+    allowNetwork: () -> Boolean = { false }, modifier: Modifier = Modifier.width(64.dp).height(48.dp), compactLogo: Boolean = false) {
     val bundled = bundledChannelArtwork(channel.name)
+    val symbolOnly = corporateTvbLogo(channel.name) || (compactLogo && bundled in listOf(R.drawable.channel_jade, R.drawable.channel_pearl))
     val tileColor = Color.Transparent
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(tileColor)
         .semantics { contentDescription = "${channel.name}频道标识" }, contentAlignment = Alignment.Center) {
@@ -59,7 +61,9 @@ import com.tvatlas.core.model.Channel
                 textAlign = TextAlign.Center, maxLines = 2)
         }
         if (bundled != null) Image(painterResource(bundled), contentDescription = null,
-            modifier = Modifier.fillMaxSize().padding(5.dp), contentScale = ContentScale.Fit)
+            modifier = Modifier.fillMaxSize().padding(5.dp).clipToBounds(),
+            contentScale = if (symbolOnly) ContentScale.Crop else ContentScale.Fit,
+            alignment = if (symbolOnly) Alignment.CenterStart else Alignment.Center)
         else if (channel.logo.isNullOrBlank()) fallback() else SubcomposeAsyncImage(
             model = ImageRequest.Builder(LocalContext.current).data(channel.logo)
                 .decoderFactory(SvgDecoder.Factory())
@@ -76,7 +80,10 @@ import com.tvatlas.core.model.Channel
     }
 }
 
+private fun corporateTvbLogo(name: String): Boolean = name.lowercase().replace(" ", "") in setOf("tvbplus", "tvb新闻台", "tvb新聞台", "tvbnews")
+
 private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().replace(" ", "")) {
+    "tvbplus", "tvb新闻台", "tvb新聞台", "tvbnews" -> R.drawable.channel_jade
     "翡翠台", "翡翠", "tvbjade" -> R.drawable.channel_jade
     "明珠台", "明珠", "tvbpearl" -> R.drawable.channel_pearl
     "viutv" -> R.drawable.channel_viu

@@ -156,6 +156,7 @@ class TvSplitLayoutsTest {
         val cards = (1..3).map { compose.onNodeWithTag("channel:c$it").fetchSemanticsNode().boundsInRoot }
         assertEquals(1, cards.map { it.left }.distinct().size)
         assertEquals(3, cards.map { it.top }.distinct().size)
+        assertTrue(cards[0].top < cards[1].top && cards[1].top < cards[2].top)
         compose.onNodeWithTag("channel:c1").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         compose.onNodeWithTag("channel:c1").performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("channel-guide").assertIsDisplayed()
@@ -167,9 +168,11 @@ class TvSplitLayoutsTest {
         val guideBounds = compose.onNodeWithTag("channel-guide").fetchSemanticsNode().boundsInRoot
         assertTrue(categoriesWithGuide.right < channelWithGuide.left)
         assertTrue(channelWithGuide.right < guideBounds.left)
+        compose.onNodeWithTag("channel:c2").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         capture("tv-channel-programme.png")
+        compose.onNodeWithText("收起节目单").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         compose.onNodeWithText("收起节目单").performKeyInput { pressKey(Key.DirectionLeft) }
-        compose.onNodeWithTag("channel:c1").assertIsFocused()
+        compose.onNodeWithTag("channel:c2").assertIsFocused()
         compose.onNodeWithTag("channel-guide").assertDoesNotExist()
         capture("tv-channel-list.png")
     }

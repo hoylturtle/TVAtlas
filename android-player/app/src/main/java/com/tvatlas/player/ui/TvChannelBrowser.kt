@@ -72,7 +72,9 @@ import kotlinx.coroutines.launch
                 else -> if (query.isBlank()) channel.browseRegion() == selectedRegion && (selectedType == "全部类型" || channel.browseType() == selectedType) else true
             } && (query.isBlank() || channel.name.contains(query, true) || channel.browseRegion().contains(query, true) || channel.browseType().contains(query, true))
         }
-        if (mode == 2) base.sortedBy { recent.indexOf(it.id) } else base.primaryChannelsFirst()
+        if (mode == 2) base.sortedBy { recent.indexOf(it.id) }
+        else if (overlay && mode == 0 && query.isBlank() && selectedType == "全部类型") base.groupBy { it.browseType() }.values.flatMap { it.primaryChannelsFirst() }
+        else base.primaryChannelsFirst()
     }
     LaunchedEffect(searchRequest) { if (searchRequest > 0) { search = true; mode = 0 } }
     Row(modifier.padding(if (overlay) 0.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(if (overlay) 0.dp else 12.dp)) {
@@ -136,7 +138,7 @@ import kotlinx.coroutines.launch
                             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (overlay) Text("${index + 1}", Modifier.width(18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                             ChannelArtwork(channel, !overlay && playing && status.successAt != null, allowArtworkNetwork,
-                                modifier = if (overlay) Modifier.width(52.dp).height(44.dp) else Modifier.width(64.dp).height(48.dp))
+                                modifier = if (overlay) Modifier.width(52.dp).height(44.dp) else Modifier.width(64.dp).height(48.dp), compactLogo = overlay)
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = if (overlay) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleSmall,
                                     color = if (playing && !overlay) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,

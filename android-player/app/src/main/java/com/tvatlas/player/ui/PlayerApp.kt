@@ -519,7 +519,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     if (immersive) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            channel?.let { ChannelArtwork(it, allowNetwork = artworkNetwork, modifier = Modifier.size(40.dp)) }
+            channel?.let { ChannelArtwork(it, allowNetwork = artworkNetwork, modifier = Modifier.width(50.dp).height(40.dp), compactLogo = true) }
             TvTextButton(onClick = onDetails, enabled = canDetails, modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) {
                 Column(Modifier.fillMaxWidth()) {
