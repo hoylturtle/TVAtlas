@@ -137,6 +137,7 @@ class TvSplitLayoutsTest {
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
             Box(Modifier.requiredSize(1280.dp, 720.dp).testTag("tv-split-preview")) {
+                PlaybackSystemBars(true)
                 TvBrowseLayout(true, "翡翠台", channels = {
                     ChannelList(library, PlaybackStatus(channelId = "c1"), true, Modifier.fillMaxSize(), {}, {}, {}, autoExpand = true,
                         programme = { Text("示例节目", maxLines = 1) }, guide = {
@@ -162,6 +163,9 @@ class TvSplitLayoutsTest {
         compose.onNodeWithTag("channel-guide").assertIsDisplayed()
         compose.onNodeWithText("收起节目单").assertIsFocused()
         compose.onNodeWithText("今日节目").assertIsDisplayed()
+        val panelBottom = compose.onNodeWithTag("live-channel-overlay").fetchSemanticsNode().boundsInRoot.bottom
+        val controlsTop = compose.onNodeWithTag("playback-controls").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("Channel panel must not obscure playback controls", panelBottom <= controlsTop)
         compose.onNodeWithTag("channel:c8").assertIsDisplayed()
         val categoriesWithGuide = compose.onNodeWithTag("channel-categories").fetchSemanticsNode().boundsInRoot
         val channelWithGuide = compose.onNodeWithTag("channel-list").fetchSemanticsNode().boundsInRoot
