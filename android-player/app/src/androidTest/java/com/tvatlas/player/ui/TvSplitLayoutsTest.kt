@@ -37,6 +37,13 @@ class TvSplitLayoutsTest {
         val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
     }
+    @Test fun shortLandscapeNavigationCanScrollToSettings() {
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            Box(Modifier.requiredSize(132.dp, 280.dp)) { MainNavigationRail(true, false, false, 0, {}) }
+        } } }
+        compose.onNodeWithTag("main-nav:3").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("main-nav:0").performScrollTo().assertIsDisplayed()
+    }
     @Test fun stoppedHomeExposesAllPagesAndPlaybackHidesNavigation() {
         val channels = listOf("翡翠台", "明珠台", "TVB Plus", "ViuTV", "ViuTVsix", "港台电视31").mapIndexed { index, name ->
             Channel("hk$index", name, "香港 · TVB", streams = emptyList())
