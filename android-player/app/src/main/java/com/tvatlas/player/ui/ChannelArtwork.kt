@@ -98,7 +98,8 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
             override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) { networkRevision++ }
             override fun onLost(network: android.net.Network) { networkRevision++ }
         }
-        val registered = runCatching { connectivity.registerDefaultNetworkCallback(callback) }.isSuccess
+        val registered = runCatching { connectivity.registerNetworkCallback(android.net.NetworkRequest.Builder()
+            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), callback) }.isSuccess
         onDispose { if (registered) runCatching { connectivity.unregisterNetworkCallback(callback) } }
     }
     val allowed = allowNetwork()
