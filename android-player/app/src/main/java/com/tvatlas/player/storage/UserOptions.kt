@@ -13,6 +13,7 @@ import com.tvatlas.core.model.RouteTarget
     val warnMetered: Boolean = true, val wifiUpdates: Boolean = true, val limitMiB: Long = 0,
     val networkAccess: NetworkAccess = NetworkAccess.BOTH,
     val displayMode: DisplayMode = DisplayMode.AUTO,
+    val alwaysLandscape: Boolean = false,
 )
 @Serializable data class SavedPreferences(val options: UserOptions = UserOptions(), val diagnostics: Boolean = false,
     val updateRoute: RouteTarget = RouteTarget.AUTO, val subscriptionRoute: RouteTarget = RouteTarget.AUTO)

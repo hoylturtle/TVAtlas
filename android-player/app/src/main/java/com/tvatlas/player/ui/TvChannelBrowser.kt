@@ -5,8 +5,13 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -27,17 +32,23 @@ import kotlinx.coroutines.launch
 @Composable internal fun TvChannelBrowser(library: Library, status: PlaybackStatus, modifier: Modifier,
     onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit,
     favorites: Set<String>, recent: List<String>, onFavorite: (Channel) -> Unit,
-    programme: @Composable (Channel) -> Unit, allowArtworkNetwork: () -> Boolean, searchRequest: Int) {
+    programme: @Composable (Channel) -> Unit, allowArtworkNetwork: () -> Boolean, searchRequest: Int, guide: @Composable (Channel) -> Unit = programme) {
     var region by rememberSaveable { mutableStateOf<String?>(null) }
     var type by rememberSaveable { mutableStateOf<String?>(null) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
     var lastFocused by rememberSaveable { mutableStateOf<String?>(null) }
-    val grid = rememberLazyGridState()
+    val grid = rememberLazyListState()
+    var guideOpen by rememberSaveable { mutableStateOf(false) }
+    var guideChannel by rememberSaveable { mutableStateOf<String?>(null) }
+    val guideFocus = remember { FocusRequester() }
+
     val scope = rememberCoroutineScope()
     val restoreFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
+    BackHandler(guideOpen) { guideOpen = false; runCatching { restoreFocus.requestFocus() } }
+    LaunchedEffect(guideOpen) { if (guideOpen) { withFrameNanos { }; runCatching { guideFocus.requestFocus() } } }
     val input = LocalInputModeManager.current
     val sorted = remember(library.channels) { library.channels.hongKongFirst() }
     val regions = remember(sorted) { sorted.map { it.browseRegion() }.distinct() }
@@ -56,7 +67,7 @@ import kotlinx.coroutines.launch
     }
     LaunchedEffect(searchRequest) { if (searchRequest > 0) { search = true; mode = 0 } }
     Row(modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        LazyColumn(Modifier.width(128.dp).fillMaxHeight().focusGroup().testTag("channel-categories"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LazyColumn(Modifier.width(100.dp).fillMaxHeight().focusGroup().testTag("channel-categories"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             item {
                 listOf("全部", "收藏", "最近").forEachIndexed { index, label ->
                     TvTextButton(onClick = { mode = index; scope.launch { grid.scrollToItem(0) } }, modifier = Modifier.fillMaxWidth().selectionOutline(mode == index)
@@ -84,34 +95,52 @@ import kotlinx.coroutines.launch
             }
             if (search) OutlinedTextField(query, { query = it.take(120) }, Modifier.fillMaxWidth(), label = { Text("搜索频道") }, singleLine = true)
             if (shown.isEmpty()) Text(if (library.channels.isEmpty()) "请先添加频道源" else "暂无匹配频道")
-            LazyVerticalGrid(columns = GridCells.Adaptive(196.dp), state = grid, modifier = Modifier.weight(1f).testTag("channel-list"),
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(4.dp)) {
-                gridItems(shown, key = { it.id }) { channel ->
+            LazyColumn(state = grid, modifier = Modifier.weight(1f).testTag("channel-list"),
+                verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(4.dp)) {
+                items(shown, key = { it.id }) { channel ->
                     val playing = status.channelId == channel.id
-                    Surface(color = if (playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer,
-                        contentColor = if (playing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    Surface(color = if (playing) MaterialTheme.colorScheme.primary.copy(alpha = .22f) else Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                         shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().height(168.dp).testTag("channel:${channel.id}")
+                        modifier = Modifier.fillMaxWidth().height(72.dp).testTag("channel:${channel.id}")
                             .then(if (lastFocused == channel.id) Modifier.focusRequester(restoreFocus) else Modifier)
-                            .onFocusChanged { if (it.isFocused) lastFocused = channel.id }.tvFocusOutline()
+                            .onFocusChanged { if (it.isFocused) { lastFocused = channel.id; guideChannel = channel.id } }.tvFocusOutline()
                             .onPreviewKeyEvent { event ->
-                                if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress &&
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                                    guideChannel = channel.id; guideOpen = true; true
+                                } else if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress &&
                                     event.nativeKeyEvent.keyCode in listOf(android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER)) {
                                     onDetails(channel); true
                                 } else false
                             }
                             .combinedClickable(onClick = { onPlay(channel) }, onLongClick = { onDetails(channel) })) {
-                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                ChannelArtwork(channel, playing && status.successAt != null, allowArtworkNetwork)
-                                Text(channel.name, Modifier.weight(1f).padding(start = 8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ChannelArtwork(channel, playing && status.successAt != null, allowArtworkNetwork)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall,
+                                    color = if (playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                programme(channel)
                             }
-                            Column(Modifier.weight(1f)) { programme(channel) }
-                            TvTextButton(onClick = { onFavorite(channel) }, modifier = Modifier.align(androidx.compose.ui.Alignment.End)) {
-                                Text(if (channel.id in favorites) "★ 已收藏" else "☆ 收藏", style = MaterialTheme.typography.labelSmall)
-                            }
+                            TvTextButton(onClick = { guideChannel = channel.id; guideOpen = true }) { Text("节目", style = MaterialTheme.typography.labelSmall) }
                         }
                     }
+                }
+            }
+        }
+        if (guideOpen) {
+            Column(Modifier.widthIn(min = 180.dp, max = 240.dp).fillMaxHeight().testTag("channel-guide")
+                .focusRequester(guideFocus).focusGroup().onPreviewKeyEvent {
+                    if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
+                        guideOpen = false; runCatching { restoreFocus.requestFocus() }; true
+                    } else false
+                }.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TvTextButton(onClick = { guideOpen = false; runCatching { restoreFocus.requestFocus() } }) { Text("收起节目单") }
+                library.channels.firstOrNull { it.id == guideChannel }?.let { channel ->
+                    Text(channel.name, style = MaterialTheme.typography.titleMedium)
+                    guide(channel)
+                    TvTextButton(onClick = { onFavorite(channel) }) { Text(if (channel.id in favorites) "取消收藏" else "收藏频道") }
+                    TvTextButton(onClick = { onDetails(channel) }) { Text("线路详情") }
                 }
             }
         }

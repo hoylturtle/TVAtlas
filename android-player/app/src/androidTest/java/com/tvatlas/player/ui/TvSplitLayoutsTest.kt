@@ -2,6 +2,8 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -65,16 +67,30 @@ class TvSplitLayoutsTest {
             Channel("jade", "翡翠台", "香港 · TVB", streams = emptyList())
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
-            Box(Modifier.requiredSize(960.dp, 540.dp).atlasBackdrop().testTag("tv-split-preview")) {
-                ChannelList(library, PlaybackStatus(channelId = "c1"), true, Modifier.fillMaxSize(), {}, {}, {}, autoExpand = true,
-                    programme = { Text("正在播：示例节目", maxLines = 1) })
+            Box(Modifier.requiredSize(1280.dp, 720.dp).testTag("tv-split-preview")) {
+                TvBrowseLayout(true, "CCTV-1", channels = {
+                    ChannelList(library, PlaybackStatus(channelId = "c1"), true, Modifier.fillMaxSize(), {}, {}, {}, autoExpand = true,
+                        programme = { Text("正在播：示例节目", maxLines = 1) }, guide = {
+                            Text("今日节目")
+                            listOf("19:00 新闻", "19:30 纪录片", "20:30 电影", "22:30 晚间新闻").forEach { title ->
+                                Text(title, Modifier.padding(vertical = 12.dp))
+                            }
+                        })
+                }, picture = { Box(Modifier.fillMaxSize().background(Color(0xFF244A50))) }, navigation = { TvNavigation(0, {}) })
             }
         } } }
         val categories = compose.onNodeWithTag("channel-categories").fetchSemanticsNode().boundsInRoot
         val grid = compose.onNodeWithTag("channel-list").fetchSemanticsNode().boundsInRoot
         assertTrue(categories.right < grid.left)
         val cards = (1..3).map { compose.onNodeWithTag("channel:c$it").fetchSemanticsNode().boundsInRoot }
-        assertTrue(cards.map { it.left }.distinct().size >= 2)
-        capture("tv-channel-grid.png")
+        assertEquals(1, cards.map { it.left }.distinct().size)
+        assertEquals(3, cards.map { it.top }.distinct().size)
+        compose.onNodeWithTag("channel:c1").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        compose.onNodeWithTag("channel:c1").performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNodeWithTag("channel-guide").assertIsDisplayed()
+        capture("tv-channel-programme.png")
+        compose.onNodeWithText("收起节目单").performClick()
+        compose.onNodeWithTag("channel-guide").assertDoesNotExist()
+        capture("tv-channel-list.png")
     }
 }

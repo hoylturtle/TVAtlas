@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import kotlinx.coroutines.ensureActive
 import coil.decode.SvgDecoder
 import com.tvatlas.player.R
 import com.tvatlas.core.model.Channel
@@ -45,7 +46,7 @@ import com.tvatlas.core.model.Channel
 @Composable internal fun ChannelArtwork(channel: Channel, playing: Boolean = false,
     allowNetwork: () -> Boolean = { false }, modifier: Modifier = Modifier.width(64.dp).height(48.dp)) {
     val bundled = bundledChannelArtwork(channel.name)
-    val tileColor = MaterialTheme.colorScheme.surface
+    val tileColor = Color.Transparent
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(tileColor)
         .semantics { contentDescription = "${channel.name}频道标识" }, contentAlignment = Alignment.Center) {
         val fallback: @Composable () -> Unit = {
@@ -62,6 +63,7 @@ import com.tvatlas.core.model.Channel
         else if (channel.logo.isNullOrBlank()) fallback() else SubcomposeAsyncImage(
             model = ImageRequest.Builder(LocalContext.current).data(channel.logo)
                 .decoderFactory(SvgDecoder.Factory())
+                .diskCachePolicy(CachePolicy.ENABLED).memoryCachePolicy(CachePolicy.ENABLED)
                 .networkCachePolicy(if (allowNetwork()) CachePolicy.ENABLED else CachePolicy.DISABLED)
                 .size(156).build(),
             contentDescription = null, modifier = Modifier.fillMaxSize().padding(5.dp),
@@ -83,4 +85,22 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
     "港台电视32", "港台電視32", "rthk32" -> R.drawable.channel_rthk32
     "港台电视33", "港台電視33", "rthk33" -> R.drawable.channel_rthk33
     else -> null
+}
+
+/** Prefetch sequentially, suspend/cancel with the screen, and obey current network consent. */
+@OptIn(coil.annotation.ExperimentalCoilApi::class)
+@androidx.compose.runtime.Composable internal fun CacheChannelArtwork(channels: List<Channel>, allowed: Boolean) {
+    val context = LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(channels, allowed) {
+        if (!allowed) return@LaunchedEffect
+        val loader = coil.Coil.imageLoader(context)
+        channels.asSequence().filter { bundledChannelArtwork(it.name) == null }
+            .mapNotNull { it.logo?.takeIf { url -> url.startsWith("https://") || url.startsWith("http://") } }
+            .distinct().take(512).forEach { url ->
+                kotlin.coroutines.coroutineContext.ensureActive()
+                val cached = loader.diskCache?.openSnapshot(url)
+                if (cached != null) cached.close() else loader.execute(ImageRequest.Builder(context).data(url).size(156)
+                    .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build())
+            }
+    }
 }

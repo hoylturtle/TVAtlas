@@ -116,11 +116,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val nodeTesting by model.nodeTesting.collectAsStateWithLifecycle()
         val ruleFiles by model.ruleFiles.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
+        CacheChannelArtwork(library.channels, model.canLoadChannelArtwork())
         val context = LocalContext.current
         val config = LocalConfiguration.current
         val tv = atlasTv()
         val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
-        val wide = tv || (windowWidth >= 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        val wide = tv || (windowWidth >= 600.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var tab by rememberSaveable { mutableIntStateOf(0) }
         var channelSearchRequest by remember { mutableIntStateOf(0) }
@@ -164,7 +165,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 channelPanelOpen = false; fullscreen = true
             }
         }
-        PlaybackOrientation(immersive, tv)
+        PlaybackOrientation(immersive || options.alwaysLandscape, tv && !options.alwaysLandscape)
         PlaybackSystemBars(immersive || tv)
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
@@ -208,7 +209,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         }
                         val channels: @Composable (Modifier) -> Unit = { modifier ->
                             channelMemory.SaveableStateProvider("channel-browser") {
-                                ChannelList(library, status, tv, modifier, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest)
+                                ChannelList(library, status, tv || wide || landscape, modifier, select, { detailId = it.id }, { tab = 1 }, options.favorites, recent.map { it.channelId }, model::toggleFavorite, { ProgrammeInfo(model.epg, it) }, autoExpand = true, allowArtworkNetwork = model::canLoadChannelArtwork, searchRequest = channelSearchRequest, guide = { ProgrammeInfo(model.epg, it, true) })
                             }
                         }
                         when {
@@ -253,7 +254,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     }
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, interfaceContent = { DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, interfaceContent = { LandscapePreference(options.alwaysLandscape) { enabled -> model.editOptions { it.copy(alwaysLandscape = enabled) } }; DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
                 }
                 }
                 }
@@ -317,9 +318,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     onPlay: (Channel) -> Unit, onDetails: (Channel) -> Unit, onAdd: () -> Unit,
     favorites: Set<String> = emptySet(), recent: List<String> = emptyList(), onFavorite: (Channel) -> Unit = {},
     programme: @Composable (Channel) -> Unit = {}, autoExpand: Boolean = false,
-    allowArtworkNetwork: () -> Boolean = { false }, searchRequest: Int = 0) {
+    allowArtworkNetwork: () -> Boolean = { false }, searchRequest: Int = 0, guide: @Composable (Channel) -> Unit = programme) {
     if (tv) {
-        TvChannelBrowser(library, status, modifier, onPlay, onDetails, onAdd, favorites, recent, onFavorite, programme, allowArtworkNetwork, searchRequest)
+        TvChannelBrowser(library, status, modifier, onPlay, onDetails, onAdd, favorites, recent, onFavorite, programme, allowArtworkNetwork, searchRequest, guide)
         return
     }
     var query by rememberSaveable { mutableStateOf("") }

@@ -59,14 +59,21 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     channels: @Composable () -> Unit, picture: @Composable () -> Unit,
     navigation: @Composable () -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
-        val browserWidth = if (tv) (maxWidth * .72f).coerceIn(480.dp, 880.dp).coerceAtMost(maxWidth - 144.dp) else 320.dp
+        val browserWidth = if (tv) (maxWidth * .62f).coerceIn(480.dp, 880.dp).coerceAtMost(maxWidth) else (maxWidth * .8f).coerceAtMost(760.dp)
         Box(Modifier.fillMaxSize()) { picture() }
-        Box(Modifier.align(androidx.compose.ui.Alignment.CenterStart).fillMaxHeight().padding(bottom = 76.dp)) { navigation() }
-        Surface(Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
-            .fillMaxHeight().width(browserWidth).padding(top = 12.dp, bottom = 76.dp, end = 12.dp),
+
+        Surface(Modifier.align(androidx.compose.ui.Alignment.CenterStart)
+            .fillMaxHeight().width(browserWidth).padding(top = 12.dp, bottom = 76.dp, start = 12.dp),
             color = MaterialTheme.colorScheme.background.copy(alpha = 0.68f), contentColor = MaterialTheme.colorScheme.onSurface, shape = MaterialTheme.shapes.large) {
             Column(Modifier.padding(12.dp)) {
-                Text("频道列表", Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                var navigationOpen by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("TVAtlas · 直播", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    if (tv) TvTextButton(onClick = { navigationOpen = true }) { Text("导航") }
+                }
+                if (navigationOpen) androidx.compose.ui.window.Dialog(onDismissRequest = { navigationOpen = false }) {
+                    Surface { Column { TvTextButton(onClick = { navigationOpen = false }) { Text("返回直播") }; navigation() } }
+                }
                 Text("方向键选择 · 确认播放 · 返回收起", Modifier.padding(horizontal = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Box(Modifier.weight(1f)) { channels() }

@@ -22,6 +22,32 @@ import org.junit.Test
 
 class PreviewIdentityTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
+    @Test fun alwaysLandscapePreferenceSurvivesReloadAndRestoresOrientation() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = SettingsStore(context)
+        val previous = store.options.first()
+        compose.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+        store.editOptions { it.copy(alwaysLandscape = false) }
+        try {
+            compose.setContent {
+                val options by store.options.collectAsState(initial = UserOptions())
+                val scope = rememberCoroutineScope()
+                AtlasTheme {
+                    PlaybackOrientation(options.alwaysLandscape, false)
+                    Column { LandscapePreference(options.alwaysLandscape) { value -> scope.launch { store.editOptions { it.copy(alwaysLandscape = value) } } } }
+                }
+            }
+            compose.onNode(isToggleable()).performClick()
+            compose.waitUntil(10000) { compose.activity.requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE }
+            assertTrue(SettingsStore(context).options.first().alwaysLandscape)
+            compose.onNode(isToggleable()).performClick()
+            compose.waitUntil(10000) { compose.activity.requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+            assertFalse(SettingsStore(context).options.first().alwaysLandscape)
+        } finally {
+            store.editOptions { previous }
+            compose.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+        }
+    }
     @Test fun installedApkAndVisibleBuildIdentityAgree() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
