@@ -159,12 +159,6 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             else exitPrompt = true
         }
         BackHandler(!immersive && tab != 0) { tab = 0 }
-        LaunchedEffect(tv, channelPanelOpen, remoteActivity, status.successAt) {
-            if (tv && tab == 0 && channelPanelOpen && status.successAt != null) {
-                kotlinx.coroutines.delay(8000)
-                channelPanelOpen = false; fullscreen = true
-            }
-        }
         PlaybackOrientation(immersive || options.alwaysLandscape, tv && !options.alwaysLandscape)
         PlaybackSystemBars(immersive || tv)
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
@@ -173,7 +167,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             topBar = {
                 if (!tv && !immersive && !theater) AtlasAppBar({ tab = 0; channelSearchRequest++ }, { tab = 3 }, busy)
             }, bottomBar = {
-                if (!tv && !immersive) AtlasBottomNavigation(tab) { tab = it }
+                if (!tv && !immersive && !theater) AtlasBottomNavigation(tab) { tab = it }
             }) { padding ->
             Row(Modifier.fillMaxSize().padding(padding).onPreviewKeyEvent { event ->
                 if (tv && event.type == KeyEventType.KeyDown) remoteActivity++
@@ -217,7 +211,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
                                 channels = { channels(Modifier.fillMaxSize()) },
                                 picture = { video(Modifier.fillMaxSize()) },
-                                navigation = { if (tv) TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
+                                navigation = { TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
                                 channels = { channels(it) })
                         }

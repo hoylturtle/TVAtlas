@@ -88,8 +88,10 @@ class TvSplitLayoutsTest {
         compose.onNodeWithTag("channel:c1").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         compose.onNodeWithTag("channel:c1").performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("channel-guide").assertIsDisplayed()
+        compose.onNodeWithText("收起节目单").assertIsFocused()
         capture("tv-channel-programme.png")
-        compose.onNodeWithText("收起节目单").performClick()
+        compose.onNodeWithText("收起节目单").performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.onNodeWithTag("channel:c1").assertIsFocused()
         compose.onNodeWithTag("channel-guide").assertDoesNotExist()
         capture("tv-channel-list.png")
     }
