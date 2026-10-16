@@ -10,7 +10,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,15 +89,27 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
 
 /** Prefetch sequentially, suspend/cancel with the screen, and obey current network consent. */
 @OptIn(coil.annotation.ExperimentalCoilApi::class)
-@androidx.compose.runtime.Composable internal fun CacheChannelArtwork(channels: List<Channel>, allowed: Boolean) {
+@androidx.compose.runtime.Composable internal fun CacheChannelArtwork(channels: List<Channel>, allowNetwork: () -> Boolean) {
     val context = LocalContext.current
-    androidx.compose.runtime.LaunchedEffect(channels, allowed) {
+    val connectivity = remember(context) { context.getSystemService(android.net.ConnectivityManager::class.java) }
+    var networkRevision by remember { mutableIntStateOf(0) }
+    DisposableEffect(connectivity) {
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) { networkRevision++ }
+            override fun onLost(network: android.net.Network) { networkRevision++ }
+        }
+        val registered = runCatching { connectivity.registerDefaultNetworkCallback(callback) }.isSuccess
+        onDispose { if (registered) runCatching { connectivity.unregisterNetworkCallback(callback) } }
+    }
+    val allowed = allowNetwork()
+    androidx.compose.runtime.LaunchedEffect(channels, allowed, networkRevision) {
         if (!allowed) return@LaunchedEffect
         val loader = coil.Coil.imageLoader(context)
         channels.asSequence().filter { bundledChannelArtwork(it.name) == null }
             .mapNotNull { it.logo?.takeIf { url -> url.startsWith("https://") || url.startsWith("http://") } }
             .distinct().take(512).forEach { url ->
                 kotlin.coroutines.coroutineContext.ensureActive()
+                if (!allowNetwork()) return@LaunchedEffect
                 val cached = loader.diskCache?.openSnapshot(url)
                 if (cached != null) cached.close() else loader.execute(ImageRequest.Builder(context).data(url).size(156)
                     .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build())

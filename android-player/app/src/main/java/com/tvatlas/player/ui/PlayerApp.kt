@@ -116,7 +116,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val nodeTesting by model.nodeTesting.collectAsStateWithLifecycle()
         val ruleFiles by model.ruleFiles.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
-        CacheChannelArtwork(library.channels, model.canLoadChannelArtwork())
+        CacheChannelArtwork(library.channels, model::canLoadChannelArtwork)
         val context = LocalContext.current
         val config = LocalConfiguration.current
         val tv = atlasTv()
