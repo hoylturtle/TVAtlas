@@ -15,30 +15,34 @@ import okhttp3.OkHttpClient
 
 data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
     val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
-    val error: String? = null, val resumeWarning: String? = null)
+    val error: String? = null, val resumeWarning: String? = null, val routeLabel: String = "直连")
 
 /** All player commands run on the main thread. Source URLs never enter logs or persistence. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VodPlaybackController(private val context: Context, private val scope: CoroutineScope,
-    client: OkHttpClient, private val storeFactory: () -> VodProgressStorage, private val canPlay: () -> Boolean) {
+    client: OkHttpClient, private val storeFactory: () -> VodProgressStorage, private val canPlay: () -> Boolean,
+    private val log: com.tvatlas.player.debug.DebugLog? = null) {
     private val _state = MutableStateFlow(VodState())
     val state = _state.asStateFlow()
     private var active: ExoPlayer? = null
     private var generation = 0L
     private var openJob: Job? = null
+    private var bufferJob: Job? = null
     private val historyLock = Mutex()
     private var store: VodProgressStorage? = null
     private var lastSaved: Pair<String, VodBookmark>? = null
-    private val mediaClient = client.newBuilder().callTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).addNetworkInterceptor { chain ->
-            if (!canPlay()) throw java.io.IOException("Network policy does not allow playback")
-            chain.proceed(chain.request())
-        }.build()
+    private var transport = client
+    private var routeLabel = "直连"
+    private fun mediaClient() = vodMediaClient(transport, canPlay, log)
     init { scope.launch { while (isActive) { delay(5000); checkpoint() } } }
-    fun open(item: VodItem) {
+    fun open(item: VodItem, client: OkHttpClient? = null, label: String? = null, alternatives: List<VodItem> = emptyList(), resumePosition: Long = 0,
+        alternativeClients: Map<String, OkHttpClient> = emptyMap(), alternativeLabels: Map<String, String> = emptyMap()) {
         close()
+        if (alternativeClients[item.url] != null) transport = alternativeClients.getValue(item.url) else if (client != null) transport = client
+        if (alternativeLabels[item.url] != null) routeLabel = alternativeLabels.getValue(item.url) else if (label != null) routeLabel = label
+        log?.event("INFO", "VOD_PLAY", "requested host=${java.net.URI(item.url).host} route=$routeLabel")
         val token = ++generation
-        _state.value = VodState(item = item)
+        _state.value = VodState(item = item, routeLabel = routeLabel)
         openJob = scope.launch {
             var warning: String? = null
             val saved = try { historyLock.withLock { withContext(Dispatchers.IO) {
@@ -48,7 +52,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
             if (token != generation) return@launch
             if (!canPlay()) { _state.value = _state.value.copy(error = "网络条件已变化，请确认后继续播放"); return@launch }
             val player = ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(
-                OkHttpDataSource.Factory(mediaClient).setUserAgent("TVAtlas-VOD"))).build()
+                OkHttpDataSource.Factory(mediaClient()).setUserAgent("Mozilla/5.0 TVAtlas"))).build()
             active = player
             var restored = false
             player.setAudioAttributes(AudioAttributes.DEFAULT, true)
@@ -56,10 +60,20 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
             player.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     if (active !== player) return
+                    log?.event("INFO", "VOD_PLAYER", "state=$playbackState")
+                    bufferJob?.cancel()
+                    if (playbackState == Player.STATE_BUFFERING && alternatives.isNotEmpty()) {
+                        bufferJob = scope.launch {
+                            delay(15000)
+                            if (active === player && player.playWhenReady && player.playbackState == Player.STATE_BUFFERING && canPlay()) {
+                                open(alternatives.first(), transport, routeLabel, alternatives.drop(1), player.currentPosition.coerceAtLeast(0), alternativeClients, alternativeLabels)
+                            }
+                        }
+                    }
                     if (playbackState == Player.STATE_READY && !restored) {
                         restored = true
                         if (!player.isCurrentMediaItemLive && player.isCurrentMediaItemSeekable) {
-                            val position = VodResume.position(saved, player.duration)
+                            val position = if (resumePosition > 0) resumePosition else VodResume.position(saved, player.duration)
                             if (position > 0) player.seekTo(position)
                         }
                     }
@@ -76,11 +90,27 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                 }
                 override fun onPlayerError(error: PlaybackException) {
                     if (active !== player) return
-                    _state.value = _state.value.copy(playing = false, error = when (error.errorCode) {
+                    if (alternatives.isNotEmpty() && canPlay()) {
+                        val position = player.currentPosition.coerceAtLeast(0)
+                        log?.event("WARN", "VOD_FAILOVER", "remaining=${alternatives.size} code=${error.errorCode}")
+                        scope.launch {
+                            if (active === player) open(alternatives.first(), transport, routeLabel, alternatives.drop(1), position, alternativeClients, alternativeLabels)
+                        }
+                        return
+                    }
+                    val http = generateSequence<Throwable>(error) { it.cause }
+                        .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+                    log?.event("ERROR", "VOD_PLAYER", "code=${error.errorCode} name=${error.errorCodeName} http=$http")
+                    log?.error("VOD_PLAYER", error)
+                    _state.value = _state.value.copy(playing = false, error = when {
+                        http == 403 -> "视频服务器拒绝访问（HTTP 403），可换网络或来源"
+                        http == 404 || http == 410 -> "播放地址已失效（HTTP $http），请更换来源或影片"
+                        http != null -> "视频服务器返回 HTTP $http，请稍后重试或更换来源"
+                        else -> when (error.errorCode) {
                         2004 -> "视频地址暂不可用或已过期，请重新获取地址后重试"
                         3001, 3002, 3003, 3004 -> "地址没有返回可识别的视频，网页地址不能当作视频直链"
                         else -> "点播未成功（${error.errorCode}），可重试或更换视频地址"
-                    })
+                    } })
                     checkpoint()
                 }
             })
@@ -104,6 +134,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         }
     }
     fun pause() {
+        bufferJob?.cancel()
         if (active == null && _state.value.item != null) {
             generation++; openJob?.cancel()
             _state.value = _state.value.copy(error = "已暂停，点击播放继续")
@@ -133,7 +164,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         }
     }
     fun close() {
-        checkpoint(); generation++; openJob?.cancel()
+        checkpoint(); generation++; openJob?.cancel(); bufferJob?.cancel()
         val old = active; active = null; old?.release()
         _state.value = VodState()
     }

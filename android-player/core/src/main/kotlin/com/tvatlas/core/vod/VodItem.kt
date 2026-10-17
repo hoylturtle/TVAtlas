@@ -8,6 +8,11 @@ import kotlinx.serialization.Serializable
 class VodItem private constructor(val url: String, val title: String, val key: String) {
     override fun toString() = "VodItem(url=[redacted], key=[redacted])"
     companion object {
+        fun episode(url: String, title: String, identity: String): VodItem {
+            require(identity.isNotBlank() && identity.length <= 1024)
+            val validated = direct(url, title)
+            return VodItem(validated.url, validated.title, stableId("episode\u0000$identity"))
+        }
         fun direct(url: String, title: String = ""): VodItem {
             require(url.length <= 8192) { "视频地址过长" }
             val clean = url.trim()

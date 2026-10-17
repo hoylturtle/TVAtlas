@@ -873,6 +873,429 @@
       "match": [
         "Vasantham"
       ]
+    },
+    {
+      "id": "regional-beautifullifetv-tw-sd",
+      "name": "人间卫视",
+      "group": "台湾 · 综合",
+      "region": "TW",
+      "match": [
+        "人间卫视"
+      ]
+    },
+    {
+      "id": "regional-cgntvchinese-tw-sd",
+      "name": "CGNTV 中文台",
+      "group": "台湾 · 综合",
+      "region": "TW",
+      "match": [
+        "CGNTV 中文台"
+      ]
+    },
+    {
+      "id": "regional-dalitv-tw-sd",
+      "name": "大立电视",
+      "group": "台湾 · 综合",
+      "region": "TW",
+      "match": [
+        "大立电视"
+      ]
+    },
+    {
+      "id": "regional-good2-tw-sd",
+      "name": "GOOD TV 真理台",
+      "group": "台湾 · 综合",
+      "region": "TW",
+      "match": [
+        "GOOD TV 真理台"
+      ]
+    },
+    {
+      "id": "regional-goodtv-tw-sd",
+      "name": "GOOD TV 综合台",
+      "group": "台湾 · 综合",
+      "region": "TW",
+      "match": [
+        "GOOD TV 综合台"
+      ]
+    },
+    {
+      "id": "regional-tvbsasia-tw-sd",
+      "name": "TVBS 亚洲台",
+      "group": "台湾 · 综合",
+      "region": "TW",
+      "match": [
+        "TVBS 亚洲台"
+      ]
+    },
+    {
+      "id": "regional-cgntvjapan-jp-sd",
+      "name": "CGNTV 日本",
+      "group": "日本 · 综合",
+      "region": "JP",
+      "match": [
+        "CGNTV 日本"
+      ]
+    },
+    {
+      "id": "regional-gstv-jp-sd",
+      "name": "GSTV",
+      "group": "日本 · 综合",
+      "region": "JP",
+      "match": [
+        "GSTV"
+      ]
+    },
+    {
+      "id": "regional-nhkgeneraltv-jp-sd",
+      "name": "NHK 综合",
+      "group": "日本 · 综合",
+      "region": "JP",
+      "match": [
+        "NHK 综合"
+      ]
+    },
+    {
+      "id": "regional-shopchannel-jp-sd",
+      "name": "Shop Channel",
+      "group": "日本 · 综合",
+      "region": "JP",
+      "match": [
+        "Shop Channel"
+      ]
+    },
+    {
+      "id": "regional-channelu-sg-sd",
+      "name": "Channel U",
+      "group": "新加坡 · 综合",
+      "region": "SG",
+      "match": [
+        "Channel U"
+      ]
+    },
+    {
+      "id": "regional-cnaoriginals-sg-sd",
+      "name": "CNA Originals",
+      "group": "新加坡 · 新闻",
+      "region": "SG",
+      "match": [
+        "CNA Originals"
+      ]
+    },
+    {
+      "id": "regional-bloombergoriginals-us-us",
+      "name": "Bloomberg Originals",
+      "group": "美国 · 新闻",
+      "region": "US",
+      "match": [
+        "Bloomberg Originals"
+      ]
+    },
+    {
+      "id": "regional-cbsnewsbaltimore-us-sd",
+      "name": "CBS News Baltimore",
+      "group": "美国 · 新闻",
+      "region": "US",
+      "match": [
+        "CBS News Baltimore"
+      ]
+    },
+    {
+      "id": "regional-cbsnewsmiami-us-sd",
+      "name": "CBS News Miami",
+      "group": "美国 · 新闻",
+      "region": "US",
+      "match": [
+        "CBS News Miami"
+      ]
+    },
+    {
+      "id": "regional-foxweather-us-sd",
+      "name": "Fox Weather",
+      "group": "美国 · 综合",
+      "region": "US",
+      "match": [
+        "Fox Weather"
+      ]
+    },
+    {
+      "id": "regional-nbcnewsnow-us-sd",
+      "name": "NBC News NOW",
+      "group": "美国 · 新闻",
+      "region": "US",
+      "match": [
+        "NBC News NOW"
+      ]
+    },
+    {
+      "id": "regional-newsmaxtv-us-sd",
+      "name": "Newsmax TV",
+      "group": "美国 · 新闻",
+      "region": "US",
+      "match": [
+        "Newsmax TV"
+      ]
+    },
+    {
+      "id": "regional-pbs-us-east",
+      "name": "PBS",
+      "group": "美国 · 综合",
+      "region": "US",
+      "match": [
+        "PBS"
+      ]
+    },
+    {
+      "id": "regional-pbskids-us-sd",
+      "name": "PBS Kids",
+      "group": "美国 · 少儿",
+      "region": "US",
+      "match": [
+        "PBS Kids"
+      ]
+    },
+    {
+      "id": "regional-pbsnature-us-sd",
+      "name": "PBS Nature",
+      "group": "美国 · 综合",
+      "region": "US",
+      "match": [
+        "PBS Nature"
+      ]
+    },
+    {
+      "id": "regional-pbstravel-us-sd",
+      "name": "PBS Travel",
+      "group": "美国 · 综合",
+      "region": "US",
+      "match": [
+        "PBS Travel"
+      ]
+    },
+    {
+      "id": "regional-usatoday-us-sd",
+      "name": "USA TODAY",
+      "group": "美国 · 综合",
+      "region": "US",
+      "match": [
+        "USA TODAY"
+      ]
+    },
+    {
+      "id": "regional-gbnews-uk-sd",
+      "name": "GB News",
+      "group": "英国 · 新闻",
+      "region": "UK",
+      "match": [
+        "GB News"
+      ]
+    },
+    {
+      "id": "regional-greatmovies-uk-uk",
+      "name": "GREAT! movies",
+      "group": "英国 · 综合",
+      "region": "UK",
+      "match": [
+        "GREAT! movies"
+      ]
+    },
+    {
+      "id": "regional-now70s-uk-sd",
+      "name": "Now 70s",
+      "group": "英国 · 综合",
+      "region": "UK",
+      "match": [
+        "Now 70s"
+      ]
+    },
+    {
+      "id": "regional-now80s-uk-sd",
+      "name": "Now 80s",
+      "group": "英国 · 综合",
+      "region": "UK",
+      "match": [
+        "Now 80s"
+      ]
+    },
+    {
+      "id": "regional-nowrock-uk-sd",
+      "name": "NOW Rock",
+      "group": "英国 · 综合",
+      "region": "UK",
+      "match": [
+        "NOW Rock"
+      ]
+    },
+    {
+      "id": "regional-skynewsweather-uk-sd",
+      "name": "Sky News Weather",
+      "group": "英国 · 新闻",
+      "region": "UK",
+      "match": [
+        "Sky News Weather"
+      ]
+    },
+    {
+      "id": "regional-talktv-uk-sd",
+      "name": "TalkTV",
+      "group": "英国 · 新闻",
+      "region": "UK",
+      "match": [
+        "TalkTV"
+      ]
+    },
+    {
+      "id": "regional-ebs1tv-kr-sd",
+      "name": "EBS 1TV",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "EBS 1TV"
+      ]
+    },
+    {
+      "id": "regional-ebs2tv-kr-sd",
+      "name": "EBS 2TV",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "EBS 2TV"
+      ]
+    },
+    {
+      "id": "regional-ebsenglish-kr-sd",
+      "name": "EBS English",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "EBS English"
+      ]
+    },
+    {
+      "id": "regional-ebskids-kr-sd",
+      "name": "EBS Kids",
+      "group": "韩国 · 少儿",
+      "region": "KR",
+      "match": [
+        "EBS Kids"
+      ]
+    },
+    {
+      "id": "regional-gugaktv-kr-sd",
+      "name": "Gugak TV",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "Gugak TV"
+      ]
+    },
+    {
+      "id": "regional-ktv-kr-sd",
+      "name": "KTV",
+      "group": "韩国 · 新闻",
+      "region": "KR",
+      "match": [
+        "KTV"
+      ]
+    },
+    {
+      "id": "regional-tbstv-kr-sd",
+      "name": "TBS TV",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "TBS TV"
+      ]
+    },
+    {
+      "id": "regional-tvchosun2-kr-sd",
+      "name": "TV Chosun 2",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "TV Chosun 2"
+      ]
+    },
+    {
+      "id": "regional-tvchosun-kr-sd",
+      "name": "TV Chosun",
+      "group": "韩国 · 综合",
+      "region": "KR",
+      "match": [
+        "TV Chosun"
+      ]
+    },
+    {
+      "id": "regional-3hd-th-sd",
+      "name": "3HD",
+      "group": "泰国 · 综合",
+      "region": "TH",
+      "match": [
+        "3HD"
+      ]
+    },
+    {
+      "id": "regional-nationtv-th-sd",
+      "name": "Nation TV",
+      "group": "泰国 · 综合",
+      "region": "TH",
+      "match": [
+        "Nation TV"
+      ]
+    },
+    {
+      "id": "regional-nbt2hd-th-sd",
+      "name": "NBT 2 HD",
+      "group": "泰国 · 新闻",
+      "region": "TH",
+      "match": [
+        "NBT 2 HD"
+      ]
+    },
+    {
+      "id": "regional-nbttvchiangmai-th-sd",
+      "name": "NBT TV Chiang Mai",
+      "group": "泰国 · 新闻",
+      "region": "TH",
+      "match": [
+        "NBT TV Chiang Mai"
+      ]
+    },
+    {
+      "id": "regional-tsports7-th-sd",
+      "name": "T Sports 7",
+      "group": "泰国 · 体育",
+      "region": "TH",
+      "match": [
+        "T Sports 7"
+      ]
+    },
+    {
+      "id": "regional-true4u-th-sd",
+      "name": "True4U",
+      "group": "泰国 · 综合",
+      "region": "TH",
+      "match": [
+        "True4U"
+      ]
+    },
+    {
+      "id": "regional-canalmacau-mo-sd",
+      "name": "澳视葡文",
+      "group": "澳门 · 综合",
+      "region": "MO",
+      "match": [
+        "澳视葡文"
+      ]
+    },
+    {
+      "id": "regional-thaipbs-th-sd",
+      "name": "Thai PBS",
+      "group": "泰国 · 综合",
+      "region": "TH",
+      "match": [
+        "Thai PBS"
+      ]
     }
   ]
 }

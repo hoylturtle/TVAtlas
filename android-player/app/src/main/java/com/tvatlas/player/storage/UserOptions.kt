@@ -14,6 +14,7 @@ import com.tvatlas.core.model.RouteTarget
     val networkAccess: NetworkAccess = NetworkAccess.BOTH,
     val displayMode: DisplayMode = DisplayMode.AUTO,
     val alwaysLandscape: Boolean = false,
+    val liveSubtitles: Boolean = false,
 )
 @Serializable data class SavedPreferences(val options: UserOptions = UserOptions(), val diagnostics: Boolean = false,
     val updateRoute: RouteTarget = RouteTarget.AUTO, val subscriptionRoute: RouteTarget = RouteTarget.AUTO)

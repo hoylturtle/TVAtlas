@@ -22,7 +22,7 @@ android {
     namespace = "com.tvatlas.player"
     testBuildType = providers.gradleProperty("tvatlasTestBuildType").orElse("debug").get()
     compileSdk = 35
-    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("44").get().toInt(); versionName = "1.0.1"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; manifestPlaceholders["appLabel"] = "TVAtlas Player" }
+    defaultConfig { applicationId = "com.tvatlas.player"; minSdk = 23; targetSdk = 35; versionCode = providers.gradleProperty("tvatlasVersionCode").orElse("45").get().toInt(); versionName = "1.5.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; manifestPlaceholders["appLabel"] = "TVAtlas Player" }
     defaultConfig { buildConfigField("String", "MIHOMO_VERSION", "\"$mihomoVersion\""); buildConfigField("String", "PREVIEW_ID", "\"\"") }
     signingConfigs {
         if (signingFile != null) create("tvatlasRelease") {
@@ -61,6 +61,7 @@ android {
 }
  ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
+    implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.zxing:core:3.5.3")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-svg:2.7.0")

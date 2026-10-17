@@ -31,6 +31,22 @@ import org.junit.Test
 
 class TvNavigationTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun liveNavigationAnchorsLeftHidesChannelOverlayAndClosesOnSelection() {
+        var selected = -1
+        compose.setContent { AtlasTheme {
+            TvBrowseLayout(true, "fixture", channels = { Text("频道列表测试") }, picture = { Text("画面测试") },
+                navigation = { dismiss -> TvNavigation(0, { selected = it; dismiss() }, Modifier.fillMaxSize()) })
+        } }
+        compose.onNodeWithContentDescription("导航").performClick()
+        compose.onNodeWithText("频道列表测试").assertDoesNotExist()
+        val window = compose.onNodeWithTag("live-navigation-window").fetchSemanticsNode().boundsInRoot
+        val drawer = compose.onNodeWithTag("live-navigation-drawer").fetchSemanticsNode().boundsInRoot
+        assertEquals(window.left, drawer.left, 1f)
+        compose.onNodeWithTag("main-nav:1").performClick()
+        compose.runOnIdle { assertEquals(1, selected) }
+        compose.onNodeWithTag("live-navigation-drawer").assertDoesNotExist()
+        compose.onNodeWithText("频道列表测试").assertIsDisplayed()
+    }
     @Test fun browsingKeepsPictureSeparateAndRemoteCanSelectChannel() {
         val channel = Channel("fixture", "翡翠台", "香港 · 综合", streams = listOf(Stream("s", "https://example.com/live.m3u8", "p")))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
@@ -87,6 +103,9 @@ class TvNavigationTest {
         compose.setContent { MaterialTheme(colorScheme = colors) { TvNavigation(selected, { selected = it }) } }
         compose.onNodeWithText("直播").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithText("直播").performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithText("影视").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.runOnIdle { assertEquals(4, selected) }
+        compose.onNodeWithText("影视").performKeyInput { pressKey(Key.DirectionDown) }
         compose.onNodeWithText("频道源").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertEquals(1, selected) }
         compose.onNodeWithText("频道源").performKeyInput { pressKey(Key.DirectionDown); pressKey(Key.DirectionDown) }

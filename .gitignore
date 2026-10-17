@@ -20,3 +20,6 @@ android-player/docs/*audit*.md
 
 # Kotlin incremental compilation state is local.
 **/.kotlin/
+
+# Native cores are checksum-verified build inputs, never source artifacts.
+**/jniLibs/

@@ -80,6 +80,32 @@ class UserFeaturesTest {
             compose.onNodeWithText("关闭", substring = false).performClick()
         } finally { compose.runOnIdle { player.release() } }
     }
+    @Test fun subtitleOnlyDialogRemembersSwitchWithoutChangingAudioSelection() {
+        lateinit var player: ExoPlayer
+        var remembered: Boolean? = null
+        compose.runOnIdle {
+            player = ExoPlayer.Builder(compose.activity).build()
+            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                .setPreferredAudioLanguage("ja").setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+        }
+        try {
+            compose.setContent { MaterialTheme(colorScheme = colors) {
+                PlaybackTrackDialog(player, onlyType = C.TRACK_TYPE_TEXT, onTextEnabledChanged = { remembered = it }) {}
+            } }
+            compose.onNodeWithText("开启字幕（自动）").performClick()
+            compose.runOnIdle {
+                assertEquals(true, remembered)
+                assertFalse(C.TRACK_TYPE_TEXT in player.trackSelectionParameters.disabledTrackTypes)
+                assertEquals(listOf("ja"), player.trackSelectionParameters.preferredAudioLanguages)
+            }
+            compose.onNodeWithText("关闭字幕").performClick()
+            compose.runOnIdle {
+                assertEquals(false, remembered)
+                assertTrue(C.TRACK_TYPE_TEXT in player.trackSelectionParameters.disabledTrackTypes)
+                assertEquals(listOf("ja"), player.trackSelectionParameters.preferredAudioLanguages)
+            }
+        } finally { compose.runOnIdle { player.release() } }
+    }
     @Test fun trackDialogSurvivesBottomBarAutoHide() {
         lateinit var player: ExoPlayer
         var open by mutableStateOf(false)

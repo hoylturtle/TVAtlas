@@ -51,15 +51,21 @@ class PreviewIdentityTest {
     @Test fun installedApkAndVisibleBuildIdentityAgree() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
-        assertEquals("preview", BuildConfig.BUILD_TYPE)
-        assertTrue(BuildConfig.VERSION_CODE >= 1000000)
-        assertTrue(BuildConfig.VERSION_NAME.contains("preview.${BuildConfig.PREVIEW_ID}"))
+        val preview = BuildConfig.BUILD_TYPE == "preview"
+        if (preview) {
+            assertTrue(BuildConfig.VERSION_CODE >= 1000000)
+            assertTrue(BuildConfig.VERSION_NAME.contains("preview.${BuildConfig.PREVIEW_ID}"))
+        } else {
+            assertEquals("com.tvatlas.player", context.packageName)
+            assertFalse(BuildConfig.VERSION_NAME.contains("preview"))
+        }
         assertEquals(BuildConfig.VERSION_NAME, info.versionName)
         @Suppress("DEPRECATION")
         assertEquals(BuildConfig.VERSION_CODE, info.versionCode)
-        assertTrue(context.applicationInfo.loadLabel(context.packageManager).toString().contains(BuildConfig.PREVIEW_ID))
+        if (preview) assertTrue(context.applicationInfo.loadLabel(context.packageManager).toString().contains(BuildConfig.PREVIEW_ID))
         compose.setContent { AtlasTheme { AtlasBrand() } }
-        compose.onNodeWithText("预览 #${BuildConfig.PREVIEW_ID}").assertIsDisplayed()
+        if (preview) compose.onNodeWithText("预览 #${BuildConfig.PREVIEW_ID}").assertIsDisplayed()
+        else compose.onNodeWithText("TVAtlas").assertIsDisplayed()
     }
     @Test fun phoneReportedDeviceCanPersistAndReverseTelevisionLayoutChoice() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -100,8 +106,10 @@ class PreviewIdentityTest {
             }
         } } }
         compose.onNodeWithText("更新与诊断").performClick()
-        compose.onNodeWithText("版本：${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）").assertIsDisplayed()
-        compose.onNodeWithText("当前布局识别：手机／平板").assertIsDisplayed()
+        if (BuildConfig.BUILD_TYPE == "preview") {
+            compose.onNodeWithText("版本：${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）").assertIsDisplayed()
+            compose.onNodeWithText("当前布局识别：手机／平板").assertIsDisplayed()
+        } else compose.onNodeWithText("当前版本：${BuildConfig.VERSION_NAME}").assertIsDisplayed()
         val bitmap = compose.onNodeWithTag("preview-version-screen").captureToImage().asAndroidBitmap()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val values = android.content.ContentValues().apply {

@@ -2,6 +2,7 @@ package com.tvatlas.player.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
@@ -75,28 +77,46 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
 /** Playback remains full size; navigation and channels float above it. */
 @Composable internal fun TvBrowseLayout(tv: Boolean, channelName: String?,
     channels: @Composable () -> Unit, picture: @Composable () -> Unit,
-    navigation: @Composable () -> Unit = {}) {
+    navigation: @Composable (() -> Unit) -> Unit = {}) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         var guideExpanded by remember { mutableStateOf(false) }
+        var navigationOpen by remember { mutableStateOf(false) }
         val browserWidth = if (guideExpanded) (maxWidth * .56f).coerceIn(620.dp, 900.dp).coerceAtMost(maxWidth)
             else (maxWidth * .36f).coerceIn(360.dp, 560.dp).coerceAtMost(maxWidth)
         Box(Modifier.fillMaxSize()) { picture() }
 
-        Surface(Modifier.align(androidx.compose.ui.Alignment.CenterStart)
+        if (!navigationOpen) Surface(Modifier.align(androidx.compose.ui.Alignment.CenterStart)
             .fillMaxHeight().width(browserWidth).padding(bottom = 64.dp),
             color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF11121D).copy(alpha = .84f), Color(0xFF11121D).copy(alpha = .72f), Color(0xFF11121D).copy(alpha = .50f))))) {
-                var navigationOpen by remember { mutableStateOf(false) }
                 Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     AtlasBrand()
                     Text("  |  直播", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = { navigationOpen = true }) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "导航") }
                 }
-                if (navigationOpen) androidx.compose.ui.window.Dialog(onDismissRequest = { navigationOpen = false }) {
-                    Surface { Column { TvTextButton(onClick = { navigationOpen = false }) { Text("返回直播") }; navigation() } }
-                }
                 Box(Modifier.weight(1f).testTag("live-channel-overlay")) {
                     CompositionLocalProvider(LocalLiveOverlay provides true, LocalLiveGuideOpen provides { guideExpanded = it }) { channels() }
+                }
+            }
+        }
+        if (navigationOpen) LiveNavigationDrawer(onDismiss = { navigationOpen = false }) { dismiss -> navigation(dismiss) }
+    }
+}
+
+/** A left-edge modal drawer, never a narrow dialog centered over the channel list. */
+@Composable internal fun LiveNavigationDrawer(onDismiss: () -> Unit, navigation: @Composable (() -> Unit) -> Unit) {
+    val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { returnFocus.requestFocus() }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().testTag("live-navigation-window")) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)).clickable(onClick = onDismiss))
+            Surface(Modifier.align(Alignment.CenterStart).widthIn(max = 260.dp).fillMaxHeight().testTag("live-navigation-drawer"),
+                color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {
+                Column(Modifier.fillMaxSize()) {
+                    TvTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        .then(Modifier.focusRequester(returnFocus))) { Text("返回直播") }
+                    Box(Modifier.weight(1f).fillMaxWidth()) { navigation(onDismiss) }
                 }
             }
         }

@@ -18,6 +18,32 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class DefaultPlaylistsTest {
+    @Test fun bundledRegionalUpgradeDoesNotFetchOrTouchUnrelatedStreams() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.inMemoryDatabaseBuilder(context, PlayerDatabase::class.java).build()
+        try {
+            val playlist = DefaultPlaylists.entries.last()
+            val original = "#EXTM3U\n#EXTINF:-1 group-title=\"中国大陆\",CCTV-1\nhttps://fixture.test/cctv\n" +
+                "#EXTINF:-1 group-title=\"澳门\",澳视澳门\nhttps://fixture.test/old\n"
+            val initial = PlayerRepository(db, OkHttpClient(), fetch = { original })
+            initial.refresh(playlist)
+            val before = db.dao().sourceStreams(playlist.id)
+            val cctv = before.single { it.url.endsWith("cctv") }
+            val old = before.single { it.url.endsWith("old") }
+            db.dao().channelRoute(old.channelId, "saved-channel-route")
+            val timestamp = db.dao().playlist(playlist.id)!!.lastUpdatedAt
+            val repo = PlayerRepository(db, OkHttpClient(), regionalCatalog =
+                "#EXTM3U\n#EXTINF:-1 group-title=\"澳门\",澳视澳门\nhttps://fixture.test/new\n", fetch = { error("must not fetch on upgrade") })
+            repeat(2) { repo.initializeDefaults(listOf(playlist)) }
+            val after = db.dao().sourceStreams(playlist.id)
+            assertEquals(cctv, after.single { it.url.endsWith("cctv") })
+            assertEquals(old.channelId, after.single { it.url.endsWith("new") }.channelId)
+            assertEquals(2, after.size)
+            assertEquals("saved-channel-route", db.dao().channel(old.channelId)!!.manualRoute)
+            assertEquals(timestamp, db.dao().playlist(playlist.id)!!.lastUpdatedAt)
+        } finally { db.close() }
+    }
+
     @Test fun seedsOfficialOfflineAndRetriesFailedSubscriptionWithoutDuplicates() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.inMemoryDatabaseBuilder(context, PlayerDatabase::class.java).build()

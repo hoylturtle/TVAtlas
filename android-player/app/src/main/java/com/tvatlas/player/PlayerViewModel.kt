@@ -38,13 +38,158 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val vod by lazy {
         com.tvatlas.player.vod.VodPlaybackController(getApplication(), viewModelScope, pool.direct,
             { com.tvatlas.player.vod.VodProgressStore(getApplication()) },
-            { allowCurrentNetwork(options.value) && !needsConsent() }).also { vodActive = it }
+            { allowCurrentNetwork(options.value) && !needsConsent() }, debugLog).also { vodActive = it }
     }
     fun openVod(url: String, title: String) {
-        if (BuildConfig.BUILD_TYPE != "preview") return
+        cancelVodSelection()
         val item = try { com.tvatlas.core.vod.VodItem.direct(url, title) }
             catch (_: IllegalArgumentException) { _message.value = "请输入有效的视频直链"; return }
-        cloudNetworkAction { stopPlayback(false); vod.open(item) }
+        cloudNetworkAction {
+            viewModelScope.launch {
+                try {
+                    stopPlayback(false)
+                    val (client, label) = prepareVodClient()
+                    vod.open(item, client, label)
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { debugLog.error("VOD_ROUTE", error); _message.value = "点播网络不可用，请重新选择节点" }
+            }
+        }
+    }
+    private var vodChoiceJob: Job? = null
+    private var vodChoiceGeneration = 0L
+    private val _vodSelecting = MutableStateFlow(false)
+    val vodSelecting = _vodSelecting.asStateFlow()
+    fun cancelVodSelection() { vodChoiceGeneration++; vodChoiceJob?.cancel(); _vodSelecting.value = false }
+    fun openVodChoice(choice: com.tvatlas.core.vod.VodEpisodeChoice, title: String) {
+        cancelVodSelection()
+        val token = vodChoiceGeneration
+        cloudNetworkAction {
+            if (token != vodChoiceGeneration) return@cloudNetworkAction
+            vodChoiceJob = viewModelScope.launch {
+                _vodSelecting.value = true
+                try {
+                    val (client, label) = prepareVodClient()
+                    val ordered = com.tvatlas.player.vod.VodLineSelector(
+                        com.tvatlas.player.vod.vodMediaClient(client, { canLoadChannelArtwork() }, debugLog)).order(choice.candidates)
+                    val items = ordered.map { com.tvatlas.core.vod.VodItem.direct(it.url, title.take(80)) }
+                    if (items.isEmpty()) { _message.value = "这一集没有可播放地址"; return@launch }
+                    stopPlayback(false)
+                    vod.open(items.first(), client, label, items.drop(1))
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { debugLog.error("VOD_SELECT", error); _message.value = "自动选线失败，请重试或检查网络" }
+                finally { if (token == vodChoiceGeneration) _vodSelecting.value = false }
+            }
+        }
+    }
+    private var activeUnifiedVod: com.tvatlas.player.vod.UnifiedVodRepository? = null
+    private var activeVodSubscriptions: com.tvatlas.player.vod.VodSubscriptionStore? = null
+    internal val vodSubscriptions by lazy {
+        val bootstrap = kotlinx.serialization.json.Json.decodeFromString<List<com.tvatlas.core.vod.SubscribedVodSource>>(
+            getApplication<Application>().assets.open("vod-test-sources.json").bufferedReader().use { it.readText() })
+        com.tvatlas.player.vod.VodSubscriptionStore(java.io.File(getApplication<Application>().noBackupFilesDir, "vod-subscriptions"), bootstrap, viewModelScope,
+            feeds = kotlinx.serialization.json.Json.parseToJsonElement(getApplication<Application>().assets.open("vod-subscriptions.json").bufferedReader().use { it.readText() })
+                .let { root -> ((root as kotlinx.serialization.json.JsonObject).getValue("feeds") as kotlinx.serialization.json.JsonArray).associate { item ->
+                    val row = item as kotlinx.serialization.json.JsonObject
+                    (row.getValue("name") as kotlinx.serialization.json.JsonPrimitive).content to (row.getValue("url") as kotlinx.serialization.json.JsonPrimitive).content
+                } },
+            fetch = { url -> resourceBytes(url, 2 * 1024 * 1024, "VOD_SUBSCRIPTION").toString(Charsets.UTF_8) },
+            validate = { api ->
+                requireNetwork(settings.options.first()); require(!needsConsent())
+                val client = com.tvatlas.player.vod.VodCatalogClient(prepareVodClient(vodSourceRoutes.get(api)).first, debugLog)
+                client.load(api, 1, "").movies.any { it.episodes.isNotEmpty() }
+            }).also { store ->
+            activeVodSubscriptions = store
+            viewModelScope.launch { store.state.map { it.sources.map { source -> source.api } }.distinctUntilChanged()
+                .collect { activeUnifiedVod?.updateSources(it) } }
+        }
+    }
+    fun syncVodSubscriptions(manual: Boolean = false) {
+        if (!manual && (!options.value.autoRefresh || isMetered() || playback.player.value != null || vodActive?.state?.value?.player != null)) return
+        cloudNetworkAction { vodSubscriptions.sync(force = manual, interval = options.value.refreshHours * 3600000L) }
+    }
+    internal val unifiedVod by lazy {
+        com.tvatlas.player.vod.UnifiedVodRepository(vodSubscriptions.state.value.sources.map { it.api },
+            java.io.File(getApplication<Application>().noBackupFilesDir, "vod-catalog"), viewModelScope, debugLog) { source ->
+            requireNetwork(settings.options.first()); require(!needsConsent())
+            val (client, _) = prepareVodClient(vodSourceRoutes.get(source))
+            com.tvatlas.player.vod.VodCatalogClient(client, debugLog)
+        }.also { activeUnifiedVod = it }
+    }
+    private var unifiedEpisodeSources = emptyMap<String, String>()
+    suspend fun unifiedDetails(movie: com.tvatlas.core.vod.UnifiedMovie): com.tvatlas.core.vod.UnifiedMovie {
+        val result = unifiedVod.details(movie)
+        unifiedEpisodeSources = result.offers.flatMap { offer -> offer.movie.episodes.map { it.url to offer.source } }.asReversed().toMap()
+        return result
+    }
+    fun openUnifiedChoice(choice: com.tvatlas.core.vod.VodEpisodeChoice, identity: String, title: String) {
+        cancelVodSelection(); val token = vodChoiceGeneration
+        cloudNetworkAction {
+            if (token != vodChoiceGeneration) return@cloudNetworkAction
+            vodChoiceJob = viewModelScope.launch {
+                _vodSelecting.value = true
+                try {
+                    val prepared = choice.candidates.mapNotNull { unifiedEpisodeSources[it.url] }.distinct().associateWith { source ->
+                        prepareVodClient(vodSourceRoutes.get(source))
+                    }
+                    val fallback = prepared.values.firstOrNull() ?: throw IllegalArgumentException("请重新打开影片获取播放信息")
+                    val mediaClients = prepared.mapValues { (_, value) -> com.tvatlas.player.vod.vodMediaClient(value.first, { canLoadChannelArtwork() }, debugLog) }
+                    val ordered = com.tvatlas.player.vod.VodLineSelector(fallback.first) { episode ->
+                        mediaClients[unifiedEpisodeSources[episode.url]] ?: fallback.first
+                    }.order(choice.candidates)
+                    val items = ordered.map { com.tvatlas.core.vod.VodItem.episode(it.url, title.take(80), identity) }
+                    if (items.isEmpty()) throw IllegalArgumentException("暂无可用地址")
+                    val clients = items.associate { it.url to (prepared[unifiedEpisodeSources[it.url]]?.first ?: fallback.first) }
+                    val labels = items.associate { it.url to (prepared[unifiedEpisodeSources[it.url]]?.second ?: fallback.second) }
+                    stopPlayback(false)
+                    vod.open(items.first(), fallback.first, fallback.second, items.drop(1),
+                        alternativeClients = clients, alternativeLabels = labels)
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { debugLog.error("VOD_UNIFIED", error); _message.value = error.message ?: "播放信息暂不可用" }
+                finally { if (token == vodChoiceGeneration) _vodSelecting.value = false }
+            }
+        }
+    }
+    suspend fun loadVodCatalog(api: String, page: Int, search: String, id: String? = null): com.tvatlas.core.vod.CatalogPage {
+        requireNetwork(settings.options.first())
+        require(!needsConsent()) { "读取片单需要确认移动网络" }
+        val (client, label) = prepareVodClient()
+        debugLog.event("INFO", "VOD_CATALOG_ROUTE", "route=$label page=$page detail=${id != null} search=${search.isNotBlank()}")
+        return com.tvatlas.player.vod.VodCatalogClient(client, debugLog).load(api, page, search, id)
+    }
+    suspend fun createVodArtworkLoader(): coil.ImageLoader {
+        val (client, _) = prepareVodClient()
+        val guarded = client.newBuilder().addInterceptor { chain ->
+            if (!canLoadChannelArtwork()) throw java.io.IOException("当前网络不允许加载海报")
+            chain.proceed(chain.request())
+        }.build()
+        return coil.Coil.imageLoader(getApplication()).newBuilder().okHttpClient(guarded).build()
+    }
+    private val _vodRoute = MutableStateFlow(RouteTarget.DIRECT)
+    val vodRoute = _vodRoute.asStateFlow()
+    private val vodSourceRoutes = com.tvatlas.core.vod.VodSourceRoutes()
+    private var selectedVodSource = "direct-video"
+    fun selectVodSource(source: String) {
+        selectedVodSource = source
+        _vodRoute.value = vodSourceRoutes.get(source)
+    }
+    fun setVodRoute(target: RouteTarget) {
+        cancelVodSelection()
+        vodSourceRoutes.set(selectedVodSource, target)
+        _vodRoute.value = target
+    }
+    fun isSystemVpnActive(): Boolean = connectivity.activeNetwork?.let(connectivity::getNetworkCapabilities)
+        ?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) == true
+    private suspend fun prepareVodClient(target: RouteTarget = _vodRoute.value): Pair<okhttp3.OkHttpClient, String> {
+        requireNetwork(settings.options.first())
+        val profiles = repository.library.first().profiles
+        return routeChanges.withLock {
+            withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
+            val profile = profiles.firstOrNull { it.id == target.profile }
+            val subscription = profile?.subscriptionId?.let { database.dao().subscription(it)?.name }
+            val label = if (target.type == RouteType.DIRECT) "直连" else listOfNotNull(subscription, profile?.name).joinToString(" · ")
+            debugLog.event("INFO", "VOD_NETWORK", "route=$label systemVpn=${isSystemVpnActive()} metered=${isMetered()} fallback=false")
+            pool.client(target) to label
+        }
     }
     fun toggleVod() {
         if (vod.state.value.playing || vod.state.value.player?.playWhenReady == true) vod.pause()
@@ -72,7 +217,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         try { getApplication<Application>().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(share.webUrl())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         catch (_: Exception) { _message.value = "未找到浏览器，无法打开网盘官方页面" }
     }
-    private val repository = PlayerRepository(database, playlistClient, debugLog) { url -> resourceBytes(url, 8 * 1024 * 1024, "PLAYLIST").toString(Charsets.UTF_8) }
+    private val repository = PlayerRepository(database, playlistClient, debugLog,
+        regionalCatalog = getApplication<Application>().assets.open("regional-live.m3u").bufferedReader().use { it.readText() }) { url -> resourceBytes(url, 8 * 1024 * 1024, "PLAYLIST").toString(Charsets.UTF_8) }
     private val subscriptionRepository = SubscriptionRepository(database, playlistClient, vault, core, debugLog) { url ->
         requireNetwork(settings.options.first())
         val profiles = library.value.profiles
@@ -98,15 +244,36 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val latency = NodeLatencyTester(pool::client)
     val directHealth = latency.direct
     val nodeHealth = latency.health
-    val nodeTesting = latency.testing
+    private val nodeTestPreparing = MutableStateFlow(false)
+    private var nodeTestJob: Job? = null
+    val nodeTesting = combine(latency.testing, nodeTestPreparing) { measuring, preparing -> measuring || preparing }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val nodeTestProgress = latency.progress
     fun testNodes() {
-        viewModelScope.launch {
-            val profiles = library.value.profiles
-            withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
-            latency.measure(profiles)
+        if (nodeTestJob?.isActive == true) return
+        nodeTestJob = viewModelScope.launch {
+            nodeTestPreparing.value = true
+            try {
+                requireNetwork(settings.options.first())
+                val profiles = library.value.profiles
+                withContext(Dispatchers.IO) { core.update(profiles); pool.update(profiles) }
+                nodeTestPreparing.value = false
+                latency.measure(profiles)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { debugLog.error("NODE_TEST", error); _message.value = "节点测试失败，请检查网络设置" }
+            finally { nodeTestPreparing.value = false }
         }
     }
-    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog, latency::failed) { channel, stream -> guardPlaybackNetwork(channel, stream) }
+    val playback = PlaybackCoordinator(application, repository, pool, viewModelScope, debugLog, latency::failed,
+        subtitlesEnabled = { options.value.liveSubtitles }) { channel, stream -> guardPlaybackNetwork(channel, stream) }
+    private var activeSubtitleTranslation: com.tvatlas.player.translation.SubtitleTranslation? = null
+    internal val subtitleTranslation by lazy {
+        com.tvatlas.player.translation.SubtitleTranslation(getApplication(), viewModelScope,
+            { playback.player.value }, ::canLoadChannelArtwork).also { controller ->
+            activeSubtitleTranslation = controller
+            viewModelScope.launch { playback.player.collect { controller.bind(it) } }
+        }
+    }
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
     private val _busy = MutableStateFlow(false)
@@ -226,6 +393,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var autoRefreshJob: Job? = null
     private var officialGuideJob: Job? = null
     private var guideJob: Job? = null
+    private var guideCacheJob: Job? = null
     private suspend fun resourceBytes(url: String, maximum: Int, tag: String): ByteArray {
         requireNetwork(settings.options.first())
         val selected = settings.subscriptionRoute.first()
@@ -312,7 +480,26 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun dismissMetered() { _pendingPlay.value = null; _pendingDownload.value = false; pendingCloudAction = null; _pendingCloudConsent.value = false }
     fun editOptions(edit: (UserOptions) -> UserOptions) = preferenceAction { settings.editOptions(edit) }
     fun toggleFavorite(channel: Channel) = editOptions { it.copy(favorites = if (channel.id in it.favorites) it.favorites - channel.id else it.favorites + channel.id) }
-    fun refreshGuide() { guideJob?.cancel(); guideJob = viewModelScope.launch { epg.refresh(settings.options.first().epgUrl) } }
+    fun refreshGuide() {
+        guideJob?.cancel()
+        guideJob = viewModelScope.launch {
+            guideCacheJob?.join()
+            epg.refresh(settings.options.first().epgUrl)
+        }
+    }
+    private fun requestChannelGuide(channel: Channel) {
+        officialGuideJob?.cancel()
+        officialGuideJob = viewModelScope.launch {
+            // Loading cached data must finish before a network result can replace it.
+            guideCacheJob?.join()
+            refreshOfficialGuide(channel)
+            val url = settings.options.first().epgUrl
+            if (!epg.hasOfficial(channel) && url.isNotBlank() && epg.needsRefresh()) {
+                guideJob?.join()
+                if (epg.needsRefresh()) epg.refresh(url)
+            }
+        }
+    }
     fun saveGuideUrl(url: String) = preferenceAction { settings.editOptions { it.copy(epgUrl = url) }; refreshGuide() }
     private suspend fun refreshOfficialGuide(channel: Channel) {
         val now = System.currentTimeMillis()
@@ -335,14 +522,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun restoreBackup(uri: Uri, password: CharArray) = action("配置已恢复") {
         _restoring.value = true
         try {
-        initializationJob?.cancelAndJoin(); autoRefreshJob?.cancelAndJoin(); officialGuideJob?.cancelAndJoin(); guideJob?.cancelAndJoin()
+        initializationJob?.cancelAndJoin(); autoRefreshJob?.cancelAndJoin(); officialGuideJob?.cancelAndJoin(); guideJob?.cancelAndJoin(); guideCacheJob?.cancelAndJoin()
         stopPlayback()
         val bytes = withContext(Dispatchers.IO) { requireNotNull(getApplication<Application>().contentResolver.openInputStream(uri)).use { input ->
             val out = ByteArrayOutputStream(); val b = ByteArray(8192)
             while (true) { val n = input.read(b); if (n < 0) break; require(out.size() + n <= com.tvatlas.core.backup.BackupCipher.MAX_BYTES + 52); out.write(b, 0, n) }; out.toByteArray() } }
         try { routeChanges.withLock { backup.restore(bytes, password) } }
         catch (error: java.security.GeneralSecurityException) { throw IllegalArgumentException("密码错误或备份已损坏，原配置已保留") }
-        synchronizeSubscriptionClients(); epg.reset(settings.options.first().epgUrl); officialGuideAt.clear(); refreshGuide()
+        synchronizeSubscriptionClients(); epg.reset(settings.options.first().epgUrl); officialGuideAt.clear()
         } finally { password.fill('\u0000'); _restoring.value = false }
     }
     private suspend fun refreshDue() {
@@ -351,6 +538,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _busy.value = true
         try {
             val now = System.currentTimeMillis(); val interval = prefs.refreshHours * 3600000L
+            if (vodActive?.state?.value?.player == null) {
+                activeVodSubscriptions?.sync(interval = interval)
+                activeUnifiedVod?.refreshDue(interval)
+            }
             repository.library.first().playlists.filter { it.enabled && now - (it.lastUpdatedAt ?: 0) >= interval }.forEach { playlist ->
                 try { repository.refresh(playlist); epg.invalidateLibrary() } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
             }
@@ -358,12 +549,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 try { subscriptionRepository.refresh(sub.id); routeChanges.withLock { synchronizeSubscriptionClients() } }
                 catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
             }
-            if (epg.needsRefresh()) epg.refresh(prefs.epgUrl)
         } finally { _busy.value = false; operations.unlock() }
     }
     init {
         initializationJob = viewModelScope.launch { repository.initializeDefaults(); autoRefreshJob = viewModelScope.launch { refreshDue() } }
-        guideJob = viewModelScope.launch { library.first { it.channels.isNotEmpty() }; val prefs = settings.options.first(); epg.load(prefs.epgUrl); if (!isMetered() && epg.needsRefresh()) epg.refresh(prefs.epgUrl) }
+        guideCacheJob = viewModelScope.launch { library.first { it.channels.isNotEmpty() }; epg.load(settings.options.first().epgUrl) }
         viewModelScope.launch { while (isActive) { delay(900000); autoRefreshJob?.cancelAndJoin(); autoRefreshJob = viewModelScope.launch { refreshDue() } } }
         viewModelScope.launch {
             while (isActive) {
@@ -450,12 +640,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         repository.refresh(Playlist(stableId(url.trim()), name.trim(), url.trim()))
         epg.invalidateLibrary()
     }
+    private var livePageActive = true
     fun play(channel: Channel, streamId: String? = null) {
+        if (!livePageActive) return
+        activeSubtitleTranslation?.bind(null)
         vodActive?.close()
         if (!guardPlaybackNetwork(channel, streamId)) return
         playIntent++
         val refreshing = autoRefreshJob; refreshing?.cancel()
-        officialGuideJob?.cancel(); officialGuideJob = viewModelScope.launch { refreshOfficialGuide(channel) }
+        requestChannelGuide(channel)
         debugLog.event("INFO", "PLAY", "requested channel=${channel.name} line=${streamId?.let { "selected" } ?: "automatic"}")
         val routes = library.value.profiles.filter { it.enabled }
         debugLog.event("INFO", "PROXY", "available=" + routes.joinToString { "${it.id}:${it.name}:${it.type}" })
@@ -484,6 +677,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Leaving live cancels pending route resolution as well as an already created player. */
+    fun setLivePageActive(active: Boolean) {
+        livePageActive = active
+        if (active) return
+        _pendingPlay.value = null
+        playIntent++; playJob?.cancel()
+        if (playback.player.value != null || playback.status.value.loading) playback.stop()
+    }
     fun stopPlayback(showMessage: Boolean = true) { playIntent++; playJob?.cancel(); playback.stop(showMessage); vodActive?.pause() }
     private suspend fun synchronizeSubscriptionClients() = withContext(Dispatchers.IO) {
         // Read the committed database snapshot rather than a possibly stale StateFlow value.
@@ -608,6 +809,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { connectivity.unregisterNetworkCallback(networkCallback) }
         updateJob?.cancel()
         downloadJob?.cancel()
+        activeSubtitleTranslation?.close()
         vodActive?.close()
         stopPlayback(false); core.close(); pool.close(); playlistClient.dispatcher.cancelAll(); database.close(); debugLog.close(); traffic.close()
     }

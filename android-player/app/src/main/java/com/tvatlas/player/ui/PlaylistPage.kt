@@ -27,7 +27,9 @@ import com.tvatlas.player.storage.*
 @Composable internal fun PlaylistPage(library: Library, busy: Boolean, onAdd: () -> Unit,
     onRefresh: (Playlist) -> Unit, onRefreshBuiltIn: () -> Unit, feedback: String? = null,
     onEdit: (Playlist) -> Unit = {}, onEnable: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {},
-    cloudShareCount: Int? = null, onImportCloud: () -> Unit = {}, onBrowseCloud: () -> Unit = {}) {
+    cloudShareCount: Int? = null, onImportCloud: () -> Unit = {}, onBrowseCloud: () -> Unit = {},
+    vodSources: List<Pair<String, String>> = emptyList(), onBrowseVod: (String) -> Unit = {}, onConfigureVod: (String) -> Unit = {},
+    vodSubscriptionStatus: String = "", vodSubscriptionBusy: Boolean = false, onSyncVod: () -> Unit = {}) {
     var details by remember { mutableStateOf(false) }
     var inspected by remember { mutableStateOf<String?>(null) }
     val tv = atlasTv()
@@ -65,6 +67,21 @@ import com.tvatlas.player.storage.*
                                 TvTextButton(onClick = onRefreshBuiltIn, enabled = !busy) { Text(if (busy) "处理中…" else "刷新订阅", style = MaterialTheme.typography.labelMedium) }
                             }
                             if (feedback != null) Text(feedback, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                if (vodSources.isNotEmpty()) item(key = "vod-sources") {
+                    AtlasPanel(Modifier.fillMaxWidth()) {
+                        Text("影视源", style = MaterialTheme.typography.titleMedium)
+                        Text("${vodSources.size} 个片库 · 从原始订阅同步可用原生接口", style = MaterialTheme.typography.bodySmall)
+                        if (vodSubscriptionStatus.isNotBlank()) Text(vodSubscriptionStatus, style = MaterialTheme.typography.bodySmall)
+                        TvOutlinedButton(onClick = onSyncVod, enabled = !vodSubscriptionBusy) { Text(if (vodSubscriptionBusy) "同步中…" else "同步影视订阅") }
+                        vodSources.forEach { (name, api) ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                TvTextButton(onClick = { onConfigureVod(api) }) { Text("网络") }
+                                TvTextButton(onClick = { onBrowseVod(api) }) { Text("片库") }
+                            }
                         }
                     }
                 }

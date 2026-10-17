@@ -47,6 +47,7 @@ import com.tvatlas.player.storage.NetworkAccess
         Text("提醒按统计重置后的累计量计算，不自动停止播放。", style = MaterialTheme.typography.bodySmall)
     }
     if (section == "all" || section == "playback") FeatureCard("节目单") {
+        Text("启动只读取缓存；观看频道时后台更新过期节目单，也可手动刷新。", style = MaterialTheme.typography.bodySmall)
         Text("XMLTV + TVB、ViuTV 官方节目表补充；地址留空可停用 XMLTV", style = MaterialTheme.typography.bodySmall)
         Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "节目单缓存：${guide.channelCount} 个频道的 ${guide.guide.programmes.size} 条节目安排（不是直播频道数）", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

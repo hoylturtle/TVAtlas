@@ -57,7 +57,7 @@ import com.tvatlas.player.vod.VodState
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(8.dp)) {
                         Text(state.item?.title.orEmpty(), color = Color.White, maxLines = 1)
-                        Text(if (state.live) "直连 · 直播媒体不记录续播" else "直连 · 视频直链点播", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
+                        Text(if (state.live) "${state.routeLabel} · 直播媒体不记录续播" else "${state.routeLabel} · 视频直链点播", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
                     }
                     TvTextButton(onClick = onToggle) { Text(if (state.playing) "暂停" else "播放") }
                     TvTextButton(onClick = onRestart, enabled = state.ready && !state.live) { Text("从头") }

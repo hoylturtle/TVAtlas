@@ -51,6 +51,7 @@ class PlaybackCoordinator(
     private val pool: ProxyClientPool, private val scope: CoroutineScope,
     private val log: com.tvatlas.player.debug.DebugLog? = null,
     private val onNodeFailure: (RouteTarget) -> Unit = {},
+    private val subtitlesEnabled: () -> Boolean = { false },
     private val allowStart: (Channel, String?) -> Boolean = { _, _ -> true },
 ) {
     private val _player = MutableStateFlow<ExoPlayer?>(null)
@@ -63,6 +64,12 @@ class PlaybackCoordinator(
     val status = _status.asStateFlow()
     private val observationSession = java.util.UUID.randomUUID().toString()
     private val reliability = RouteReliabilityStore(java.io.File(context.noBackupFilesDir, "playback/route-observations.json"))
+    private val bundledHlsUrls by lazy {
+        context.assets.open("regional-live.m3u").bufferedReader().use { reader ->
+            com.tvatlas.core.playlist.M3uParser.parse(reader.readText(), "formats")
+                .flatMap { it.streams }.map { it.url }.toSet()
+        }
+    }
     val routeRecords = reliability.state
     private suspend fun observe(channelId: String, route: RouteAttempt, success: Boolean, failure: FailureKind? = null) {
         try { reliability.record(RouteObservation(channelId, route.streamId, route.target, System.currentTimeMillis(), success, failure, "$observationSession:$generation:${session?.attemptCount}")) }
@@ -219,6 +226,9 @@ class PlaybackCoordinator(
             mediaSourceFactory.setDrmSessionManagerProvider { manager }
         }
         val instance = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
+        instance.trackSelectionParameters = instance.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !subtitlesEnabled())
+            .setSelectUndeterminedTextLanguage(true).build()
         _player.value = instance
         _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null, loading = false)
         log?.event("INFO", "PLAYER", "ExoPlayer created; DASH/DRM=${source != null}")
@@ -277,6 +287,19 @@ class PlaybackCoordinator(
             }
         })
         instance.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+                log?.event("INFO", "SUBTITLE", "groups=${textGroups.size} selected=${textGroups.count { it.isSelected }} enabled=${subtitlesEnabled()}")
+                val parameters = instance.trackSelectionParameters
+                if (!subtitlesEnabled() || C.TRACK_TYPE_TEXT in parameters.disabledTrackTypes ||
+                    parameters.overrides.values.any { it.type == C.TRACK_TYPE_TEXT }) return
+                val groups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+                if (groups.any { it.isSelected }) return
+                val group = groups.firstOrNull { g -> (0 until g.length).any { g.isTrackSupported(it) } } ?: return
+                val index = (0 until group.length).first { group.isTrackSupported(it) }
+                instance.trackSelectionParameters = parameters.buildUpon()
+                    .addOverride(androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, listOf(index))).build()
+            }
             override fun onPlaybackStateChanged(playbackState: Int) { log?.event("INFO", "PLAYER", "state=$playbackState (1=idle 2=buffering 3=ready 4=ended)") }
             override fun onIsPlayingChanged(isPlaying: Boolean) { log?.event("INFO", "PLAYER", "isPlaying=$isPlaying") }
             override fun onPlayerError(error: PlaybackException) {
@@ -287,14 +310,23 @@ class PlaybackCoordinator(
                 fail(failure, error.errorCode.takeIf { it in 6000..6999 })
             }
         })
-        val item = if (source == null) MediaItem.fromUri(route.streamUrl) else MediaItem.Builder()
+        // A few verified HLS endpoints have no .m3u8 suffix. URI inference would
+        // otherwise select a progressive extractor and reject the playlist text.
+        val bundledHls = source == null && withContext(Dispatchers.IO) { route.streamUrl in bundledHlsUrls }
+        val item = if (source == null) MediaItem.Builder().setUri(route.streamUrl).apply {
+            if (bundledHls) setMimeType(MimeTypes.APPLICATION_M3U8)
+        }.build() else MediaItem.Builder()
             .setUri(source.url).setMimeType(source.mimeType).apply {
                 if (source.drmRequired) setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
                     .setLicenseUri(source.licenseUrl)
                     .setLicenseRequestHeaders(if (viu) emptyMap() else MyTvSuperSource.licenseHeaders(source.userToken))
                     .build())
             }.build()
-        instance.setMediaItem(item)
+        val nativeHls = source == null && (item.localConfiguration?.mimeType == MimeTypes.APPLICATION_M3U8 ||
+            android.net.Uri.parse(route.streamUrl).path.orEmpty().endsWith(".m3u8", true))
+        if (nativeHls) instance.setMediaSource(androidx.media3.exoplayer.hls.HlsMediaSource.Factory(factory)
+            .setAllowChunklessPreparation(false).createMediaSource(item))
+        else instance.setMediaItem(item)
         instance.prepare(); instance.playWhenReady = true
         watcher = scope.launch {
             val gate = SuccessGate()

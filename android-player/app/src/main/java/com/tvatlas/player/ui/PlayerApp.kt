@@ -116,6 +116,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val coreInfo by model.coreInfo.collectAsStateWithLifecycle()
         val nodeHealth by model.nodeHealth.collectAsStateWithLifecycle()
         val nodeTesting by model.nodeTesting.collectAsStateWithLifecycle()
+        val nodeTestProgress by model.nodeTestProgress.collectAsStateWithLifecycle()
         val ruleFiles by model.ruleFiles.collectAsStateWithLifecycle()
         val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
         CacheChannelArtwork(library.channels, model::canLoadChannelArtwork)
@@ -125,7 +126,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
         val wide = tv || (windowWidth >= 600.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        var requestedVodSource by rememberSaveable { mutableStateOf<String?>(null) }
+        var vodSourceRequest by rememberSaveable { mutableIntStateOf(0) }
+        var mediaRequestedCatalog by rememberSaveable { mutableStateOf<Boolean?>(null) }
+        var mediaRequestId by rememberSaveable { mutableIntStateOf(0) }
         var tab by rememberSaveable { mutableIntStateOf(0) }
+        // Every navigation entry point shares this lifecycle, including restored pages and back.
+        LaunchedEffect(tab) { model.setLivePageActive(tab == 0) }
         var channelSearchRequest by remember { mutableIntStateOf(0) }
         var cloudImportRequest by remember { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
@@ -217,28 +224,48 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
                                 channels = { channels(Modifier.fillMaxSize()) },
                                 picture = { video(Modifier.fillMaxSize()) },
-                                navigation = { TvNavigation(tab, { tab = it }, Modifier.fillMaxHeight()) })
+                                navigation = { dismiss -> TvNavigation(tab, { dismiss(); tab = it }, Modifier.fillMaxSize()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
                                 channels = { channels(it) })
                         }
                     }
-                    4 -> if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview") {
+                    4 -> {
+                        var catalogOpen by rememberSaveable { mutableStateOf(true) }
                         val controller = model.cloudLibrary
                         val cloudState by controller.state.collectAsStateWithLifecycle()
-                        CloudLibraryPage(cloudState, controller::importShare,
+                        var consumedMediaRequest by rememberSaveable { mutableIntStateOf(-1) }
+                        LaunchedEffect(mediaRequestId) {
+                            if (consumedMediaRequest != mediaRequestId) {
+                                mediaRequestedCatalog?.let { catalogOpen = it }
+                                consumedMediaRequest = mediaRequestId
+                            }
+                        }
+                        if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }) else CloudLibraryPage(cloudState, controller::importShare,
                             { share -> model.cloudNetworkAction { controller.open(share) } },
                             { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
                             { model.cloudNetworkAction { controller.refresh() } },
-                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest, model::openVod, { tab = 1 })
+                            { model.cloudNetworkAction { controller.more() } }, controller::remove, model::openCloudWebsite, cloudImportRequest, model::openVod, { tab = 1 }, { catalogOpen = true })
                     }
                     1 -> {
-                        val cloudCount = if (BuildConfig.BUILD_TYPE == "preview") {
+                        val cloudCount = run {
                             val cloud by model.cloudLibrary.state.collectAsStateWithLifecycle()
                             cloud.shares.size
-                        } else null
+                        }
+                        val vodFeedState by model.vodSubscriptions.state.collectAsStateWithLifecycle()
+                        LaunchedEffect(Unit) { model.syncVodSubscriptions() }
+                        var configuringVodSource by remember { mutableStateOf<String?>(null) }
+                        configuringVodSource?.let { source ->
+                            VodSourceNetworkDialog(model, source) { configuringVodSource = null }
+                        }
                         PlaylistPage(library, busy, { addPlaylist = true }, model::refresh, model::refreshBuiltIn, playlistFeedback,
                         { editPlaylistId = it.id }, model::enablePlaylist, { deletePlaylistId = it.id }, cloudCount,
-                        { tab = 4; cloudImportRequest++ }, { tab = 4 })
+                        { mediaRequestedCatalog = false; mediaRequestId++; tab = 4; cloudImportRequest++ },
+                        { mediaRequestedCatalog = false; mediaRequestId++; tab = 4 },
+                        vodSources = vodFeedState.sources.map { it.name to it.api },
+                        vodSubscriptionStatus = vodFeedState.message, vodSubscriptionBusy = vodFeedState.busy,
+                        onSyncVod = { model.syncVodSubscriptions(manual = true) },
+                        onBrowseVod = { api -> requestedVodSource = api; vodSourceRequest++; mediaRequestedCatalog = true; mediaRequestId++; tab = 4 },
+                        onConfigureVod = { api -> model.selectVodSource(api); configuringVodSource = api })
                     }
                     2 -> {
                         val target by model.playback.networkTarget.collectAsStateWithLifecycle()
@@ -250,11 +277,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         { removeSubscription = it }, model::enableNode, subscriptionRoute, model::setSubscriptionRoute,
                         subscriptionFeedback, updatingSubscription, coreInfo, model::refreshCoreInfo, { tab = 3; model.checkUpdate() },
                         nodeHealth, nodeTesting, model::testNodes, ruleFiles, model::selectRuleFile,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, currentTarget = target, currentSpeed = speed, currentUsage = usage.entries.associate { it.id to it.total })
+                        nodeTestProgress = nodeTestProgress, trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, currentTarget = target, currentSpeed = speed, currentUsage = usage.entries.associate { it.id to it.total })
                     }
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, interfaceContent = { LandscapePreference(options.alwaysLandscape) { enabled -> model.editOptions { it.copy(alwaysLandscape = enabled) } }; DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, testingContent = {
+                            TranslationSettings(model, returnToLive = { tab = 0 })
+                        }, interfaceContent = { LandscapePreference(options.alwaysLandscape) { enabled -> model.editOptions { it.copy(alwaysLandscape = enabled) } }; DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
                 }
                 }
                 }
@@ -272,7 +301,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             }
         }, confirmButton = { TvTextButton(onClick = { pageMenuOpen = false }) { Text("关闭") } })
         if (exitPrompt) ExitConfirmation({ exitPrompt = false }) { model.stopPlayback(); (context as? android.app.Activity)?.finish() }
-        if (com.tvatlas.player.BuildConfig.BUILD_TYPE == "preview") {
+        run {
             val vod by model.vod.state.collectAsStateWithLifecycle()
             if (vod.item != null) VodPlaybackDialog(vod, model.vod, model::toggleVod, model::restartVod)
         }
@@ -306,7 +335,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
         if (detail != null) ChannelDialog(detail, library.profiles, library.playlists, status, { detailId = null },
             { streamId, target -> model.setRoute(detail.id, streamId, target) },
-            { streamId -> model.play(detail, streamId); detailId = null }, { model.resetChannelRoutes(detail.id) }, busy, guide = { ProgrammeInfo(model.epg, detail, true) }, favorite = {
+            { streamId -> model.play(detail, streamId); detailId = null }, { model.resetChannelRoutes(detail.id) }, busy, favorite = {
                 TvTextButton(onClick = { model.toggleFavorite(detail) }, modifier = Modifier.fillMaxWidth().selectionOutline(detail.id in options.favorites)) { Text(if (detail.id in options.favorites) "取消收藏" else "收藏频道") } }, history = {
                 val observations by model.playback.routeRecords.collectAsStateWithLifecycle()
                 RouteRecordSummary(detail, library, subscriptions, observations)
@@ -450,15 +479,40 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 @Composable private fun VideoPane(model: PlayerViewModel, status: PlaybackStatus, library: Library, modifier: Modifier, diagnostics: Boolean, tv: Boolean, pictureFocused: Boolean, fillPicture: Boolean, immersive: Boolean, compact: Boolean,
     onFullscreen: () -> Unit, onShowChannels: () -> Unit, onDetails: () -> Unit, onChannel: (Int) -> Unit, panelLabel: String? = null) {
     val player by model.playback.player.collectAsStateWithLifecycle()
+    val translation by model.subtitleTranslation.state.collectAsStateWithLifecycle()
+    var translationOpen by remember { mutableStateOf(false) }
     val networkTarget by model.playback.networkTarget.collectAsStateWithLifecycle()
     val subscriptions by model.subscriptions.collectAsStateWithLifecycle()
     var tracksOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(player) { if (player == null) tracksOpen = false }
+    var subtitlesOpen by remember { mutableStateOf(false) }
+    var subtitlesEnabled by remember(player) { mutableStateOf(player?.trackSelectionParameters?.disabledTrackTypes?.contains(androidx.media3.common.C.TRACK_TYPE_TEXT) == false) }
+    var hasSubtitleTracks by remember(player) { mutableStateOf(player?.currentTracks?.groups?.any { it.type == androidx.media3.common.C.TRACK_TYPE_TEXT } == true) }
+    var subtitleSelected by remember(player) { mutableStateOf(player?.currentTracks?.groups?.any { it.type == androidx.media3.common.C.TRACK_TYPE_TEXT && it.isSelected } == true) }
+    var subtitleCues by remember(player) { mutableStateOf(player?.currentCues?.cues?.isNotEmpty() == true) }
+    var subtitleReady by remember(player) { mutableStateOf(player?.playbackState == androidx.media3.common.Player.STATE_READY) }
+    DisposableEffect(player) {
+        val current = player
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                hasSubtitleTracks = tracks.groups.any { it.type == androidx.media3.common.C.TRACK_TYPE_TEXT && (0 until it.length).any(it::isTrackSupported) }
+                subtitleSelected = tracks.groups.any { it.type == androidx.media3.common.C.TRACK_TYPE_TEXT && it.isSelected }
+            }
+            override fun onCues(group: androidx.media3.common.text.CueGroup) { subtitleCues = group.cues.isNotEmpty() }
+            override fun onPlaybackStateChanged(state: Int) { subtitleReady = state == androidx.media3.common.Player.STATE_READY }
+            override fun onTrackSelectionParametersChanged(parameters: androidx.media3.common.TrackSelectionParameters) {
+                subtitlesEnabled = androidx.media3.common.C.TRACK_TYPE_TEXT !in parameters.disabledTrackTypes
+            }
+        }
+        current?.addListener(listener)
+        onDispose { current?.removeListener(listener) }
+    }
+    LaunchedEffect(player) { tracksOpen = false; subtitlesOpen = false }
     val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
     val picture: @Composable () -> Unit = {
+        Box(Modifier.fillMaxSize()) {
             if (player == null) AtlasIdlePicture(if (compact && status.error != null && !status.loading) "播放未成功" else status.message,
                 library.channels.firstOrNull { it.id == status.channelId }, status.loading)
-            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv && !immersive; keepScreenOn = true; isFocusable = !immersive && (!tv || pictureFocused); isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.useController = !tv && !immersive; it.isFocusable = !immersive && (!tv || pictureFocused); it.isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive && !it.hasFocus()) it.post { it.requestFocus() } },
+            else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv && !immersive; keepScreenOn = true; isFocusable = !immersive && (!tv || pictureFocused); isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.subtitleView?.visibility = if (translation.enabled) android.view.View.GONE else android.view.View.VISIBLE; it.useController = !tv && !immersive; it.isFocusable = !immersive && (!tv || pictureFocused); it.isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive && !it.hasFocus()) it.post { it.requestFocus() } },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !immersive && (!tv || pictureFocused) }.onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) false else when (event.key) {
                         Key.DirectionUp -> { onChannel(-1); true }
@@ -468,6 +522,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         else -> false
                     }
                 })
+            if (translation.enabled && translation.original.isNotBlank()) {
+                val text = if (translation.translated.isBlank()) translation.original else if (translation.bilingual)
+                    translation.original + "\n" + translation.translated else translation.translated
+                Text(text, Modifier.align(Alignment.BottomCenter).padding(horizontal = 24.dp, vertical = 88.dp)
+                    .background(Color.Black.copy(alpha = .7f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(10.dp),
+                    color = Color.White, textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 4,
+                    style = MaterialTheme.typography.bodyLarge)
+            }
+        }
         }
     val controls: @Composable () -> Unit = {
         if (tv && pictureFocused && !immersive) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
@@ -480,6 +543,17 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             fullscreenLabel = panelLabel ?: if (tv) "频道" else if (immersive) "退出全屏" else "全屏 / 频道", immersive = immersive,
             tail = {
                 PlaybackNetworkInfo(model, networkTarget ?: displayedAttempt?.target)
+                TvTextButton(onClick = { translationOpen = true }, enabled = player != null,
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("翻译", maxLines = 1) }
+                TvTextButton(onClick = { subtitlesOpen = true }, enabled = player != null,
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text(when {
+                        !subtitlesEnabled -> "字幕：关"
+                        !subtitleReady -> "字幕：检测中"
+                        !hasSubtitleTracks -> "字幕：无轨道"
+                        !subtitleSelected -> "字幕：待选择"
+                        subtitleCues -> "字幕：显示中"
+                        else -> "字幕：已开启"
+                    }, maxLines = 1) }
                 if (immersive) TvTextButton(onClick = { tracksOpen = true }, enabled = player != null,
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.White)) { Text("画质", maxLines = 1) }
             }, fullscreenRoute = playbackRouteLabel(networkTarget ?: displayedAttempt?.target, library.profiles, subscriptions),
@@ -498,7 +572,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
         onChannel, onDetails, picture, controls, keepControlsVisible = panelLabel == "收起")
     else PlayerPaneLayout(fillPicture, modifier, picture, controls)
-    if (tracksOpen && player != null) PlaybackTrackDialog(requireNotNull(player)) { tracksOpen = false }
+    if (translationOpen) AlertDialog(onDismissRequest = { translationOpen = false }, title = { Text("字幕翻译") },
+        text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) { TranslationSettings(model, livePictureVisible = true) } },
+        confirmButton = { TvTextButton(onClick = { translationOpen = false }) { Text("关闭") } })
+    if (tracksOpen && player != null) PlaybackTrackDialog(requireNotNull(player),
+        onTextEnabledChanged = { enabled -> model.editOptions { it.copy(liveSubtitles = enabled) } }) { tracksOpen = false }
+    if (subtitlesOpen && player != null) PlaybackTrackDialog(requireNotNull(player), onlyType = androidx.media3.common.C.TRACK_TYPE_TEXT,
+        onTextEnabledChanged = { enabled -> model.editOptions { it.copy(liveSubtitles = enabled) } }) { subtitlesOpen = false }
 }
 
 
@@ -618,7 +698,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
 
 @Composable internal fun ChannelDialog(channel: Channel, profiles: List<ProxyProfile>, playlists: List<Playlist>, status: PlaybackStatus, onDismiss: () -> Unit,
     onRoute: (String?, RouteTarget?) -> Unit, onPlay: (String?) -> Unit,
-    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false, guide: @Composable () -> Unit = {}, favorite: @Composable () -> Unit = {}, history: @Composable () -> Unit = {}) {
+    onResetRoutes: () -> Unit = { onRoute(null, null); channel.streams.forEach { onRoute(it.id, null) } }, busy: Boolean = false, favorite: @Composable () -> Unit = {}, history: @Composable () -> Unit = {}) {
     var selectedStreamId by remember(channel.id) {
         mutableStateOf((status.attempt ?: status.lastAttempt)?.takeIf { status.channelId == channel.id }?.streamId)
     }
@@ -626,7 +706,6 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     AlertDialog(onDismissRequest = onDismiss, title = { Text(channel.name) }, text = {
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             favorite()
-            guide()
             history()
             Text("播放源", style = MaterialTheme.typography.labelLarge)
             var lineMenu by remember { mutableStateOf(false) }

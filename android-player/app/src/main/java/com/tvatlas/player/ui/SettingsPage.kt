@@ -33,7 +33,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}, interfaceContent: @Composable () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}, interfaceContent: @Composable () -> Unit = {}, testingContent: @Composable () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -155,6 +155,7 @@ import com.tvatlas.player.update.*
             }
             if (category == 0) trafficContent()
             if (category == 3) { backupContent(); extrasContent() }
+            if (category == 1) SettingsCard { testingContent() }
             if (category == 1) SettingsCard {
                 Text("诊断与日志", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {

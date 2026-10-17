@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -24,7 +26,7 @@ import com.tvatlas.player.transfer.TransferKind
     onImport: (String, String, String, () -> Unit) -> Unit, onOpen: (CloudShare) -> Unit,
     onEnter: (CloudFile) -> Unit, onBack: () -> Unit, onRefresh: () -> Unit, onMore: () -> Unit,
     onRemove: (CloudShare) -> Unit, onWebsite: (CloudShare) -> Unit, importRequest: Int = 0,
-    onDirectVideo: (String, String) -> Unit = { _, _ -> }, onManageSources: () -> Unit = {}) {
+    onDirectVideo: (String, String) -> Unit = { _, _ -> }, onManageSources: () -> Unit = {}, onCatalog: () -> Unit = {}) {
     var videoPhoneInput by remember { mutableStateOf(false) }
     var directVideo by remember { mutableStateOf(false) }
     var videoUrl by remember { mutableStateOf("") }
@@ -72,34 +74,37 @@ import com.tvatlas.player.transfer.TransferKind
         }
         if (current == null) {
             val overview: @Composable ColumnScope.() -> Unit = {
-                AtlasHeader("影视 · 网盘分享", "已导入的分享与文件夹")
+                AtlasHeader("我的网盘", "已保存的分享，打开后浏览文件夹") {
+                    TvTextButton(onClick = onCatalog) { Text("影视片库") }
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TvOutlinedButton(onClick = onManageSources) { Text("管理来源") }
+                    TvOutlinedButton(onClick = onManageSources) { Text("添加 / 管理分享") }
+                    TvTextButton(onClick = { directVideo = true }) { Text("视频直链") }
                     TvTextButton(onClick = { showAuthorization = true }) { Text("账号授权") }
-                    TvOutlinedButton(onClick = { directVideo = true }) { Text("视频直链点播") }
                 }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (state.shares.isEmpty()) Text("暂无已导入分享，请到频道源添加网盘分享。", style = MaterialTheme.typography.bodyMedium)
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.shares, key = { it.key }) { share ->
-                        AtlasPanel(Modifier.fillMaxWidth()) {
-                            Text(share.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(share.provider.label, style = MaterialTheme.typography.bodySmall)
-                            TvTextButton(onClick = { onOpen(share) }) { Text(if (share.provider == CloudProvider.BAIDU) "查看接入状态" else "浏览目录") }
-                            TvTextButton(onClick = { deleting = share }) { Text("移除记录") }
+                if (state.shares.isEmpty()) AtlasPanel(Modifier.fillMaxWidth()) {
+                    Text("还没有保存的网盘分享", style = MaterialTheme.typography.titleMedium)
+                    Text("到频道源导入夸克、百度或 115 分享链接。保存后可从这里继续浏览文件夹。", style = MaterialTheme.typography.bodyMedium)
+                    TvOutlinedButton(onClick = onManageSources) { Text("导入分享链接") }
+                }
+                LazyVerticalGrid(columns = GridCells.Adaptive(240.dp), modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    gridItems(state.shares, key = { it.key }) { share ->
+                        Card(onClick = { onOpen(share) }, modifier = Modifier.fillMaxWidth().tvFocusOutline()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(share.provider.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                                Text(share.name, style = MaterialTheme.typography.titleMedium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(if (share.provider == CloudProvider.BAIDU) "查看接入状态 ›" else "打开文件夹 ›", style = MaterialTheme.typography.bodySmall)
+                                TvTextButton(onClick = { deleting = share }) { Text("移除记录") }
+                            }
                         }
                     }
                 }
             }
-            if (split) Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Column(Modifier.width(sidebarWidth).fillMaxHeight().focusGroup(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp), content = overview)
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("文件夹内容", style = MaterialTheme.typography.titleLarge)
-                    Text("从左侧选择已导入分享，读取后在这里浏览文件。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp), content = overview)
+            // The overview uses the whole screen; split only after a folder is opened.
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), content = overview)
         } else {
             val browser: @Composable ColumnScope.() -> Unit = {
                 Text(state.folders.lastOrNull()?.name ?: "分享根目录", style = MaterialTheme.typography.titleMedium,

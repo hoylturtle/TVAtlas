@@ -13,6 +13,27 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class EpgStoreTest {
+    @Test fun expiredCacheIsLoadedWithoutFetchingUntilExplicitRefresh() = runBlocking {
+        val file = File.createTempFile("epg-expired", ".json")
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val url = "https://fixture.test/epg"
+        val now = System.currentTimeMillis()
+        file.writeText(Json.encodeToString(CachedGuide(url, now - 7 * 3600000L,
+            Guide(mapOf("Other" to listOf("Other")), listOf(Programme("Other", now, now + 3600000, "cached"))))))
+        var requests = 0
+        try {
+            val store = EpgStore(file, scope) { requests++; xml("updated") }
+            store.load(url)
+            assertTrue(store.needsRefresh())
+            assertEquals(0, requests)
+            assertEquals("cached", store.state.value.guide.programmes.single().title)
+            store.refresh(url)
+            assertEquals(1, requests)
+            assertFalse(store.needsRefresh())
+            assertEquals("updated", store.state.value.guide.programmes.single().title)
+        } finally { scope.cancel(); file.delete() }
+    }
+
     @Test fun loadingLargeLegacyCacheRemovesUnrelatedProgrammesWithoutNetwork() = runBlocking {
         val file = File.createTempFile("epg-large", ".json")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

@@ -37,9 +37,13 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
         val route = manual?.takeUnless { it.type == RouteType.AUTO } ?: rule?.route ?: config.defaultRoute
         val region = context.channel.playbackRegion().takeIf { rule == null && (manual == null || manual.type == RouteType.AUTO) }
         val regional = region?.let { orderedRegionNodes(profiles, it, health, now).map { p -> p.id } }.orEmpty()
-        if (region != null && region != PlaybackRegion.MAINLAND && regional.isEmpty()) return RoutePlan(emptyList())
+        // Public international services can use direct access when no matching node exists.
+        // Existing HK/TW/JP/KR entitlement routing remains unchanged.
+        val publicRegion = region in setOf(PlaybackRegion.SINGAPORE, PlaybackRegion.UNITED_STATES,
+            PlaybackRegion.UNITED_KINGDOM, PlaybackRegion.THAILAND)
+        if (region != null && region != PlaybackRegion.MAINLAND && regional.isEmpty() && !publicRegion) return RoutePlan(emptyList())
         val selected = when {
-            region == PlaybackRegion.MAINLAND -> RouteTarget.DIRECT
+            region == PlaybackRegion.MAINLAND || (publicRegion && regional.isEmpty()) -> RouteTarget.DIRECT
             region != null -> RouteTarget(RouteType.AUTO, `try` = regional)
             manual?.type == RouteType.AUTO && route.type == RouteType.DIRECT && rule == null -> RouteTarget.AUTO
             else -> route

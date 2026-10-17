@@ -12,6 +12,18 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
+data class NodeTestProgress(
+    val total: Int = 0,
+    val completed: Int = 0,
+    val failed: Int = 0,
+    val activeIds: Set<String> = emptySet(),
+    val running: Boolean = false,
+    val samplesPerNode: Int = 3,
+) {
+    val succeeded: Int get() = completed - failed
+    val remaining: Int get() = total - completed
+}
+
 /** HTTPS response latency through the actual proxy, including DNS, TCP and TLS; not ICMP ping. */
 class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
     private val endpoint: String = "https://www.gstatic.com/generate_204") {
@@ -32,22 +44,40 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
     }
     private val _testing = MutableStateFlow(false)
     val testing = _testing.asStateFlow()
+    private val _progress = MutableStateFlow(NodeTestProgress())
+    val progress = _progress.asStateFlow()
     private var generation = 0L
-    @Synchronized fun invalidate() { generation++; _health.value = emptyMap(); _direct.value = null }
+    @Synchronized fun invalidate() { generation++; _health.value = emptyMap(); _direct.value = null; _progress.value = NodeTestProgress() }
     @Synchronized fun failed(target: RouteTarget) {
         target.profile?.let { _health.value = _health.value + (it to NodeHealth(null, System.currentTimeMillis())) }
     }
-    @Synchronized private fun save(id: String, sample: NodeHealth, token: Long) { if (token == generation) _health.value = _health.value + (id to sample) }
+    @Synchronized private fun started(id: String, token: Long) {
+        if (token == generation) _progress.value = _progress.value.copy(activeIds = _progress.value.activeIds + id)
+    }
+    @Synchronized private fun save(id: String, sample: NodeHealth, token: Long) {
+        if (token != generation) return
+        _health.value = _health.value + (id to sample)
+        val previous = _progress.value
+        _progress.value = previous.copy(completed = previous.completed + 1,
+            failed = previous.failed + if (sample.delayMs == null) 1 else 0, activeIds = previous.activeIds - id)
+    }
+    @Synchronized private fun finish(token: Long) {
+        if (token == generation) _progress.value = _progress.value.copy(running = false, activeIds = emptySet())
+    }
     suspend fun measure(profiles: List<ProxyProfile>, staleOnly: Boolean = false) {
         if (!mutex.tryLock()) return
         _testing.value = true
+        val token = synchronized(this) { generation }
         try {
-            val token = synchronized(this) { generation }
-            val candidates = profiles.filter { it.enabled && (!staleOnly || _health.value[it.id]?.fresh(System.currentTimeMillis()) != true) }
+            val candidates = profiles.distinctBy { it.id }.filter { it.enabled && (!staleOnly || _health.value[it.id]?.fresh(System.currentTimeMillis()) != true) }
+            synchronized(this) {
+                if (token == generation) _progress.value = NodeTestProgress(total = candidates.size, running = true, samplesPerNode = if (staleOnly) 1 else 3)
+            }
             val semaphore = Semaphore(4)
             withTimeoutOrNull(if (staleOnly) 10_000L else 120_000L) {
                 coroutineScope { candidates.map { profile -> launch(Dispatchers.IO) {
                     semaphore.withPermit {
+                        started(profile.id, token)
                         val values = mutableListOf<Long>()
                         repeat(if (staleOnly) 1 else 3) {
                             val delay = probe(RouteTarget.proxy(profile.id))
@@ -57,7 +87,7 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
                     }
                 } }.joinAll() }
             }
-        } finally { _testing.value = false; mutex.unlock() }
+        } finally { finish(token); _testing.value = false; mutex.unlock() }
     }
     private suspend fun probe(target: RouteTarget): Long? {
         val network = try { client(target).newBuilder().callTimeout(4, TimeUnit.SECONDS).connectTimeout(3, TimeUnit.SECONDS)

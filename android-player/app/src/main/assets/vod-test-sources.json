@@ -1,0 +1,38 @@
+[
+  {
+    "name": "百度",
+    "api": "https://api.apibdzy.com/api.php/provide/vod?ac=list"
+  },
+  {
+    "name": "影视 • 电影天堂",
+    "api": "http://caiji.dyttzyapi.com/api.php/provide/vod"
+  },
+  {
+    "name": "影视 • 天涯",
+    "api": "http://tyyszy.com/api.php/provide/vod"
+  },
+  {
+    "name": "影视 • 量子[直连]",
+    "api": "https://cj.lziapi.com/api.php/provide/vod/"
+  },
+  {
+    "name": "影视 • 非凡[直连]",
+    "api": "http://ffzy.tv/api.php/provide/vod/"
+  },
+  {
+    "name": "影视 • 尤酷[直连]",
+    "api": "https://api.ukuapi.com/api.php/provide/vod/?ac=list"
+  },
+  {
+    "name": "影视 • 极速[直连]",
+    "api": "https://jszyapi.com/api.php/provide/vod/?ac=list"
+  },
+  {
+    "name": "影视 • 率率[直连]",
+    "api": "https://suoniapi.com/api.php/provide/vod/?ac=list"
+  },
+  {
+    "name": "影视 • 暴風[直连]",
+    "api": "https://bfzyapi.com/api.php/provide/vod/?ac=list"
+  }
+]

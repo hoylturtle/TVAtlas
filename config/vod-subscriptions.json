@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "profile": "tvbox-native-json",
+  "supportedSiteTypes": [1],
+  "maxSourcesPerFeed": 40,
+  "validation": "MacCMS detail JSON with native media episodes",
+  "executablePlugins": false,
+  "feeds": [
+    {"name": "饭太硬", "url": "https://qist.wyfc.qzz.io/fty.json"},
+    {"name": "肥猫", "url": "http://xn--z7x900a.com/"},
+    {"name": "王二小", "url": "https://9280.kstore.vip/newwex.json"},
+    {"name": "电视 · 原生采集配置", "url": "https://raw.githubusercontent.com/qist/tvbox/master/jsm.json"}
+  ]
+}

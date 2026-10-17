@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream
 data class Library(val playlists: List<Playlist>, val channels: List<Channel>, val profiles: List<ProxyProfile>, val rules: RuleConfig)
 
 class PlayerRepository(private val db: PlayerDatabase, private val directClient: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null,
+    private val regionalCatalog: String = "",
     private val fetch: (suspend (String) -> String)? = null) {
     private val dao = db.dao()
     private fun route(text: String?): RouteTarget? = text?.let { RuleCodec.json.decodeFromString<RouteTarget>(it) }
@@ -34,6 +35,14 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
                 if (row.enabled && row.lastUpdatedAt == null)
                     Playlist(row.id, row.name, row.url, row.enabled, row.refreshIntervalHours)
                 else null
+            }
+        }
+        // Install the small local repair table before any network work, including on upgrades.
+        defaults.firstOrNull { it.url == DefaultPlaylists.CHANNELS_URL }?.let { entry ->
+            val row = dao.playlist(entry.id)
+            if (row?.enabled == true && regionalCatalog.isNotBlank()) {
+                val playlist = Playlist(row.id, row.name, row.url, row.enabled, row.refreshIntervalHours, row.lastUpdatedAt)
+                persist(playlist, M3uParser.parse(regionalCatalog, entry.id), partial = true)
             }
         }
         for (playlist in pending) {
@@ -85,8 +94,14 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
             bytes.toString(Charsets.UTF_8)
         }
         require(body.toByteArray(Charsets.UTF_8).size <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
-        val parsed = M3uParser.parse(body, playlist.id)
+        val base = M3uParser.parse(body, playlist.id)
+        val parsed = if (playlist.url == DefaultPlaylists.CHANNELS_URL)
+            com.tvatlas.core.playlist.RegionalLiveCatalog.merge(base, M3uParser.parse(regionalCatalog, playlist.id)) else base
         require(parsed.isNotEmpty()) { "没有有效的 HTTP(S) 频道，已保留旧列表" }
+        persist(playlist, parsed)
+    }
+
+    private suspend fun persist(playlist: Playlist, parsed: List<Channel>, partial: Boolean = false) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val oldStreams = dao.sourceStreams(playlist.id).associateBy { it.id }
             val previousChannels = dao.channelsSnapshot()
@@ -104,10 +119,12 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
                     old?.copy(url = stream.url, channelId = channelId, headers = RuleCodec.json.encodeToString(stream.headers)) ?: StreamRow(stream.id, channelId, stream.url, playlist.id, headers = RuleCodec.json.encodeToString(stream.headers))
                 }
             }
-            dao.deleteStreams(oldStreams.keys.toList() - rows.map { it.id }.toSet())
+            val affected = rows.map { it.channelId }.toSet()
+            val removable = if (partial) oldStreams.values.filter { it.channelId in affected }.map { it.id } else oldStreams.keys.toList()
+            dao.deleteStreams(removable - rows.map { it.id }.toSet())
             dao.saveStreams(rows)
             dao.pruneHistory(); dao.pruneFailures()
-            dao.savePlaylist(PlaylistRow(playlist.id, playlist.name, playlist.url, playlist.enabled,
+            if (!partial) dao.savePlaylist(PlaylistRow(playlist.id, playlist.name, playlist.url, playlist.enabled,
                 playlist.refreshIntervalHours, System.currentTimeMillis()))
         }
     }

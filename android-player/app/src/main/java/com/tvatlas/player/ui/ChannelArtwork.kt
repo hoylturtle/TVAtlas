@@ -47,7 +47,7 @@ import com.tvatlas.core.model.Channel
 @Composable internal fun ChannelArtwork(channel: Channel, playing: Boolean = false,
     allowNetwork: () -> Boolean = { false }, modifier: Modifier = Modifier.width(64.dp).height(48.dp), compactLogo: Boolean = false) {
     val bundled = bundledChannelArtwork(channel.name)
-    val symbolOnly = corporateTvbLogo(channel.name) || (compactLogo && bundled in listOf(R.drawable.channel_jade, R.drawable.channel_pearl))
+    val symbolOnly = compactLogo && bundled in listOf(R.drawable.channel_jade, R.drawable.channel_pearl)
     val tileColor = Color.Transparent
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(tileColor)
         .semantics { contentDescription = "${channel.name}频道标识" }, contentAlignment = Alignment.Center) {
@@ -80,10 +80,10 @@ import com.tvatlas.core.model.Channel
     }
 }
 
-private fun corporateTvbLogo(name: String): Boolean = name.lowercase().replace(" ", "") in setOf("tvbplus", "tvb新闻台", "tvb新聞台", "tvbnews")
 
 private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().replace(" ", "")) {
-    "tvbplus", "tvb新闻台", "tvb新聞台", "tvbnews" -> R.drawable.channel_jade
+    "tvbplus" -> extraBundledArtwork("TVB Plus")
+    "tvb新闻台", "tvb新聞台", "tvbnews" -> extraBundledArtwork("无线新闻台")
     "翡翠台", "翡翠", "tvbjade" -> R.drawable.channel_jade
     "明珠台", "明珠", "tvbpearl" -> R.drawable.channel_pearl
     "viutv" -> R.drawable.channel_viu
@@ -91,7 +91,7 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
     "港台电视31", "港台電視31", "rthk31" -> R.drawable.channel_rthk31
     "港台电视32", "港台電視32", "rthk32" -> R.drawable.channel_rthk32
     "港台电视33", "港台電視33", "rthk33" -> R.drawable.channel_rthk33
-    else -> null
+    else -> extraBundledArtwork(name)
 }
 
 /** Prefetch sequentially, suspend/cancel with the screen, and obey current network consent. */

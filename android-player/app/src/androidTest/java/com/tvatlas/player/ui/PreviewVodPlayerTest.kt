@@ -20,6 +20,38 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PreviewVodPlayerTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
 
+    @Test fun failedMediaAutomaticallyFallsBackToAnotherLine() {
+        compose.setContent { AtlasTheme {} }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("vod-fixture.mp4").use { it.readBytes() }
+        val server = MockWebServer()
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse =
+                if (request.path!!.startsWith("/denied")) MockResponse().setResponseCode(403)
+                else MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+        }
+        server.start()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        lateinit var controller: VodPlaybackController
+        val denied = VodItem.direct(server.url("/denied.mp4").toString(), "第1集")
+        val good = VodItem.direct(server.url("/good.mp4").toString(), "第1集")
+        try {
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+                controller.open(denied, alternatives = listOf(good))
+            }
+            compose.waitUntil(20000) { controller.state.value.ready && controller.state.value.item == good }
+            compose.runOnIdle { assertNull(controller.state.value.error) }
+        } finally {
+            compose.runOnIdle { controller.close() }
+            scope.cancel(); server.shutdown()
+        }
+    }
+
     @Test fun nativePlayerSeeksResumesAndHonoursNetworkPolicy() {
         compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
