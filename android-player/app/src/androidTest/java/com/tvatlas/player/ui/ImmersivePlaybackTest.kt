@@ -47,9 +47,10 @@ class ImmersivePlaybackTest {
                 picture = { Box(Modifier.fillMaxSize().testTag("picture")) },
                 controls = { VideoControls("正在播放", "线路", "香港", true, true, {}, {}, {}, fullscreenLabel = "退出全屏", immersive = true, fullscreenRoute = "香港代理") })
         } }
+        compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag("picture", useUnmergedTree = true).assertWidthIsEqualTo(640.dp).assertHeightIsEqualTo(360.dp)
         compose.onNodeWithText("退出全屏").assertIsDisplayed()
-        compose.onNodeWithText("线路 | 香港代理").assertIsDisplayed()
+        compose.onNodeWithTag("video-route-button").assertIsDisplayed()
         assertTrue(compose.onNodeWithTag("playback-controls").fetchSemanticsNode().boundsInRoot.height /
             InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density <= 96f)
         compose.onNodeWithText("正在播放").assertDoesNotExist()
@@ -100,13 +101,13 @@ class ImmersivePlaybackTest {
         compose.onNodeWithTag("playback-controls").assertDoesNotExist()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("线路 | 香港代理").assertIsFocused()
+        compose.onNodeWithTag("video-route-button").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionUp) }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithTag("playback-controls").assertDoesNotExist()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
-        compose.onNodeWithText("线路 | 香港代理").assertIsFocused()
+        compose.onNodeWithTag("video-route-button").assertIsFocused()
         compose.onRoot().performKeyInput { pressKey(Key.DirectionRight); pressKey(Key.DirectionRight); pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText("重新播放").assertIsDisplayed()

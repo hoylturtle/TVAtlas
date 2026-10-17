@@ -106,7 +106,6 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
 /** A left-edge modal drawer, never a narrow dialog centered over the channel list. */
 @Composable internal fun LiveNavigationDrawer(onDismiss: () -> Unit, navigation: @Composable (() -> Unit) -> Unit) {
     val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(Unit) { returnFocus.requestFocus() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().testTag("live-navigation-window")) {
@@ -116,6 +115,7 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
                 Column(Modifier.fillMaxSize()) {
                     TvTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(12.dp)
                         .then(Modifier.focusRequester(returnFocus))) { Text("返回直播") }
+                    LaunchedEffect(Unit) { withFrameNanos { }; returnFocus.requestFocus() }
                     Box(Modifier.weight(1f).fillMaxWidth()) { navigation(onDismiss) }
                 }
             }

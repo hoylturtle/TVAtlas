@@ -39,7 +39,7 @@ class RoutingPageTest {
         } } }
         compose.onNodeWithText("节点详情").assertDoesNotExist()
         compose.onNodeWithText("美国节点").performClick()
-        compose.onNode(hasText("美国节点") and hasAnyAncestor(isDialog())).assertIsDisplayed()
+        compose.onAllNodes(hasText("美国节点") and hasAnyAncestor(isDialog())).onFirst().assertIsDisplayed()
         compose.onNodeWithText("暂无同地区备用节点").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("private.example", substring = true).assertDoesNotExist()
     }

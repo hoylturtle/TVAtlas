@@ -112,7 +112,7 @@ class TvSplitLayoutsTest {
                 Box(Modifier.weight(1f)) { RoutingPage(library, {}, {}, {}, {}, listOf(SubscriptionRow("sub", "测试影音订阅", 0, profiles.size)), false, {}, {}, {}, {}) }
             }
         } } }
-        val bounds = (0..5).map { compose.onNodeWithTag("proxy-node:p$it").fetchSemanticsNode().boundsInRoot }
+        val bounds = (0..11).map { compose.onNodeWithTag("proxy-node:p$it").fetchSemanticsNode().boundsInRoot }
         assertTrue(bounds.map { it.left }.distinct().size >= 3)
         assertTrue(bounds.map { it.top }.distinct().size >= 2)
         bounds.forEach { assertEquals(bounds.first().width, it.width, 1f); assertEquals(bounds.first().height, it.height, 1f) }

@@ -12,6 +12,13 @@ import org.junit.Rule
 import org.junit.Test
 
 class SubscriptionPasteTest {
+    @org.junit.Before fun allowFixtureClipboardReads() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.adoptShellPermissionIdentity("android.permission.READ_CLIPBOARD_IN_BACKGROUND")
+    }
+    @org.junit.After fun restoreClipboardIdentity() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.dropShellPermissionIdentity()
+    }
+
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
 
     @Test fun pasteSubscriptionAddressPreservesCompleteUrlAndEnablesImport() {

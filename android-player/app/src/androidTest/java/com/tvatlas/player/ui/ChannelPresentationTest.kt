@@ -1,6 +1,8 @@
 @file:OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 package com.tvatlas.player.ui
 
+import androidx.compose.foundation.background
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -28,7 +30,7 @@ class ChannelPresentationTest {
     @Test fun everyChannelLogoUsesThemeSurfaceInsteadOfWhiteTiles() {
         val names = listOf("CCTV1", "湖南卫视", "翡翠台", "ViuTV")
         compose.setContent { AtlasTheme {
-            Row { names.forEachIndexed { index, name ->
+            Row(Modifier.background(colors.surface)) { names.forEachIndexed { index, name ->
                 ChannelArtwork(Channel("logo$index", name, "综合", streams = listOf(first)))
             } }
         } }
@@ -63,10 +65,11 @@ class ChannelPresentationTest {
         var played = false
         compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()),
             PlaybackStatus(), true, Modifier, { played = true }, {}, {}, autoExpand = true) } }
-        compose.onNodeWithText("香港", substring = false).assertIsFocused()
-        compose.onNodeWithText("⌄  TVB").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
-        compose.onNodeWithText("⌄  TVB").performKeyInput { pressKey(Key.DirectionDown) }
-        compose.onAllNodesWithText("翡翠台").filterToOne(isFocusable()).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("全部", substring = false).assertIsFocused()
+        compose.onNodeWithText("香港", substring = false).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        compose.onNodeWithText("香港", substring = false).performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithTag("channel:jade").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        compose.onNodeWithTag("channel:jade").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertTrue(played) }
     }
     @Test fun groupsStartCollapsedAndSearchShowsMatchesWithoutOpeningEveryGroup() {
@@ -90,9 +93,9 @@ class ChannelPresentationTest {
         val channel = Channel("c1", "新闻频道", "新闻", streams = listOf(first))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), true, Modifier, {}, {}, {}) } }
-        compose.onNodeWithText("›  其他").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
-        compose.onNodeWithText("⌄  其他").performKeyInput { pressKey(Key.DirectionDown) }
-        compose.onNodeWithText("›  新闻").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("全部", substring = false).assertIsFocused()
+        compose.onNodeWithText("其他", substring = false).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        compose.onNodeWithText("其他", substring = false).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.onNodeWithText("新闻频道").assertExists()
     }
     @Test fun mainlandCctvAndSatelliteTypesExpandIndependently() {

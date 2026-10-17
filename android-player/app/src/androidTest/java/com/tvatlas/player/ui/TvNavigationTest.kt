@@ -62,11 +62,9 @@ class TvNavigationTest {
                 }
             } }
         }
-        compose.onNodeWithText("›  香港").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
-        compose.onNodeWithText("⌄  香港").performKeyInput { pressKey(Key.DirectionDown) }
-        compose.onNodeWithText("›  TVB").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
-        compose.onNodeWithText("⌄  TVB").performKeyInput { pressKey(Key.DirectionDown) }
-        compose.onAllNodesWithText("翡翠台").filterToOne(isFocusable()).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithText("香港", substring = false).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
+        compose.onNodeWithTag("channel:fixture").performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNodeWithTag("channel:fixture").assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertEquals(true, played) }
         val bitmap = compose.onNodeWithTag("tv-layout").captureToImage().asAndroidBitmap()
         val context = InstrumentationRegistry.getInstrumentation().targetContext

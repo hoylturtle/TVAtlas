@@ -56,7 +56,7 @@ class CloudLibraryPageTest {
                 folders = listOf(CloudFolder("0", "分享根目录")), files = listOf(CloudFile("folder", "第一季", true), CloudFile("video", "E01.mp4", false, 1024))) },
                 { entered = true }, {}, {}, {}, {}, {}, importRequest)
         } }
-        compose.onNodeWithText("浏览目录").performClick()
+        compose.onNodeWithText("打开文件夹 ›").performClick()
         compose.onNodeWithText("第一季").performClick(); compose.runOnIdle { assertTrue(entered) }
         compose.onNodeWithText("E01.mp4").performClick()
         compose.onNodeWithText("已识别视频文件。原生取流和账号授权尚未接入，本阶段不能在 App 内播放。").assertIsDisplayed()
