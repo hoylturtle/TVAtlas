@@ -332,7 +332,7 @@ import com.tvatlas.player.storage.*
     HorizontalDivider()
     Text("同地区回退候选", style = MaterialTheme.typography.titleSmall)
     val region = playbackRegion(profile.name)
-    val peers = region?.let { orderedRegionNodes(library.profiles, it, health, System.currentTimeMillis()) }.orEmpty().take(4)
+    val peers = region?.let { orderedRegionNodes(library.profiles, it, health, System.currentTimeMillis()) }.orEmpty().filterNot { it.id == profile.id }.take(4)
     peers.forEachIndexed { index, node ->
         Row(Modifier.fillMaxWidth()) {
             Text("${index + 1}", Modifier.width(24.dp), color = MaterialTheme.colorScheme.secondary)
