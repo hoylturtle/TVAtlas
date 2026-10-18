@@ -20,6 +20,38 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PreviewVodPlayerTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
 
+    @Test fun reportedAdvertisementIsRememberedAcrossControllersAndCanBeCleared() {
+        compose.setContent { AtlasTheme {} }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        val bad = VodItem.direct("https://example.invalid/advertisement-test.mp4", "测试")
+        val good = VodItem.direct("https://example.invalid/alternative-test.mp4", "测试")
+        lateinit var controller: VodPlaybackController
+        try {
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+                controller.clearAdvertisementReports()
+                controller.open(bad, alternatives = listOf(good))
+                controller.reportAdvertisement()
+                assertEquals(good, controller.state.value.item)
+                controller.close()
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+                controller.open(bad)
+                assertNotNull(controller.state.value.error)
+                assertNull(controller.state.value.player)
+                controller.clearAdvertisementReports()
+                controller.open(bad)
+                assertNull(controller.state.value.error)
+            }
+        } finally {
+            compose.runOnIdle { controller.clearAdvertisementReports(); controller.close(); scope.cancel() }
+        }
+    }
+
     @Test fun naturalEndCanAdvanceButExplicitCloseNeverAdvances() {
         compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext

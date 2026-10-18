@@ -27,6 +27,11 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private val onMediaFailure: (VodItem, String, Int) -> Unit = { _, _, _ -> }) {
     private val _state = MutableStateFlow(VodState())
     val state = _state.asStateFlow()
+    private val adPreferences = context.getSharedPreferences("vod-reported-ad-addresses", Context.MODE_PRIVATE)
+    private var reportAction: (() -> Unit)? = null
+    private fun adKey(url: String): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(url.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    private fun reported(item: VodItem) = adPreferences.getBoolean(adKey(item.url), false)
     private var active: ExoPlayer? = null
     private var generation = 0L
     private var openJob: Job? = null
@@ -40,7 +45,29 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     init { scope.launch { while (isActive) { delay(5000); checkpoint() } } }
     fun open(item: VodItem, client: OkHttpClient? = null, label: String? = null, alternatives: List<VodItem> = emptyList(), resumePosition: Long = 0,
         alternativeClients: Map<String, OkHttpClient> = emptyMap(), alternativeLabels: Map<String, String> = emptyMap()) {
+        val eligible = (listOf(item) + alternatives).filterNot(::reported)
+        if (eligible.isEmpty()) {
+            releasePlayer()
+            _state.value = VodState(item = item, error = "这些视频地址已被你标记为有广告，暂无其他线路。可撤销广告标记后重试。")
+            return
+        }
+        if (eligible.first().url != item.url || eligible.size != alternatives.size + 1) {
+            open(eligible.first(), client, label, eligible.drop(1), resumePosition, alternativeClients, alternativeLabels)
+            return
+        }
         releasePlayer()
+        reportAction = {
+            val position = active?.currentPosition?.coerceAtLeast(0) ?: 0
+            val key = adKey(item.url)
+            adPreferences.edit().putBoolean(key, true).apply()
+            log?.event("INFO", "VOD_PLAYER", "user reported embedded advertisement; alternatives=${alternatives.size}")
+            if (alternatives.isNotEmpty() && canPlay()) {
+                open(alternatives.first(), transport, routeLabel, alternatives.drop(1), position, alternativeClients, alternativeLabels)
+            } else {
+                pause()
+                notice("已标记此视频地址有广告并暂停，暂无可用的其他线路。")
+            }
+        }
         if (alternativeClients[item.url] != null) transport = alternativeClients.getValue(item.url) else if (client != null) transport = client
         if (alternativeLabels[item.url] != null) routeLabel = alternativeLabels.getValue(item.url) else if (label != null) routeLabel = label
         log?.event("INFO", "VOD_PLAY", "requested host=${java.net.URI(item.url).host} route=$routeLabel")
@@ -176,10 +203,16 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
             catch (_: Exception) { if (token == generation) _state.value = _state.value.copy(resumeWarning = "续播记录保存失败，播放不受影响") }
         }
     }
+    fun reportAdvertisement() { reportAction?.invoke() }
+    fun clearAdvertisementReports() {
+        adPreferences.edit().clear().apply()
+        notice("已清除本机的广告地址标记，可重新选择影片播放")
+    }
     fun notice(message: String) { _state.value = _state.value.copy(resumeWarning = message) }
     fun close() { releasePlayer(); onClosed() }
     private fun releasePlayer() {
         checkpoint(finished = active?.playbackState == Player.STATE_ENDED); generation++; openJob?.cancel(); bufferJob?.cancel()
+        reportAction = null
         val old = active; active = null; old?.release()
         _state.value = VodState()
     }

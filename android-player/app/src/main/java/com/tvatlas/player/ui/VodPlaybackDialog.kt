@@ -28,6 +28,7 @@ import com.tvatlas.player.vod.VodState
     preparing: Boolean = false, autoNext: Boolean = true, onAutoNext: (Boolean) -> Unit = {}, onNext: () -> Unit = {}) {
     val tv = atlasTv()
     var controlsVisible by remember { mutableStateOf(true) }
+    var confirmAd by remember { mutableStateOf(false) }
     var tracks by remember(state.player) { mutableStateOf(false) }
     PlaybackOrientation(true, tv)
     Dialog(onDismissRequest = controller::close,
@@ -71,6 +72,8 @@ import com.tvatlas.player.vod.VodState
                     TvTextButton(onClick = onToggle) { Text(if (state.playing) "暂停" else "播放") }
                     TvTextButton(onClick = onRestart, enabled = state.ready && !state.live) { Text("从头") }
                     TvTextButton(onClick = { tracks = true }, enabled = state.ready) { Text("音轨／字幕") }
+                    TvTextButton(onClick = { confirmAd = true }, enabled = state.player != null) { Text("有广告，换线路") }
+                    TvTextButton(onClick = controller::clearAdvertisementReports) { Text("清除广告标记") }
                 }
                 if (preparing) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在准备播放…", color = Color.LightGray) }
                 state.qualityHeight?.let { Text("实际视频分辨率：${it}P", color = Color.LightGray, style = MaterialTheme.typography.labelSmall) }
@@ -79,6 +82,11 @@ import com.tvatlas.player.vod.VodState
             }
             if (state.player == null && state.error == null) CircularProgressIndicator(Modifier.align(Alignment.Center))
         }
+        if (confirmAd) AlertDialog(onDismissRequest = { confirmAd = false },
+            title = { Text("标记广告并换线路？") },
+            text = { Text("本机会避开这条视频地址，并尝试备用线路。不同版本的播放进度可能有偏差；画面内嵌广告无法直接清除。可用“清除广告标记”恢复。") },
+            confirmButton = { TvTextButton(onClick = { confirmAd = false; controller.reportAdvertisement() }) { Text("标记并换线") } },
+            dismissButton = { TvTextButton(onClick = { confirmAd = false }) { Text("取消") } })
         if (tracks) state.player?.let { PlaybackTrackDialog(it) { tracks = false } }
     }
 }
