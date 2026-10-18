@@ -9,6 +9,19 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+enum class LogCategory(val label: String, val fileKey: String) {
+    ALL("全部", "all"), STARTUP("启动", "startup"), PLAYBACK("播放", "playback"), INTERACTION("操作", "interaction");
+    fun accepts(line: String): Boolean {
+        val stage = line.split(' ', limit = 7).getOrNull(4).orEmpty()
+        return when (this) {
+            ALL -> true
+            STARTUP -> stage == "APP" || stage.startsWith("STARTUP") || stage == "CHANNEL_INDEX" || stage == "LIFECYCLE"
+            INTERACTION -> stage.startsWith("INPUT") || stage in setOf("NAVIGATION", "MAIN_STALL", "MAIN_RECOVERED")
+            PLAYBACK -> stage in setOf("PLAY", "PLAYER", "ROUTE", "SOURCE", "HTTP", "SESSION", "SESSION_PAIR", "SESSION_BOOTSTRAP", "CHECKOUT", "CHECKOUT_URL", "CHECKOUT_FORMAT", "FAILOVER", "MANIFEST", "MEDIA", "DRM_CONFIG", "DRM_LICENSE", "SUBTITLE", "VOD_PLAY", "VOD_PLAYER", "VOD_HTTP", "VOD_NETWORK", "NODE_TEST")
+        }
+    }
+}
+
 /** Bounded app-private diagnostic history. Never accepts request/response bodies or headers. */
 class DebugLog(private val file: File, private val environment: String) : AutoCloseable {
     private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "tvatlas-debug-log").apply { isDaemon = true } }
@@ -39,7 +52,7 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
         if (closed) return@synchronized
         val time = timestamp.format(Date())
         val line = sanitize("$time ${level.take(8)} ${stage.take(32)} thread=${Thread.currentThread().name.take(32)} $message")
-        if ((stage == "APP" || stage.startsWith("STARTUP")) && startup.size < 64) startup.add(line)
+        if ((stage == "APP" || stage.startsWith("STARTUP") || stage == "CHANNEL_INDEX" || stage == "LIFECYCLE") && startup.size < 64) startup.add(line)
         val size = line.toByteArray(Charsets.UTF_8).size + 1
         byteSizes.addLast(size); totalBytes += size
         var removed = 0
@@ -53,7 +66,12 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
         val frames = error.stackTrace.take(5).joinToString(" | ") { "${it.className}.${it.methodName}:${it.lineNumber}" }
         event("ERROR", stage, "$causes frames=$frames")
     }
-    fun snapshot(): String {
+    fun categoryLines(category: LogCategory): List<String> = synchronized(lock) {
+        (if (category == LogCategory.STARTUP) (startup + _lines.value).distinct() else _lines.value).filter(category::accepts)
+    }
+    fun snapshot(category: LogCategory = LogCategory.ALL): String {
+        if (category != LogCategory.ALL) return "TVAtlas ${category.label}日志\n${sanitize(environment)}\nURLs, headers and bodies omitted; no automatic upload.\n\n" + categoryLines(category).joinToString("\n") + "\n"
+
         val (rows, launch) = synchronized(lock) { _lines.value to startup.toList() }
         val current = rows.indexOfLast { it.contains(" INFO APP ") }.coerceAtLeast(0)
         return "TVAtlas debug log\n${sanitize(environment)}\nURLs, headers and bodies omitted; no automatic upload.\n\n" +

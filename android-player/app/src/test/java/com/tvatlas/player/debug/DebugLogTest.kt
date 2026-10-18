@@ -7,6 +7,22 @@ import java.io.File
 
 class DebugLogTest {
     private fun file() = File(Files.createTempDirectory("tvatlas-log-test").toFile(), "player.log")
+    @Test fun categoryExportsSeparateStartupPlaybackAndRemoteEvents() {
+        val log = DebugLog(file(), "fixture")
+        log.event("INFO", "STARTUP_COMPONENT", "database-ready")
+        log.event("INFO", "CHANNEL_INDEX", "index-ready")
+        log.event("INFO", "MANIFEST", "manifest-refresh")
+        log.event("WARN", "INPUT_QUEUE", "remote-delay")
+        val startup = log.snapshot(LogCategory.STARTUP)
+        assertTrue(startup.contains("database-ready")); assertTrue(startup.contains("index-ready"))
+        assertFalse(startup.contains("manifest-refresh")); assertFalse(startup.contains("remote-delay"))
+        val playback = log.snapshot(LogCategory.PLAYBACK)
+        assertTrue(playback.contains("manifest-refresh")); assertFalse(playback.contains("database-ready"))
+        assertTrue(log.snapshot(LogCategory.INTERACTION).contains("remote-delay"))
+        repeat(600) { log.event("INFO", "MANIFEST", "refresh=$it") }
+        assertTrue(log.snapshot(LogCategory.STARTUP).contains("index-ready"))
+        log.close()
+    }
     @Test fun startupSummarySurvivesPlaybackLogRotationAndIsClearedOnRequest() {
         val log = DebugLog(file(), "fixture")
         log.event("INFO", "STARTUP_COMPONENT", "database elapsedMs=5 token=private")

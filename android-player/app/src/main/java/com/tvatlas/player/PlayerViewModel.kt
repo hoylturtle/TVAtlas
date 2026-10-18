@@ -941,8 +941,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         repository.importRules(text, library.value.profiles, name)
     }
     fun clearLogs() { debugLog.clear() }
-    fun exportLogs(uri: Uri) = action("日志已导出") {
-        val text = debugLog.snapshot()
+    fun exportLogs(uri: Uri, category: com.tvatlas.player.debug.LogCategory = com.tvatlas.player.debug.LogCategory.ALL) = action("日志已导出") {
+        val text = debugLog.snapshot(category)
         withContext(Dispatchers.IO) {
             val output = getApplication<Application>().contentResolver.openOutputStream(uri, "wt") ?: error("无法创建日志文件")
             output.bufferedWriter(Charsets.UTF_8).use { it.write(text) }

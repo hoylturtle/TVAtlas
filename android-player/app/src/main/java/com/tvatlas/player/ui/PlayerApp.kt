@@ -154,7 +154,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val detail = library.channels.firstOrNull { it.id == detailId }
         val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(model::importRules) }
         val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { it?.let(model::exportRules) }
-        val logExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { it?.let(model::exportLogs) }
+        var exportLogCategory by rememberSaveable { mutableStateOf(com.tvatlas.player.debug.LogCategory.ALL) }
+        val logExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { it?.let { uri -> model.exportLogs(uri, exportLogCategory) } }
         val snackbar = remember { SnackbarHostState() }
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
         val immersive = tab == 0 && activePlayback && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
@@ -334,7 +335,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         if (apkUploadOpen) ApkUploadDialog { apkUploadOpen = false }
         if (logsOpen) {
             val logLines by model.debugLog.lines.collectAsStateWithLifecycle()
-            DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
+            DebugLogDialog(logLines, { model.debugLog.snapshot() }, { logsOpen = false }, model::clearLogs,
+                { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") },
+                categorySnapshot = { model.debugLog.snapshot(it) }, categoryLines = { model.debugLog.categoryLines(it) },
+                categoryExport = { category -> exportLogCategory = category; logExporter.launch("tvatlas-${category.fileKey}-v${BuildConfig.VERSION_NAME}.txt") })
         }
         if (addMediaSubscription) MediaSubscriptionDialog({ addMediaSubscription = false }) { name, url ->
             addMediaSubscription = false; model.addMediaSubscription(name, url)
@@ -841,23 +845,34 @@ internal fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNu
 
 
 @Composable internal fun DebugLogDialog(lines: List<String>, snapshot: () -> String, onDismiss: () -> Unit,
-    onClear: () -> Unit, onExport: () -> Unit) {
+    onClear: () -> Unit, onExport: () -> Unit,
+    categorySnapshot: ((com.tvatlas.player.debug.LogCategory) -> String)? = null,
+    categoryLines: ((com.tvatlas.player.debug.LogCategory) -> List<String>)? = null,
+    categoryExport: ((com.tvatlas.player.debug.LogCategory) -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
+    var category by rememberSaveable { mutableStateOf(com.tvatlas.player.debug.LogCategory.ALL) }
+    val shown = categoryLines?.invoke(category) ?: lines.filter(category::accepts)
+    val selectedSnapshot = { categorySnapshot?.invoke(category) ?: snapshot() }
     var copied by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var shareOpen by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("调试日志（${lines.size} 条）") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("${category.label}日志（${shown.size} 条）") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("最近 500 条，重启后保留；不记录完整地址、认证标头或响应正文。失败后导出即可排查。", style = MaterialTheme.typography.bodySmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                com.tvatlas.player.debug.LogCategory.entries.forEach { item ->
+                    TvTextButton(onClick = { category = item; copied = false }, modifier = Modifier.selectionOutline(category == item)) { Text(item.label + "日志") }
+                }
+            }
+            Text("分类查看、复制、扫码或导出；滚动记录最近 500 条，另保留本次启动摘要；不记录完整地址、认证标头或响应正文。失败后导出即可排查。", style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TvTextButton(onClick = { shareOpen = true }) { Text("手机扫码获取") }
-                TvTextButton(onClick = { clipboard.setText(AnnotatedString(snapshot())); copied = true }) { Text(if (copied) "已复制" else "复制日志") }
-                TvTextButton(onClick = onExport) { Text("导出 TXT") }
+                TvTextButton(onClick = { clipboard.setText(AnnotatedString(selectedSnapshot())); copied = true }) { Text(if (copied) "已复制" else "复制日志") }
+                TvTextButton(onClick = { categoryExport?.invoke(category) ?: onExport() }) { Text("导出 TXT") }
                 TvTextButton(onClick = { confirmClear = true }) { Text("清空") }
             }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (lines.isEmpty()) item { Text("暂无日志，请重试播放后查看") }
-                items(lines.asReversed()) { line ->
+                if (shown.isEmpty()) item { Text("暂无此类日志") }
+                items(shown.asReversed()) { line ->
                     androidx.compose.foundation.text.selection.SelectionContainer {
                         Text(line, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                     }
@@ -865,7 +880,7 @@ internal fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNu
             }
         }
     }, confirmButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
-    if (shareOpen) LogShareDialog(snapshot) { shareOpen = false }
+    if (shareOpen) LogShareDialog(selectedSnapshot) { shareOpen = false }
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清空日志？") },
         text = { Text("将删除已保存的诊断记录。") },
         confirmButton = { TvTextButton(onClick = { onClear(); copied = false; confirmClear = false }) { Text("确认清空") } },
