@@ -1,6 +1,9 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.tvatlas.core.model.Channel
 import com.tvatlas.core.model.ChannelBrowseIndex
@@ -24,4 +27,16 @@ private data class BrowseSnapshot(val input: List<Channel>, val index: ChannelBr
         }
     }
     return index?.takeIf { it.input == channels }?.index
+}
+
+/** Keep the parent's panel constraints on the container, never on the progress bar. */
+@Composable internal fun ChannelBrowseLoading(modifier: androidx.compose.ui.Modifier) {
+    androidx.compose.foundation.layout.Column(
+        modifier.then(androidx.compose.ui.Modifier.padding(16.dp)),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+    ) {
+        androidx.compose.material3.LinearProgressIndicator(
+            androidx.compose.ui.Modifier.fillMaxWidth().height(4.dp).testTag("channel-loading-progress"))
+        androidx.compose.material3.Text("正在准备频道列表…")
+    }
 }

@@ -402,7 +402,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     var lastFocusedChannel by rememberSaveable { mutableStateOf<String?>(null) }
     val listPosition = rememberLazyListState()
     val inputMode = LocalInputModeManager.current
-    if (channelIndex == null) { LinearProgressIndicator(modifier.fillMaxWidth()); return }
+    if (channelIndex == null) { ChannelBrowseLoading(modifier); return }
     val sortedChannels = channelIndex.channels
     Column(modifier.padding(horizontal = 8.dp)) {
         if (autoExpand && library.channels.isNotEmpty()) {

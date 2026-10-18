@@ -21,6 +21,19 @@ import org.junit.Test
 
 class ImmediateFocusPaintTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun channelLoadingKeepsProgressThinInsideFullSizePanel() {
+        compose.setContent { AtlasTheme {
+            Box(Modifier.size(360.dp, 480.dp).testTag("loading-panel")) {
+                ChannelBrowseLoading(Modifier.fillMaxSize())
+            }
+        } }
+        compose.onNodeWithText("正在准备频道列表…").assertIsDisplayed()
+        compose.onNodeWithTag("channel-loading-progress").assertHeightIsEqualTo(4.dp)
+        val panel = compose.onNodeWithTag("loading-panel").fetchSemanticsNode().boundsInRoot
+        val progress = compose.onNodeWithTag("channel-loading-progress").fetchSemanticsNode().boundsInRoot
+        assertTrue(progress.height < panel.height / 20)
+        assertTrue(progress.width < panel.width)
+    }
     @Test fun remoteFocusRepaintsBothItemsWithoutRecomposingTheirContent() {
         val first = FocusRequester()
         var compositions = 0

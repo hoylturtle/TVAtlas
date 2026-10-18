@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
     BackHandler(guideOpen) { closeGuide() }
     val input = LocalInputModeManager.current
     val index = rememberChannelBrowseIndex(library.channels)
-    if (index == null) { LinearProgressIndicator(modifier.fillMaxWidth()); return }
+    if (index == null) { ChannelBrowseLoading(modifier); return }
     LaunchedEffect(guideOpen, index) { guideVisibility?.invoke(guideOpen); if (guideOpen) { withFrameNanos { }; runCatching { guideFocus.requestFocus() } } }
     val sorted = index.channels
     val regions = index.regions
