@@ -165,7 +165,7 @@ class TvSplitLayoutsTest {
         // Guide focus can now update before the parent overlay has completed its width change.
         try {
             compose.waitUntil(5000) { runCatching { compose.onNodeWithText("今日节目").assertIsDisplayed(); true }.getOrDefault(false) }
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
             throw AssertionError("Guide layout: " + compose.onNodeWithTag("channel-guide").printToString(), error)
         }
         compose.onNodeWithText("今日节目").assertIsDisplayed()
