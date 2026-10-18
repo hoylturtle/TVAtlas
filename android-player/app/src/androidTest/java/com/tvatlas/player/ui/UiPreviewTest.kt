@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tvatlas.core.model.*
+import com.tvatlas.core.vod.CatalogMovie
 import com.tvatlas.core.routing.RuleConfig
 import com.tvatlas.player.playback.PlaybackStatus
 import com.tvatlas.player.storage.*
@@ -58,6 +59,12 @@ class UiPreviewTest {
                                         else MobileLiveLayout(true, picture = picture, channels = channels)
                                     1 -> PlaylistPage(library, false, {}, {}, {})
                                     2 -> RoutingPage(library, {}, {}, {}, {}, listOf(SubscriptionRow("sub", "艾可云", 1791946800000, 3, 1024, 38L * 1024 * 1024 * 1024, 100L * 1024 * 1024 * 1024, quotaUpdatedAt = 1791946800000)), false, {}, {}, {}, {})
+                                    4 -> Column(Modifier.fillMaxSize().padding(12.dp)) {
+                                        AtlasHeader("影视片库", "最近更新 · 分类浏览 · 高清优先")
+                                        AtlasTabs(listOf("电影", "剧集", "综艺", "动漫", "短剧"), 0, {})
+                                        VodMovieGrid((1..12).map { CatalogMovie("fixture$it", "示例影片 $it · 完整片名", "动作片", emptyList()) }, null, false,
+                                            Modifier.weight(1f), restoreFocusId = if (tv) "fixture1" else null, onSelect = {})
+                                    }
                                     3 -> SettingsPage(false, {}, com.tvatlas.player.update.UpdateState(), {}, {})
                                 }
                             }
@@ -69,7 +76,7 @@ class UiPreviewTest {
             } }
         }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        for (television in listOf(false, true)) for (page in 0..3) {
+        for (television in listOf(false, true)) for (page in 0..4) {
             compose.runOnIdle { tv = television; screen = page }
             compose.waitForIdle()
             if (television && page == 3) {

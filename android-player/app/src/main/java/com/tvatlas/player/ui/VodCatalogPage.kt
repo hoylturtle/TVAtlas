@@ -115,7 +115,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
                         }
                     }
                 }
-                TvOutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
+                AtlasActionButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -181,7 +181,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
                 Text("当前：$routeLabel", style = MaterialTheme.typography.bodyMedium)
                 Text("每个来源单独选择网络，默认直连。片单、海报与视频使用同一网络。", style = MaterialTheme.typography.bodySmall)
                 if (model.isSystemVpnActive()) Text("系统 VPN 已开启，应用直连仍可能经过系统代理。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                TvOutlinedButton(onClick = { model.setVodRoute(com.tvatlas.core.model.RouteTarget.DIRECT); artworkLoader?.shutdown(); artworkLoader = null; choosingNetwork = false; load(number = page?.page ?: 1, detail = movie) }) { Text("直连") }
+                AtlasActionButton(onClick = { model.setVodRoute(com.tvatlas.core.model.RouteTarget.DIRECT); artworkLoader?.shutdown(); artworkLoader = null; choosingNetwork = false; load(number = page?.page ?: 1, detail = movie) }) { Text("直连") }
             } }
             items(library.profiles.filter { it.enabled }, key = { it.id }) { node ->
                 val subscription = subscriptions.firstOrNull { it.id == node.subscriptionId }?.name
@@ -211,7 +211,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
     LazyVerticalGrid(columns = GridCells.Fixed(columns), state = state, modifier = Modifier.fillMaxSize().testTag("vod-movie-grid"),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
         gridItems(movies, key = { it.id }) { movie ->
-            Card(onClick = { onSelect(movie) }, modifier = Modifier.fillMaxWidth().testTag("vod-movie:${movie.id}")
+            AtlasCard(onClick = { onSelect(movie) }, modifier = Modifier.fillMaxWidth().testTag("vod-movie:${movie.id}")
                     .then(if (tv && movie.id == restoreFocusId) Modifier.focusRequester(focus) else Modifier).tvFocusOutline(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                 MoviePoster(movie, loader, allowNetwork, Modifier.fillMaxWidth().aspectRatio(if (compact) 1.1f else .85f))
@@ -272,7 +272,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
             }
         }
         gridItems(episodes.withIndex().toList(), key = { it.index }) { (index, episode) ->
-            TvOutlinedButton(onClick = { onPlay(episode) }, enabled = !loading, modifier = Modifier.fillMaxWidth().testTag("vod-episode:$index")) {
+            AtlasActionButton(onClick = { onPlay(episode) }, enabled = !loading, modifier = Modifier.fillMaxWidth().testTag("vod-episode:$index")) {
                 Text(episode.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -285,7 +285,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
             Icon(AtlasSymbols.Screen, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.secondary)
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TvOutlinedButton(onClick = onAction) { Text(action) }
+            AtlasActionButton(onClick = onAction) { Text(action) }
         }
     }
 }

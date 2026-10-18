@@ -112,7 +112,11 @@ jobs:
             adb pull /sdcard/Pictures/TVAtlas/fullscreen-layout.png app/build/reports/androidTests/fullscreen-layout.png
             adb pull /sdcard/Pictures/TVAtlas/fullscreen-stopped-layout.png app/build/reports/androidTests/fullscreen-stopped-layout.png
             adb pull /sdcard/Pictures/TVAtlas/mobile-failure-layout.png app/build/reports/androidTests/mobile-failure-layout.png
+            adb pull /sdcard/Pictures/TVAtlas-next app/build/ui-previews/next
             python3 scripts/verify_upgrade_install.py
+      - name: Emit compact UI review captures
+        if: always()
+        run: python3 scripts/ui_review_captures.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

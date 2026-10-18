@@ -49,8 +49,8 @@ import com.tvatlas.player.update.*
     val networkBusy = update.checking || update.downloading
     val release = update.release
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        if (tv) Column(Modifier.align(Alignment.CenterStart).width(210.dp).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("设置", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 12.dp))
+        if (tv) Column(Modifier.align(Alignment.CenterStart).width(AtlasPageStyle.sidebarWidth).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("设置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
             categories.forEachIndexed { index, title ->
                 TvTextButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectionOutline(category == index)) {
                     Icon(when (index) { 0 -> AtlasSymbols.Network; 1 -> Icons.Default.Refresh; 2 -> AtlasSymbols.Screen; else -> AtlasSymbols.Privacy }, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -59,7 +59,7 @@ import com.tvatlas.player.update.*
                 }
             }
         }
-        Column(Modifier.padding(start = if (tv) 210.dp else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        Column(Modifier.padding(start = if (tv) AtlasPageStyle.sidebarWidth else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (!tv) {
                 if (category == null) AtlasHeader("设置", "播放、网络与应用偏好")
@@ -79,8 +79,8 @@ import com.tvatlas.player.update.*
             }
             if (category == null) {
                 categories.forEachIndexed { index, title ->
-                    Card(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).tvFocusOutline(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    AtlasCard(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).tvFocusOutline(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                             Icon(when (index) { 0 -> AtlasSymbols.Network; 1 -> Icons.Default.Refresh; 2 -> AtlasSymbols.Screen; else -> AtlasSymbols.Privacy },
@@ -150,7 +150,7 @@ import com.tvatlas.player.update.*
                     TvButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) {
                         Text(if (update.checking) "检查中…" else "检查更新")
                     }
-                } else TvOutlinedButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) { Text("检查更新") }
+                } else AtlasActionButton(onClick = onCheckUpdate, enabled = !networkBusy, modifier = Modifier.fillMaxWidth()) { Text("检查更新") }
                 if (networkBusy) TvTextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text(if (update.downloading) "取消下载" else "取消检查") }
             }
             if (category == 0) trafficContent()
@@ -158,7 +158,7 @@ import com.tvatlas.player.update.*
             if (category == 1) SettingsCard {
                 Text("手机传安装包", style = MaterialTheme.typography.titleMedium)
                 Text("手机扫码上传 APK，在本机通过系统安装器确认安装。")
-                TvOutlinedButton(onClick = onUploadApk) { Text("手机扫码传安装包") }
+                AtlasActionButton(onClick = onUploadApk) { Text("手机扫码传安装包") }
             }
             if (category == 1) SettingsCard { testingContent() }
             if (category == 1) SettingsCard {
@@ -171,7 +171,7 @@ import com.tvatlas.player.update.*
                     Switch(checked = diagnostics, onCheckedChange = onDiagnostics, modifier = if (tv) Modifier.tvFocusOutline() else Modifier)
                 }
                 HorizontalDivider()
-                TvOutlinedButton(onClick = onLogs, modifier = Modifier.fillMaxWidth()) { Text("调试日志") }
+                AtlasActionButton(onClick = onLogs, modifier = Modifier.fillMaxWidth()) { Text("调试日志") }
                 Text("可查看、复制或导出日志，便于排查问题。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (category == 2) SettingsCard {
@@ -190,7 +190,7 @@ import com.tvatlas.player.update.*
             if (category == 3) SettingsCard {
                 Text("帮助与关于", style = MaterialTheme.typography.titleMedium)
                 Text("TVAtlas · ${if (BuildConfig.BUILD_TYPE == "preview") "独立预览版" else "稳定版"} ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium)
-                TvOutlinedButton(onClick = onRepository, modifier = Modifier.fillMaxWidth()) { Text("打开 GitHub 仓库") }
+                AtlasActionButton(onClick = onRepository, modifier = Modifier.fillMaxWidth()) { Text("打开 GitHub 仓库") }
                 TvTextButton(onClick = { clipboard.setText(AnnotatedString(REPOSITORY_URL)); repositoryCopied = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(if (repositoryCopied) "仓库链接已复制" else "复制仓库链接")
                 }
@@ -212,7 +212,7 @@ import com.tvatlas.player.update.*
 }
 
 @Composable private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    AtlasCard(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
@@ -228,7 +228,7 @@ import com.tvatlas.player.update.*
     enabled: Boolean, onSelect: (RouteTarget) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
-        TvOutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        AtlasActionButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
             Text(if (selected.type == RouteType.AUTO) "自动（失败后回退）" else routeLabel(selected, profiles), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded, { expanded = false }) {

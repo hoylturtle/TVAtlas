@@ -19,13 +19,13 @@ import com.tvatlas.player.translation.SubtitleTranslation
         var sourceOpen by remember { mutableStateOf(false) }
         var targetOpen by remember { mutableStateOf(false) }
         Box(Modifier.weight(1f)) {
-            TvOutlinedButton(onClick = { sourceOpen = true }, enabled = !state.busy) { Text("原文：${SubtitleTranslation.LANGUAGES[state.source]}") }
+            AtlasActionButton(onClick = { sourceOpen = true }, enabled = !state.busy) { Text("原文：${SubtitleTranslation.LANGUAGES[state.source]}") }
             DropdownMenu(sourceOpen, { sourceOpen = false }) { SubtitleTranslation.LANGUAGES.filterKeys { it != state.target }.forEach { (code, label) ->
                 DropdownMenuItem(text = { Text(label) }, onClick = { sourceOpen = false; controller.language(code, state.target) })
             } }
         }
         Box(Modifier.weight(1f)) {
-            TvOutlinedButton(onClick = { targetOpen = true }, enabled = !state.busy) { Text("译文：${SubtitleTranslation.LANGUAGES[state.target]}") }
+            AtlasActionButton(onClick = { targetOpen = true }, enabled = !state.busy) { Text("译文：${SubtitleTranslation.LANGUAGES[state.target]}") }
             DropdownMenu(targetOpen, { targetOpen = false }) { SubtitleTranslation.LANGUAGES.filterKeys { it != state.source }.forEach { (code, label) ->
                 DropdownMenuItem(text = { Text(label) }, onClick = { targetOpen = false; controller.language(state.source, code) })
             } }
@@ -46,13 +46,13 @@ import com.tvatlas.player.translation.SubtitleTranslation
     }
     if (state.report.isNotBlank()) Text(state.report, style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TvOutlinedButton(onClick = { if (livePictureVisible) controller.test() else controller.prepareModels() }, enabled = !state.busy) {
+        AtlasActionButton(onClick = { if (livePictureVisible) controller.test() else controller.prepareModels() }, enabled = !state.busy) {
             Text(if (livePictureVisible) "开始性能测试" else if (state.modelsReady) "检查本组模型" else "准备本组模型")
         }
         if (state.busy) TvTextButton(onClick = controller::cancelTest) { Text("取消本次测试") }
         else TvTextButton(onClick = controller::removeModels) { Text("移除本组模型") }
     }
-    TvOutlinedButton(onClick = controller::prepareChineseModels, enabled = !state.busy) { Text("准备英／日／韩 → 中文模型") }
+    AtlasActionButton(onClick = controller::prepareChineseModels, enabled = !state.busy) { Text("准备英／日／韩 → 中文模型") }
     if (!livePictureVisible && returnToLive != null) TvTextButton(onClick = returnToLive) { Text("返回直播：播放频道后点击“翻译”测试") }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text("开启字幕翻译（测试通过后开放）", Modifier.weight(1f))

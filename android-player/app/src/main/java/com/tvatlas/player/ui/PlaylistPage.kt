@@ -51,14 +51,14 @@ import com.tvatlas.player.storage.*
     val updatedAt = if (timestamps.isNotEmpty() && timestamps.all { it != null }) timestamps.filterNotNull().minOrNull() else null
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         AtlasHeader("频道源", if (cloudShareCount != null) "频道订阅与网盘分享，统一管理" else "默认频道与自己的订阅，统一管理") {
-            if (tv) TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
+            if (tv) AtlasActionButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             LazyColumn(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                 if (builtIn.isNotEmpty()) item(key = "built-in-bundle") {
                     Text("内置频道源", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp))
-                    Card(onClick = { inspected = null; if (!tv) details = true },
+                    AtlasCard(onClick = { inspected = null; if (!tv) details = true },
                         modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.hasFocus) inspected = null }.tvFocusOutline(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -85,7 +85,7 @@ import com.tvatlas.player.storage.*
                         Text("按需加载，默认 24 小时到期更新；同步不会覆盖手动来源或自动恢复已删除的直播列表。", style = MaterialTheme.typography.bodySmall)
                         if (vodSubscriptionStatus.isNotBlank()) Text(vodSubscriptionStatus, style = MaterialTheme.typography.bodySmall)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TvOutlinedButton(onClick = onAddMedia, enabled = !busy && !vodSubscriptionBusy) { Text("添加统一订阅 / 手机扫码") }
+                            AtlasActionButton(onClick = onAddMedia, enabled = !busy && !vodSubscriptionBusy) { Text("添加统一订阅 / 手机扫码") }
                             TvTextButton(onClick = onSyncVod, enabled = !vodSubscriptionBusy) { Text(if (vodSubscriptionBusy) "同步中…" else "同步订阅") }
                             TvTextButton(onClick = { subscriptionsExpanded = !subscriptionsExpanded }) { Text("管理 ${mediaSubscriptions.size} 个订阅") }
                         }
@@ -119,7 +119,7 @@ import com.tvatlas.player.storage.*
                         Text("网盘分享", style = MaterialTheme.typography.titleMedium)
                         Text("已导入 $cloudShareCount 个分享 · 在影视页浏览文件夹", style = MaterialTheme.typography.bodySmall)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TvOutlinedButton(onClick = onImportCloud) { Text("导入网盘分享 / 手机扫码") }
+                            AtlasActionButton(onClick = onImportCloud) { Text("导入网盘分享 / 手机扫码") }
                             TvTextButton(onClick = onBrowseCloud) { Text("打开影视") }
                         }
                     }
@@ -130,7 +130,7 @@ import com.tvatlas.player.storage.*
                 }
                 items(custom, key = { it.id }) { playlist ->
                     var menu by remember { mutableStateOf(false) }
-                    Card(onClick = { inspected = playlist.id }, modifier = Modifier.fillMaxWidth()
+                    AtlasCard(onClick = { inspected = playlist.id }, modifier = Modifier.fillMaxWidth()
                         .onFocusChanged { if (it.hasFocus) inspected = playlist.id }.tvFocusOutline(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -156,7 +156,7 @@ import com.tvatlas.player.storage.*
                         }
                     }
                 }
-                item { TvOutlinedButton(onClick = onAdd, enabled = !busy) { Text("添加频道源 / 手机扫码") } }
+                item { AtlasActionButton(onClick = onAdd, enabled = !busy) { Text("添加频道源 / 手机扫码") } }
             }
             if (tv) {
                 val selected = custom.firstOrNull { it.id == selectedSourceId }
@@ -194,7 +194,7 @@ import com.tvatlas.player.storage.*
                     }
                     val urls = official?.let { M3uParser.parse(it, source.id).flatMap { it.streams }.map { it.url }.toSet() }.orEmpty()
                     val channels = library.channels.filter { ch -> ch.streams.any { it.sourcePlaylistId == source.id || it.url in urls } }
-                    Card(Modifier.fillMaxWidth()) {
+                    AtlasCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(source.name, style = MaterialTheme.typography.titleSmall)
                             Text("${channels.size} 个频道 · ${if (source.enabled) "启用" else "已停用"}", style = MaterialTheme.typography.bodySmall)

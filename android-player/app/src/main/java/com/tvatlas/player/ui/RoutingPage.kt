@@ -57,8 +57,8 @@ import com.tvatlas.player.storage.*
         { val sample = orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
         { orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-    if (tv) Column(Modifier.width(112.dp).fillMaxHeight().focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("代理管理", style = MaterialTheme.typography.titleSmall)
+    if (tv) Column(Modifier.width(AtlasPageStyle.sidebarWidth).fillMaxHeight().focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("代理管理", style = MaterialTheme.typography.titleMedium)
         listOf("订阅", "节点", "规则", "流量", "内核").forEachIndexed { index, label ->
             TvTextButton(onClick = { section = index; nodeSubscription = null; inspectedNode = null },
                 modifier = Modifier.fillMaxWidth().selectionOutline(section == index).testTag("routing-section:$index")) { Text(label) }
@@ -85,7 +85,7 @@ import com.tvatlas.player.storage.*
             if (subscriptions.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("还没有代理订阅\n添加 Clash / Mihomo YAML 订阅后，节点会显示在“节点”页。", style = MaterialTheme.typography.bodyMedium) }
             gridItems(subscriptions, key = { "subscription:${it.id}" }) { sub ->
                 var menu by remember { mutableStateOf(false) }
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                AtlasCard(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row {
                             Text(sub.name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -104,7 +104,7 @@ import com.tvatlas.player.storage.*
                         if (feedback?.id == sub.id) Text(feedback.message,
                             color = if (feedback.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TvOutlinedButton(onClick = { onRefresh(sub.id) }, enabled = !busy) {
+                            AtlasActionButton(onClick = { onRefresh(sub.id) }, enabled = !busy) {
                                 Text(if (updatingId == sub.id) "更新中…" else "更新订阅")
                             }
                             TvTextButton(onClick = { nodeSubscription = sub.id; section = 1; query = ""; hongKongOnly = false; nodeRegion = null }) { Text("查看节点") }
@@ -113,7 +113,7 @@ import com.tvatlas.player.storage.*
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                AtlasCard(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("订阅下载网络", style = MaterialTheme.typography.titleMedium)
                         SubscriptionNetworkPicker(library.profiles, subscriptionRoute, !busy, onSubscriptionRoute)
@@ -135,7 +135,7 @@ import com.tvatlas.player.storage.*
                 Text("${shownNodes.size} 个节点", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth().testTag("node-actions"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TvTextButton(onClick = { nodeSearchOpen = !nodeSearchOpen; if (!nodeSearchOpen) query = "" }) { Text("搜索节点") }
-                    TvOutlinedButton(onClick = onTestNodes, enabled = !busy && !nodeTesting && library.profiles.any { it.enabled }) { Text(if (nodeTesting) "测试中…" else "测试全部延迟") }
+                    AtlasActionButton(onClick = onTestNodes, enabled = !busy && !nodeTesting && library.profiles.any { it.enabled }) { Text(if (nodeTesting) "测试中…" else "测试全部延迟") }
                 }
                 NodeTestStatus(nodeTestProgress, nodeTesting, library.profiles)
                 Column(Modifier.fillMaxWidth().testTag("node-regions")) {
@@ -149,7 +149,7 @@ import com.tvatlas.player.storage.*
             if (shownNodes.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { Text("没有符合条件的节点") }
             gridItems(shownNodes, key = { it.id }) { p ->
                 val active = currentTarget?.profile == p.id
-                Card(onClick = { inspectedNode = p.id; nodeDialog = true },
+                AtlasCard(onClick = { inspectedNode = p.id; nodeDialog = true },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp)
                         .testTag("proxy-node:${p.id}").tvFocusOutline(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
@@ -170,12 +170,12 @@ import com.tvatlas.player.storage.*
                     }
                 }
             }
-            item(span = { GridItemSpan(maxLineSpan) }) { TvOutlinedButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
+            item(span = { GridItemSpan(maxLineSpan) }) { AtlasActionButton(onClick = onAdd, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("手动添加 HTTP / SOCKS5") } }
         } else if (section == 2) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("代理规则", style = MaterialTheme.typography.titleMedium)
-                Card(Modifier.fillMaxWidth().testTag("builtin-rules")) {
+                AtlasCard(Modifier.fillMaxWidth().testTag("builtin-rules")) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("内置地区规则 · 不可修改", style = MaterialTheme.typography.titleSmall)
                         Text("中国大陆 → 直连\n香港、澳门 → 香港节点\n台湾 → 台湾节点\n日本 → 日本节点\n韩国 → 韩国节点\n其他地区 → 自动选择保底节点", style = MaterialTheme.typography.bodyMedium)
@@ -189,13 +189,13 @@ import com.tvatlas.player.storage.*
                 Text("自定义规则文件", Modifier.testTag("custom-rule-heading").padding(top = 12.dp), style = MaterialTheme.typography.titleMedium)
                 Text("可保存多个文件，同时只能选一个生效。导入后自动选中新文件，覆盖匹配到的频道。", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TvOutlinedButton(onClick = onImport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导入规则") }
-                    TvOutlinedButton(onClick = onExport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导出当前规则") }
+                    AtlasActionButton(onClick = onImport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导入规则") }
+                    AtlasActionButton(onClick = onExport, enabled = !busy, modifier = Modifier.weight(1f)) { Text("导出当前规则") }
                 }
                 }
             }
             gridItems(ruleFiles, key = { "rulefile:${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { file ->
-                Card(Modifier.fillMaxWidth()) {
+                AtlasCard(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(12.dp)) {
                         RadioButton(colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary), selected = file.active, onClick = { onSelectRule(file.id) }, enabled = !busy, modifier = if (tv) Modifier.tvFocusOutline() else Modifier)
                         Column(Modifier.weight(1f)) {
@@ -304,7 +304,7 @@ import com.tvatlas.player.storage.*
     enabled: Boolean, onSelect: (RouteTarget) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        TvOutlinedButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        AtlasActionButton(onClick = { expanded = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
             Text(if (selected.type == RouteType.AUTO) "自动选择下载网络" else routeLabel(selected, profiles), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         DropdownMenu(expanded, { expanded = false }) {
@@ -342,7 +342,7 @@ import com.tvatlas.player.storage.*
     }
     if (peers.isEmpty()) Text("暂无同地区备用节点", style = MaterialTheme.typography.bodySmall)
     Text("按最新测速排列；播放时以实际链路为准。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    TvOutlinedButton(onClick = { if (profile.type == ProxyType.MIHOMO) onEnable(profile) else onEdit(profile) }, enabled = !busy) {
+    AtlasActionButton(onClick = { if (profile.type == ProxyType.MIHOMO) onEnable(profile) else onEdit(profile) }, enabled = !busy) {
         Text(if (profile.type != ProxyType.MIHOMO) "编辑节点" else if (profile.enabled) "停用节点" else "启用节点")
     }
 }

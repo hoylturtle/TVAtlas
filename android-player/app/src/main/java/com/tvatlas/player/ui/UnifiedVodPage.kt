@@ -86,14 +86,14 @@ import kotlinx.coroutines.*
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
         val wide = atlasTv() || maxWidth >= 720.dp
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (wide) Column(Modifier.width(112.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("影视", style = MaterialTheme.typography.titleLarge)
+            if (wide) Column(Modifier.width(AtlasPageStyle.sidebarWidth).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("影视", style = MaterialTheme.typography.titleMedium)
                 UnifiedVod.browseKinds.forEach { kind ->
                     TvTextButton(onClick = { kindName = kind.name; genre = "全部"; region = "全部"; year = "全部" },
                         modifier = Modifier.fillMaxWidth().selectionOutline(filter.kind == kind)) { Text(kind.label) }
                 }
                 Spacer(Modifier.weight(1f))
-                TvOutlinedButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
+                AtlasActionButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -116,7 +116,7 @@ import kotlinx.coroutines.*
                 if (current == null) {
                     if (wide) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("类型：${filter.genre}", "地区：${filter.region}", "年份：${filter.year}", "排序：${filter.sort.label}").forEach { label ->
-                            TvOutlinedButton(onClick = { filtersOpen = true }) { Text(label) }
+                            AtlasActionButton(onClick = { filtersOpen = true }) { Text(label) }
                         }
                     } else Text(listOf(filter.genre, filter.region, filter.year).filter { it != "全部" }.joinToString(" · ").ifBlank { "全部类型 · 全部地区 · 全部年份" },
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -145,7 +145,7 @@ import kotlinx.coroutines.*
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text((if (state.showingCache) "上次浏览 · " else "") + "已显示 ${state.items.size} 部", style = MaterialTheme.typography.labelMedium)
                         TvTextButton(onClick = { browse(force = true) }, enabled = !state.loading) { Text("刷新") }
-                        TvOutlinedButton(onClick = { browse(true) }, enabled = !state.loading && state.canLoadMore) { Text("加载更多") }
+                        AtlasActionButton(onClick = { browse(true) }, enabled = !state.loading && state.canLoadMore) { Text("加载更多") }
                     }
                 } else {
                     if (detailLoading || selecting) {
@@ -154,7 +154,7 @@ import kotlinx.coroutines.*
                     }
                     detailError?.let { message ->
                         Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        TvOutlinedButton(onClick = { showDetails(current) }) { Text("重试") }
+                        AtlasActionButton(onClick = { showDetails(current) }) { Text("重试") }
                     }
                     VodMovieDetails(current.movie, loader, model.canLoadChannelArtwork(), detailLoading || selecting, Modifier.weight(1f)) { episode ->
                         model.openUnifiedChoice(episode, current.id + ":" + VodEpisodeChoices.identity(episode.name), current.movie.name + " · " + episode.name)

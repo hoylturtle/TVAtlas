@@ -52,16 +52,15 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
 @Composable internal fun AtlasHeader(title: String, subtitle: String, actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         actions()
     }
 }
 @Composable internal fun AtlasPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(14.dp))
-        .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.surface)))
-        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+    Column(modifier.clip(AtlasPageStyle.corner)
+        .background(MaterialTheme.colorScheme.surfaceContainer)
         .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
 }
 

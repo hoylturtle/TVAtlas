@@ -67,7 +67,7 @@ import com.tvatlas.player.transfer.TransferKind
                 Text(state.folders.joinToString(" / ") { it.name }, style = MaterialTheme.typography.bodySmall,
                     maxLines = 3, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TvTextButton(onClick = { pathOpen = true }) { Text("查看完整路径") }
-                TvOutlinedButton(onClick = onBack) { Text(if (state.folders.size > 1) "上一级" else "返回分享") }
+                AtlasActionButton(onClick = onBack) { Text(if (state.folders.size > 1) "上一级" else "返回分享") }
                 TvTextButton(onClick = onRefresh, enabled = !state.loading) { Text("重新读取") }
                 TvTextButton(onClick = { onWebsite(current) }) { Text("打开官网") }
                 TvTextButton(onClick = onManageSources) { Text("管理来源") }
@@ -79,7 +79,7 @@ import com.tvatlas.player.transfer.TransferKind
                     TvTextButton(onClick = onCatalog) { Text("影视片库") }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TvOutlinedButton(onClick = onManageSources) { Text("添加 / 管理分享") }
+                    AtlasActionButton(onClick = onManageSources) { Text("添加 / 管理分享") }
                     TvTextButton(onClick = { directVideo = true }) { Text("视频直链") }
                     TvTextButton(onClick = { showAuthorization = true }) { Text("账号授权") }
                 }
@@ -88,12 +88,12 @@ import com.tvatlas.player.transfer.TransferKind
                 if (state.shares.isEmpty()) AtlasPanel(Modifier.fillMaxWidth()) {
                     Text("还没有保存的网盘分享", style = MaterialTheme.typography.titleMedium)
                     Text("到频道源导入夸克、百度或 115 分享链接。保存后可从这里继续浏览文件夹。", style = MaterialTheme.typography.bodyMedium)
-                    TvOutlinedButton(onClick = onManageSources) { Text("导入分享链接") }
+                    AtlasActionButton(onClick = onManageSources) { Text("导入分享链接") }
                 }
                 LazyVerticalGrid(columns = GridCells.Adaptive(240.dp), modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     gridItems(state.shares, key = { it.key }) { share ->
-                        Card(onClick = { onOpen(share) }, modifier = Modifier.fillMaxWidth().tvFocusOutline()) {
+                        AtlasCard(onClick = { onOpen(share) }, modifier = Modifier.fillMaxWidth().tvFocusOutline()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(share.provider.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                                 Text(share.name, style = MaterialTheme.typography.titleMedium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -142,7 +142,7 @@ import com.tvatlas.player.transfer.TransferKind
                             Text(if (file.directory) "›" else "详情")
                         }
                     }
-                    if (state.nextOffset != null) item { TvOutlinedButton(onClick = onMore, enabled = !state.loading) { Text(if (state.error != null) "重试加载更多" else "加载更多") } }
+                    if (state.nextOffset != null) item { AtlasActionButton(onClick = onMore, enabled = !state.loading) { Text(if (state.error != null) "重试加载更多" else "加载更多") } }
                 }
 
             }
@@ -178,7 +178,7 @@ import com.tvatlas.player.transfer.TransferKind
                 OutlinedTextField(videoTitle, { videoTitle = it.take(80) }, label = { Text("视频名称（可选）") }, singleLine = true)
                 OutlinedTextField(videoUrl, { videoUrl = it.take(8192) }, label = { Text("HTTP(S) 视频直链") }, maxLines = 3)
                 Text("地址只保留在本次播放内存中，不加入直播频道、不保存完整地址或登录信息。再次输入相同地址可恢复本机进度。", style = MaterialTheme.typography.bodySmall)
-                TvOutlinedButton(onClick = { directVideo = false; videoPhoneInput = true; videoUrl = "" }) { Text("手机扫码输入视频直链") }
+                AtlasActionButton(onClick = { directVideo = false; videoPhoneInput = true; videoUrl = "" }) { Text("手机扫码输入视频直链") }
                 videoError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }, confirmButton = { TvButton(onClick = {
@@ -204,7 +204,7 @@ import com.tvatlas.player.transfer.TransferKind
         }, confirmButton = { TvTextButton(onClick = { showAuthorization = false }) { Text("知道了") } })
     if (importing) AlertDialog(onDismissRequest = { importing = false; text = ""; code = "" }, title = { Text("导入网盘分享") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvOutlinedButton(onClick = { importing = false; phoneInput = true }) { Text("手机扫码导入") }
+            AtlasActionButton(onClick = { importing = false; phoneInput = true }) { Text("手机扫码导入") }
             OutlinedTextField(name, { name = it.take(80) }, label = { Text("名称（可选）") }, singleLine = true)
             OutlinedTextField(text, { text = it.take(8192) }, label = { Text("完整分享文字或链接") }, maxLines = 5)
             OutlinedTextField(code, { code = it.take(4) }, label = { Text("提取码（可选，用于修正识别结果）") }, singleLine = true, visualTransformation = PasswordVisualTransformation())

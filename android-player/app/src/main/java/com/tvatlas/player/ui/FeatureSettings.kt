@@ -51,7 +51,7 @@ import com.tvatlas.player.storage.NetworkAccess
         Text("XMLTV + TVB、ViuTV 官方节目表补充；地址留空可停用 XMLTV", style = MaterialTheme.typography.bodySmall)
         Text(if (guide.loading) "正在更新节目单…" else guide.error ?: "节目单缓存：${guide.channelCount} 个频道的 ${guide.guide.programmes.size} 条节目安排（不是直播频道数）", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvOutlinedButton(onClick = { epgEdit = true }, modifier = Modifier.weight(1f)) { Text("节目单来源") }
+            AtlasActionButton(onClick = { epgEdit = true }, modifier = Modifier.weight(1f)) { Text("节目单来源") }
             TvTextButton(onClick = model::refreshGuide, enabled = !guide.loading, modifier = Modifier.weight(1f)) { Text("刷新节目单") }
         }
     }
@@ -60,7 +60,7 @@ import com.tvatlas.player.storage.NetworkAccess
         Text("打开应用及运行期间每小时检查到期来源；仅非计费网络、未播放时更新。失败保留旧配置。", style = MaterialTheme.typography.bodySmall)
         var menu by remember { mutableStateOf(false) }
         Box {
-            TvOutlinedButton(onClick = { menu = true }) { Text("刷新间隔：${options.refreshHours} 小时") }
+            AtlasActionButton(onClick = { menu = true }) { Text("刷新间隔：${options.refreshHours} 小时") }
             DropdownMenu(menu, { menu = false }) { listOf(6, 12, 24, 48).forEach { hours ->
                 DropdownMenuItem(text = { Text("$hours 小时") }, modifier = Modifier.selectionOutline(options.refreshHours == hours),
                     onClick = { menu = false; model.editOptions { it.copy(refreshHours = hours) } })
@@ -70,7 +70,7 @@ import com.tvatlas.player.storage.NetworkAccess
     if (section == "all" || section == "backup") FeatureCard("配置备份与恢复") {
         Text("包含频道源、订阅地址、节点凭证、规则、收藏和偏好。使用密码加密；忘记密码无法恢复。恢复会覆盖当前配置。", style = MaterialTheme.typography.bodySmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TvOutlinedButton(onClick = { importUri = null; password = ""; passwordPrompt = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("加密备份") }
+            AtlasActionButton(onClick = { importUri = null; password = ""; passwordPrompt = true }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("加密备份") }
             TvTextButton(onClick = { password = ""; importer.launch(arrayOf("application/octet-stream", "*/*")) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("恢复配置") }
         }
     }
