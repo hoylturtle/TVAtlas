@@ -13,4 +13,8 @@ for name in ['ui-tv-1.png', 'ui-tv-2.png', 'ui-tv-3.png', 'ui-tv-4.png',
     if len(files) != 1 or files[0].stat().st_size > 300_000:
         print('UI_REVIEW_UNAVAILABLE', name)
         continue
-    print('UI_REVIEW_IMAGE', name, base64.b64encode(files[0].read_bytes()).decode('ascii'))
+    payload = base64.b64encode(files[0].read_bytes()).decode('ascii')
+    print('UI_REVIEW_BEGIN', name)
+    for offset in range(0, len(payload), 4096):
+        print('UI_REVIEW_CHUNK', payload[offset:offset + 4096])
+    print('UI_REVIEW_END', name)
