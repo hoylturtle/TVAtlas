@@ -17,7 +17,7 @@ enum class LogCategory(val label: String, val fileKey: String) {
             ALL -> true
             STARTUP -> stage == "APP" || stage.startsWith("STARTUP") || stage == "CHANNEL_INDEX" || stage == "LIFECYCLE"
             INTERACTION -> stage.startsWith("INPUT") || stage in setOf("NAVIGATION", "MAIN_STALL", "MAIN_RECOVERED")
-            PLAYBACK -> stage in setOf("PLAY", "PLAYER", "ROUTE", "SOURCE", "HTTP", "SESSION", "SESSION_PAIR", "SESSION_BOOTSTRAP", "CHECKOUT", "CHECKOUT_URL", "CHECKOUT_FORMAT", "FAILOVER", "MANIFEST", "MEDIA", "DRM_CONFIG", "DRM_LICENSE", "SUBTITLE", "VOD_PLAY", "VOD_PLAYER", "VOD_HTTP", "VOD_NETWORK", "NODE_TEST")
+            PLAYBACK -> stage in setOf("PLAY", "PLAYER", "ROUTE", "SOURCE", "HTTP", "SESSION", "SESSION_PAIR", "SESSION_BOOTSTRAP", "CHECKOUT", "CHECKOUT_URL", "CHECKOUT_FORMAT", "FAILOVER", "MANIFEST", "MEDIA", "DRM_CONFIG", "DRM_LICENSE", "SUBTITLE", "TRANSLATION", "VOD_PLAY", "VOD_PLAYER", "VOD_HTTP", "VOD_NETWORK", "NODE_TEST")
         }
     }
 }

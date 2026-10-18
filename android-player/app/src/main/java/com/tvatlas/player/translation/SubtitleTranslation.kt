@@ -30,7 +30,8 @@ internal data class TranslationState(val source: String = "en", val target: Stri
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal class SubtitleTranslation(private val context: Context, private val scope: CoroutineScope,
-    private val player: () -> ExoPlayer?, private val networkAllowed: () -> Boolean) {
+    private val player: () -> ExoPlayer?, private val networkAllowed: () -> Boolean,
+    private val diagnostic: (String) -> Unit = {}) {
     private val _state = MutableStateFlow(TranslationState())
     val state = _state.asStateFlow()
     private val downloadProgress = ModelDownloadProgress(context)
@@ -67,6 +68,10 @@ internal class SubtitleTranslation(private val context: Context, private val sco
         }
     }
     init {
+        scope.launch {
+            state.map { "source=${it.source} target=${it.target} phase=${it.phase} busy=${it.busy} modelsReady=${it.modelsReady} eligible=${it.eligible} enabled=${it.enabled}" }
+                .distinctUntilChanged().collect { diagnostic(it) }
+        }
         scope.launch {
             val initialRevision = configurationRevision
             val cached = withContext(Dispatchers.IO) { runCatching { JSONObject(reportFile.readText()) }.getOrNull() }
@@ -195,6 +200,7 @@ internal class SubtitleTranslation(private val context: Context, private val sco
                     max(0.0, work.cpu - baseline.cpu), latencies.getOrElse((latencies.size * .95).toInt().coerceAtMost(latencies.lastIndex)) { Long.MAX_VALUE },
                     baseline.dropRate, work.dropRate, work.frames, latencies.size, baseline.progress, work.progress, baseline.buffered + work.buffered)
                 val rejection = TranslationGate.rejection(metrics)
+                diagnostic("testPassed=${rejection == null} memoryMiB=${metrics.extraMemoryMiB} cpuExtra=${metrics.extraCpuPercent} latencyP95Ms=${metrics.p95LatencyMs} frames=${work.frames} samples=${latencies.size} baselineProgressMs=${baseline.progress} workProgressMs=${work.progress}")
                 val summary = "内存增量 ${metrics.extraMemoryMiB} MiB · CPU 增量 ${"%.1f".format(metrics.extraCpuPercent)}%\n" +
                     "视频帧 ${baseline.frames} → ${work.frames} · 有效播放 ${baseline.progress / 1000}s → ${work.progress / 1000}s\n" +
                     "翻译 P95 ${metrics.p95LatencyMs} ms · 掉帧 ${"%.1f".format(metrics.baselineDropRate * 100)}% → ${"%.1f".format(metrics.workDropRate * 100)}% · 样本 ${metrics.samples}"
@@ -205,9 +211,10 @@ internal class SubtitleTranslation(private val context: Context, private val sco
                     .put("source", _state.value.source).put("target", _state.value.target).put("at", approvedAt).put("passed", rejection == null).put("report", summary)
                 withContext(Dispatchers.IO) { reportFile.parentFile?.mkdirs(); reportFile.writeText(record.toString()) }
             } catch (timeout: TimeoutCancellationException) {
+                diagnostic("testTimeout phase=${_state.value.phase}")
                 _state.value = _state.value.copy(message = "模型下载或翻译超时，测试未通过，请检查网络和设备后重试", eligible = false)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { _state.value = _state.value.copy(message = "测试未通过：${error.message?.take(100) ?: "模型无法下载或执行"}", eligible = false) }
+            catch (error: Exception) { diagnostic("testFailure type=${error.javaClass.simpleName} phase=${_state.value.phase}"); _state.value = _state.value.copy(message = "测试未通过：${error.message?.take(100) ?: "模型无法下载或执行"}", eligible = false) }
             finally {
                 if (token == testRevision) _state.value = _state.value.copy(busy = false, phase = if (_state.value.phase == "download") "idle" else _state.value.phase)
                 if (engine === owned) engine = null

@@ -389,7 +389,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private var activeSubtitleTranslation: com.tvatlas.player.translation.SubtitleTranslation? = null
     internal val subtitleTranslation by lazy {
         com.tvatlas.player.translation.SubtitleTranslation(getApplication(), viewModelScope,
-            { playback.player.value }, ::canLoadChannelArtwork).also { controller ->
+            { playback.player.value }, ::canLoadChannelArtwork,
+            { debugLog.event("INFO", "TRANSLATION", it) }).also { controller ->
             activeSubtitleTranslation = controller
             viewModelScope.launch { playback.player.collect { controller.bind(it) } }
         }
