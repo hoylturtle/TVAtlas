@@ -54,6 +54,7 @@ class ChannelPresentationTest {
         val channel = Channel("jade", "翡翠台", "香港 · 综合", streams = listOf(first))
         compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel, channel.copy(id = "cctv", name = "CCTV1", group = "中国大陆 · 央视")), emptyList(), RuleConfig()),
             PlaybackStatus(), false, Modifier, {}, {}, {}, autoExpand = true) } }
+        compose.waitUntil(5000) { runCatching { compose.onNodeWithText("翡翠台").assertIsDisplayed(); true }.getOrDefault(false) }
         compose.onNodeWithText("翡翠台").assertIsDisplayed()
         compose.onNodeWithContentDescription("翡翠台频道标识", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("大陆", substring = false).performClick()
@@ -145,6 +146,8 @@ class ChannelPresentationTest {
         compose.setContent { MaterialTheme { ChannelDialog(channel, listOf(profile), emptyList(), status, {}, { _, _ -> },
             { played = it }, onResetRoutes = { restored = true }) } }
         compose.onNodeWithText("首选节点：香港节点").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("高级设置").performScrollTo().performClick()
+        compose.onNodeWithText("播放源代理优先于频道代理。手动节点为首选，失败后尝试同地区备用节点。").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("恢复自动路由").performScrollTo().performClick()
         compose.onNodeWithText("自动选线").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("播放").performClick()

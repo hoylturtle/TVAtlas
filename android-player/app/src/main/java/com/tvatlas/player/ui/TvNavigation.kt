@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithContent
@@ -110,7 +111,12 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
     val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
-        Box(Modifier.fillMaxSize().testTag("live-navigation-window")) {
+        Box(Modifier.fillMaxSize().testTag("live-navigation-window").onPreviewKeyEvent {
+            if (it.key == Key.Back || it.key == Key.Escape) {
+                if (it.type == KeyEventType.KeyUp) onDismiss()
+                true
+            } else false
+        }) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)).clickable(onClick = onDismiss))
             Surface(Modifier.align(Alignment.CenterStart).widthIn(max = 260.dp).fillMaxHeight().testTag("live-navigation-drawer"),
                 color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {

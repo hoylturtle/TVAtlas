@@ -39,13 +39,14 @@ class RemoteContinuityTest {
                 } else Text("其他页面或全屏画面")
             }
         } } }
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("channel-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("channel-list").performScrollToNode(hasTestTag("channel:c20"))
         compose.onNodeWithTag("channel:c20").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         compose.onNodeWithTag("channel:c20").assertIsFocused()
         compose.runOnIdle { showing = false }
         compose.onNodeWithText("其他页面或全屏画面").assertIsDisplayed()
         compose.runOnIdle { showing = true }
-        compose.waitForIdle()
+        compose.waitUntil(5000) { runCatching { compose.onNodeWithTag("channel:c20").assertIsDisplayed().assertIsFocused(); true }.getOrDefault(false) }
         compose.onNodeWithTag("channel:c20").assertIsDisplayed().assertIsFocused()
         compose.onNodeWithTag("channel:c20").performKeyInput { pressKey(Key.Enter) }
         compose.runOnIdle { assertEquals("c20", played) }

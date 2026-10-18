@@ -99,7 +99,7 @@ class HttpsUpdateProxyTest {
                 pool.client(it).newBuilder().sslSocketFactory(clientTls.sslSocketFactory(), clientTls.trustManager).build()
             }, log = log) { client ->
                 protocols += client.protocols
-                UpdateRepository(client, api, web, log = log).latestAsync()
+                UpdateRepository(client, api, web, log = log, includePrereleases = true).latestAsync()
             }
             assertEquals(30, release.versionCode)
             assertEquals(2, protocols.size)

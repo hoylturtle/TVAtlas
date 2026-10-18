@@ -126,7 +126,12 @@ class TvNavigationTest {
             val pixels = compose.onNodeWithText(label).captureToImage().toPixelMap()
             return pixels[pixels.width - 12, pixels.height / 2].toArgb()
         }
-        assertEquals(colors.primary.toArgb(), background("直播"))
+        // Material focus adds a state layer; verify the filled purple family, not an exact pixel.
+        val actual = androidx.compose.ui.graphics.Color(background("直播"))
+        val expected = colors.primary
+        org.junit.Assert.assertTrue(kotlin.math.abs(actual.red - expected.red) < .12f)
+        org.junit.Assert.assertTrue(kotlin.math.abs(actual.green - expected.green) < .12f)
+        org.junit.Assert.assertTrue(kotlin.math.abs(actual.blue - expected.blue) < .12f)
         org.junit.Assert.assertNotEquals(colors.primary.toArgb(), background("设置"))
     }
     @Test fun remoteCanMoveAndConfirmWithoutTouch() {
