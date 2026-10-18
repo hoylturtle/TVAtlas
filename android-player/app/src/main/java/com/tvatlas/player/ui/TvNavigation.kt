@@ -48,7 +48,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     }
     BoxWithConstraints(modifier) {
     val compact = maxHeight < 420.dp && selected != 0
-    Column(Modifier.width(if (compact) 68.dp else 132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(if (compact) 4.dp else 12.dp).verticalScroll(rememberScrollState()),
+    Column(Modifier.width(if (compact) 68.dp else 132.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(if (compact) 4.dp else 12.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 12.dp)) {
         if (!compact) AtlasBrand(Modifier.padding(vertical = 16.dp))
         atlasNavigationItems.forEach { (index, label) ->
