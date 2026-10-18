@@ -95,6 +95,7 @@ class TvNavigationTest {
                 }
             } }
         }
+        compose.waitUntil(5000) { runCatching { compose.onNodeWithText("香港", substring = false).assertIsFocused(); true }.getOrDefault(false) }
         compose.onNodeWithText("香港", substring = false).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
         compose.onNodeWithTag("channel:fixture").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.onNodeWithTag("channel:fixture").assertIsFocused().performKeyInput { pressKey(Key.Enter) }

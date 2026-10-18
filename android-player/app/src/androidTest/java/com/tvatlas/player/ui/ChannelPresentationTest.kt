@@ -48,6 +48,7 @@ class ChannelPresentationTest {
             ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()), PlaybackStatus(), false,
                 Modifier, {}, {}, {}, autoExpand = true)
         } }
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("channel-list").fetchSemanticsNodes().isNotEmpty() }
         assertTrue(compose.onNodeWithText(name, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.height <= compose.density.run { 56.dp.toPx() })
     }
     @Test fun defaultBrowseShowsArtworkAndCanSwitchRegion() {
@@ -66,6 +67,7 @@ class ChannelPresentationTest {
         var played = false
         compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()),
             PlaybackStatus(), true, Modifier, { played = true }, {}, {}, autoExpand = true) } }
+        compose.waitUntil(5000) { runCatching { compose.onNodeWithText("全部", substring = false).assertIsFocused(); true }.getOrDefault(false) }
         compose.onNodeWithText("全部", substring = false).assertIsFocused()
         compose.onNodeWithText("香港", substring = false).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         compose.onNodeWithText("香港", substring = false).performKeyInput { pressKey(Key.Enter) }
@@ -77,6 +79,7 @@ class ChannelPresentationTest {
         val channels = listOf(Channel("c1", "CCTV 新闻", "中国大陆 · 新闻", streams = listOf(first)), Channel("c2", "体育频道", "体育", streams = listOf(second)))
         val library = Library(emptyList(), channels, emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), false, Modifier, {}, {}, {}) } }
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("channel-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("CCTV 新闻").assertDoesNotExist()
         compose.onNodeWithText("体育频道").assertDoesNotExist()
         compose.onNodeWithText("›  大陆").performClick()
@@ -94,6 +97,7 @@ class ChannelPresentationTest {
         val channel = Channel("c1", "新闻频道", "新闻", streams = listOf(first))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
         compose.setContent { MaterialTheme { ChannelList(library, PlaybackStatus(), true, Modifier, {}, {}, {}) } }
+        compose.waitUntil(5000) { runCatching { compose.onNodeWithText("全部", substring = false).assertIsFocused(); true }.getOrDefault(false) }
         compose.onNodeWithText("全部", substring = false).assertIsFocused()
         compose.onNodeWithText("其他", substring = false).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
         compose.onNodeWithText("其他", substring = false).assertIsFocused().performKeyInput { pressKey(Key.Enter) }
@@ -103,6 +107,7 @@ class ChannelPresentationTest {
         val channels = listOf(Channel("cctv", "CCTV1", "中国大陆 · 央视", streams = listOf(first)),
             Channel("gd", "广东卫视", "中国大陆 · 卫视", streams = listOf(second)))
         compose.setContent { MaterialTheme { ChannelList(Library(emptyList(), channels, emptyList(), RuleConfig()), PlaybackStatus(), false, Modifier, {}, {}, {}) } }
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("channel-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("›  大陆").performClick()
         compose.onNodeWithText("›  CCTV").performClick()
         compose.onNodeWithText("CCTV1").assertIsDisplayed()
