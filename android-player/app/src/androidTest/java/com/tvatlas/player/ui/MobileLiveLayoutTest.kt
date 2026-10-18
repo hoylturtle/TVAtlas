@@ -44,6 +44,8 @@ class MobileLiveLayoutTest {
                 }, channels = { ChannelList(library, PlaybackStatus(), false, it, { selected = it.id }, {}, {}) })
             } }
         } }
+        // Channel indexes are prepared on Dispatchers.Default, outside Compose idling.
+        compose.waitUntil(5000) { compose.onAllNodesWithText("搜索频道").fetchSemanticsNodes().isNotEmpty() }
     }
     @Test fun failureKeepsChannelSpaceAndCanScrollToAnotherChannel() {
         render(600)

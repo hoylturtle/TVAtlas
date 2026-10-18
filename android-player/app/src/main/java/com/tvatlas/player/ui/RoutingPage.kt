@@ -135,10 +135,11 @@ import com.tvatlas.player.storage.*
                     Text(subscriptions.firstOrNull { it.id == nodeSubscription }?.name ?: "订阅节点", style = MaterialTheme.typography.titleMedium)
                     TvTextButton(onClick = { nodeSubscription = null }) { Text("查看所有订阅节点") }
                 }
-                Text("${shownNodes.size} 个节点", style = MaterialTheme.typography.labelLarge)
+                if (!short) Text("${shownNodes.size} 个节点", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth().testTag("node-actions"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TvTextButton(onClick = { nodeSearchOpen = !nodeSearchOpen; if (!nodeSearchOpen) query = "" }) { Text("搜索节点") }
                     AtlasActionButton(onClick = onTestNodes, enabled = !busy && !nodeTesting && library.profiles.any { it.enabled }) { Text(if (nodeTesting) "测试中…" else "测试全部延迟") }
+                    if (short) Text("${shownNodes.size} 个节点", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 NodeTestStatus(nodeTestProgress, nodeTesting, library.profiles)
                 Column(Modifier.fillMaxWidth().testTag("node-regions")) {

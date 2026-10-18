@@ -99,7 +99,7 @@ import com.tvatlas.player.update.*
                 }
                 Text("TVAtlas ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else {
-                if (tv) Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
+                if (split) Text(categories[category!!], style = MaterialTheme.typography.titleLarge)
             }
             if (category == 0) playbackContent()
             if (category == 1 && BuildConfig.BUILD_TYPE == "preview") SettingsCard {
