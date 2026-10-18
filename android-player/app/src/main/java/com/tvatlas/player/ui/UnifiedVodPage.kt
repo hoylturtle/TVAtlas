@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.ImageLoader
@@ -34,6 +36,8 @@ import kotlinx.coroutines.*
     var search by rememberSaveable { mutableStateOf("") }
     val filter = VodFilter(VodKind.valueOf(kindName).let { if (it == VodKind.OTHER) VodKind.SHORT_DRAMA else it }, genre, region, year, VodSort.valueOf(sortName)).let { it.copy(genre = UnifiedVod.genreLabel(it.kind, it.genre)) }
     var filtersOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchDraft by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<UnifiedMovie?>(null) }
     var detailLoading by remember { mutableStateOf(false) }
     var detailError by remember { mutableStateOf<String?>(null) }
@@ -73,7 +77,10 @@ import kotlinx.coroutines.*
     VodBrowseOnEntry(filter, search, scroll) {
         backToLibrary(); returnFocusId = null; browse(force = true)
     }
-    DisposableEffect(Unit) { onDispose { detailJob?.cancel(); model.cancelVodSelection() } }
+    DisposableEffect(repository) {
+        model.setVodPageActive(true)
+        onDispose { model.setVodPageActive(false); detailJob?.cancel(); model.cancelVodSelection() }
+    }
     DisposableEffect(loader) { val owned = loader; onDispose { owned?.shutdown() } }
     BackHandler(selected != null) { backToLibrary() }
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
@@ -90,13 +97,16 @@ import kotlinx.coroutines.*
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (selected != null) IconButton(onClick = ::backToLibrary) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
+                    if (selected != null) TvIconButton(onClick = ::backToLibrary) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
                     Column(Modifier.weight(1f)) {
                         Text(if (selected == null) "影视片库" else "影片详情", style = MaterialTheme.typography.titleLarge)
                         Text(if (selected == null) "最近更新 · 分类浏览 · 高清优先" else listOf(selected!!.movie.year, selected!!.movie.area).filter { it.isNotBlank() }.joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (selected == null) TvTextButton(onClick = { filtersOpen = true }) { Text("筛选") }
+                    if (selected == null) {
+                        TvTextButton(onClick = { searchDraft = query; searchOpen = true }, modifier = Modifier.testTag("vod-search-open")) { Text("搜索") }
+                        TvTextButton(onClick = { filtersOpen = true }) { Text("筛选") }
+                    }
                     if (!wide) TvTextButton(onClick = onFiles) { Text("网盘") }
                 }
                 if (!wide && selected == null) AtlasTabs(UnifiedVod.browseKinds.map { it.label }, UnifiedVod.browseKinds.indexOf(filter.kind)) { index ->
@@ -110,13 +120,10 @@ import kotlinx.coroutines.*
                         }
                     } else Text(listOf(filter.genre, filter.region, filter.year).filter { it != "全部" }.joinToString(" · ").ifBlank { "全部类型 · 全部地区 · 全部年份" },
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(query, { value ->
-                        query = value.take(100)
-                        if (query.isBlank() && search.isNotBlank()) search = ""
-                    }, Modifier.fillMaxWidth(), singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { submitSearch() }),
-                        placeholder = { Text("在${filter.kind.label}中搜索片名") }, trailingIcon = { TvTextButton(onClick = ::submitSearch) { Text("搜索") } })
+                    if (search.isNotBlank()) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("搜索：$search", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+                        TvTextButton(onClick = { query = ""; search = "" }) { Text("清除搜索") }
+                    }
                     if (state.loading) {
                         LinearProgressIndicator(progress = { if (state.total > 0) state.completed.toFloat() / state.total else 0f }, modifier = Modifier.fillMaxWidth(), drawStopIndicator = {})
                         Text("正在整理片库…", style = MaterialTheme.typography.labelSmall)
@@ -149,6 +156,16 @@ import kotlinx.coroutines.*
             }
         }
     }
+    if (searchOpen) AlertDialog(onDismissRequest = { searchOpen = false }, title = { Text("搜索${filter.kind.label}") }, text = {
+        OutlinedTextField(searchDraft, { searchDraft = it.take(100) }, Modifier.fillMaxWidth().testTag("vod-search-input"), singleLine = true,
+            placeholder = { Text("输入片名") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { query = searchDraft; searchOpen = false; submitSearch() }))
+    }, confirmButton = { TvButton(onClick = { query = searchDraft; searchOpen = false; submitSearch() }) { Text("搜索") } },
+        dismissButton = {
+            TvTextButton(onClick = { query = ""; search = ""; searchOpen = false }) { Text("清除搜索") }
+            TvTextButton(onClick = { searchOpen = false }) { Text("取消") }
+        })
     if (filtersOpen) VodFilterDialog(filter, { filtersOpen = false }) { chosen ->
         kindName = chosen.kind.name; genre = chosen.genre; region = chosen.region; year = chosen.year; sortName = chosen.sort.name; filtersOpen = false
     }

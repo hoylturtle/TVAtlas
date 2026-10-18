@@ -22,7 +22,20 @@ class UpdateRepositoryTest {
             {"name":"$apkName","state":"uploaded","size":1000,"browser_download_url":"$apkUrl"}]}"""
     }
     private fun repository(server: MockWebServer) = UpdateRepository(OkHttpClient(),
-        server.url("/api").toString(), server.url("/web").toString())
+        server.url("/api").toString(), server.url("/web").toString(), includePrereleases = true)
+
+    @Test fun productionChannelSkipsPrereleaseWithoutFetchingItsManifest() {
+        MockWebServer().use { server ->
+            val stable = release(server, "1.5.0").replace("-beta.1", "").replace("\"prerelease\":true", "\"prerelease\":false")
+            server.enqueue(MockResponse().setBody("[${release(server, "9.0.0")},$stable]"))
+            server.enqueue(MockResponse().setBody(manifest("1.5.0", 45).replace("-beta.1", "")))
+            val result = UpdateRepository(OkHttpClient(), server.url("/api").toString(), server.url("/web").toString()).latest()
+            assertEquals("1.5.0", result.versionName)
+            assertEquals(2, server.requestCount)
+            server.takeRequest()
+            assertEquals("/web/releases/download/v1.5.0/release-info.json", server.takeRequest().path)
+        }
+    }
 
     @Test fun stableReleaseCanUpgradeExistingBetaInstallations() {
         MockWebServer().use { server ->

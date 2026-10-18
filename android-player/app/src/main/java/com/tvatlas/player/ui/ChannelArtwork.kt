@@ -112,6 +112,7 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
     val allowed = allowNetwork()
     androidx.compose.runtime.LaunchedEffect(channels, allowed, networkRevision) {
         if (!allowed) return@LaunchedEffect
+        kotlinx.coroutines.delay(1500) // Let the first interactive frame and cached channel list settle.
         val loader = coil.Coil.imageLoader(context)
         channels.asSequence().filter { bundledChannelArtwork(it.name) == null }
             .mapNotNull { it.logo?.takeIf { url -> url.startsWith("https://") || url.startsWith("http://") } }
@@ -121,8 +122,11 @@ private fun bundledChannelArtwork(name: String): Int? = when (name.lowercase().r
                 val cached = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     loader.diskCache?.openSnapshot(url)?.use { true } ?: false
                 }
-                if (!cached) loader.execute(ImageRequest.Builder(context).data(url).size(156)
-                    .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build())
+                if (!cached) {
+                    loader.execute(ImageRequest.Builder(context).data(url).size(156)
+                        .memoryCachePolicy(CachePolicy.DISABLED).diskCachePolicy(CachePolicy.ENABLED).build())
+                    kotlinx.coroutines.delay(80)
+                }
             }
     }
 }

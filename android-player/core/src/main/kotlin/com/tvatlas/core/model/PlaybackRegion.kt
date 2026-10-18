@@ -1,7 +1,13 @@
 package com.tvatlas.core.model
 
 enum class PlaybackRegion(val label: String) { MAINLAND("大陆"), HONG_KONG("香港"), TAIWAN("台湾"), JAPAN("日本"), KOREA("韩国"), SINGAPORE("新加坡"), UNITED_STATES("美国"), UNITED_KINGDOM("英国"), THAILAND("泰国") }
-private fun countryCode(value: String, pattern: String) = Regex("(?i)(?<![a-z])(?:$pattern)(?![a-z])").containsMatchIn(value)
+private val countryPatterns = listOf(
+    "mo|mac|macao|macau", "tw|twn|taiwan", "jp|jpn|japan", "kr|kor|korea",
+    "sg|sgp|singapore", "us|usa|united[ _-]*states", "uk|gb|gbr|united[ _-]*kingdom",
+    "th|tha|thailand", "cn|chn|china",
+).associateWith { Regex("(?i)(?<![a-z])(?:$it)(?![a-z])") }
+private val tvgCountrySuffix = Regex("(?i)\\.(hk|mo|tw|jp|kr|cn|sg|us|uk|gb|th)(?:@.*)?$")
+private fun countryCode(value: String, pattern: String) = countryPatterns.getValue(pattern).containsMatchIn(value)
 fun playbackRegion(value: String): PlaybackRegion? = when {
     isHongKongLabel(value) || value.contains("澳门") || value.contains("澳門") || value.contains("港澳") || value.contains("🇲🇴") || countryCode(value, "mo|mac|macao|macau") -> PlaybackRegion.HONG_KONG
     value.contains("台湾") || value.contains("台灣") || value.contains("🇹🇼") || countryCode(value, "tw|twn|taiwan") -> PlaybackRegion.TAIWAN
@@ -15,7 +21,7 @@ fun playbackRegion(value: String): PlaybackRegion? = when {
     else -> null
 }
 fun Channel.playbackRegion(): PlaybackRegion? = playbackRegion(group) ?: tvgId?.let { id ->
-    Regex("(?i)\\.(hk|mo|tw|jp|kr|cn|sg|us|uk|gb|th)(?:@.*)?$").find(id)?.groupValues?.get(1)?.let(::playbackRegion)
+    tvgCountrySuffix.find(id)?.groupValues?.get(1)?.let(::playbackRegion)
 }
 data class NodeHealth(val delayMs: Long?, val checkedAt: Long) {
     fun fresh(now: Long) = now - checkedAt in 0..300_000

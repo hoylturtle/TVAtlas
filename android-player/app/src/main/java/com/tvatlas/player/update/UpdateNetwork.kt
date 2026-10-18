@@ -38,6 +38,10 @@ internal suspend fun <T> withUpdateRoutes(targets: List<RouteTarget>, download: 
                 finally { freshPool.evictAll() }
             }
         } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: com.tvatlas.player.network.ResourceRedirectException) {
+            log?.event("WARN", routeTag, "redirect stopped: ${error.message}; retaining previous data")
+            throw error
+        }
         catch (error: Exception) { log?.error(routeTag, error); last = error }
     }
     throw last ?: UpdateException("没有可用的更新网络")

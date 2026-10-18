@@ -20,6 +20,46 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PreviewVodPlayerTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
 
+    @Test fun naturalEndCanAdvanceButExplicitCloseNeverAdvances() {
+        compose.setContent { AtlasTheme {} }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("vod-fixture.mp4").use { it.readBytes() }
+        val server = MockWebServer()
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest) = MockResponse()
+                .setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+        }
+        server.start()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val ended = java.util.concurrent.atomic.AtomicInteger(0)
+        val closed = java.util.concurrent.atomic.AtomicInteger(0)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        lateinit var controller: VodPlaybackController
+        var created = false
+        val first = VodItem.episode(server.url("/one.mp4").toString(), "第1集", "series:episode:1")
+        val next = VodItem.episode(server.url("/two.mp4").toString(), "第2集", "series:episode:2")
+        try {
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true },
+                    onEnded = { if (ended.incrementAndGet() == 1) controller.open(next) }, onClosed = { closed.incrementAndGet() })
+                created = true
+                controller.open(first)
+            }
+            compose.waitUntil(20000) { controller.state.value.ready }
+            compose.runOnIdle { controller.state.value.player!!.let { it.seekTo((it.duration - 300).coerceAtLeast(0)); it.play() } }
+            compose.waitUntil(20000) { controller.state.value.item?.key == next.key && controller.state.value.ready }
+            compose.runOnIdle { assertEquals(0, closed.get()); controller.close() }
+            compose.waitUntil(5000) { controller.state.value.item == null }
+            compose.runOnIdle { assertEquals(1, ended.get()); assertEquals(1, closed.get()) }
+        } finally {
+            compose.runOnIdle { if (created) controller.close(); scope.cancel() }
+            server.shutdown()
+        }
+    }
+
     @Test fun failedMediaAutomaticallyFallsBackToAnotherLine() {
         compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext

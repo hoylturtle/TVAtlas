@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.tvatlas.player.ui
 
 import android.app.UiModeManager
@@ -97,6 +97,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val pageMemory = rememberSaveableStateHolder()
         val channelMemory = rememberSaveableStateHolder()
         val library by model.library.collectAsStateWithLifecycle()
+        val startup by model.startup.collectAsStateWithLifecycle()
         val status by model.playback.status.collectAsStateWithLifecycle()
         val livePlayer by model.playback.player.collectAsStateWithLifecycle()
         val activePlayback = status.loading || livePlayer != null
@@ -126,8 +127,6 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
         val wide = tv || (windowWidth >= 600.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE)
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
-        var requestedVodSource by rememberSaveable { mutableStateOf<String?>(null) }
-        var vodSourceRequest by rememberSaveable { mutableIntStateOf(0) }
         var mediaRequestedCatalog by rememberSaveable { mutableStateOf<Boolean?>(null) }
         var mediaRequestId by rememberSaveable { mutableIntStateOf(0) }
         var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -136,14 +135,16 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         var channelSearchRequest by remember { mutableIntStateOf(0) }
         var cloudImportRequest by remember { mutableIntStateOf(0) }
         var exitPrompt by remember { mutableStateOf(false) }
-        var tvBackArmed by remember { mutableStateOf(false) }
+        var liveMenuOpen by remember { mutableStateOf(false) }
         var pageMenuOpen by remember { mutableStateOf(false) }
+        var apkUploadOpen by remember { mutableStateOf(false) }
         var logsOpen by rememberSaveable { mutableStateOf(false) }
         var fullscreen by rememberSaveable { mutableStateOf(false) }
         var channelPanelOpen by rememberSaveable { mutableStateOf(true) }
         var landscapeChannels by rememberSaveable { mutableStateOf(false) }
         var detailId by rememberSaveable { mutableStateOf<String?>(null) }
         var addPlaylist by rememberSaveable { mutableStateOf(false) }
+        var addMediaSubscription by remember { mutableStateOf(false) }
         var editPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
         var deletePlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
         var addProxy by rememberSaveable { mutableStateOf(false) }
@@ -158,15 +159,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         LaunchedEffect(message) { message?.let { snackbar.showSnackbar(it); model.dismissMessage() } }
         val immersive = tab == 0 && activePlayback && (fullscreen || (landscape && !landscapeChannels) || (wide && !channelPanelOpen))
         val theater = tab == 0 && wide
-        BackHandler(immersive) {
-            if (wide && tvBackArmed) { tvBackArmed = false; exitPrompt = true }
-            else { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
+        BackHandler(tab == 0 && !exitPrompt && !liveMenuOpen) {
+            when (liveBackAction(wide, immersive, activePlayback, channelPanelOpen)) {
+                LiveBackAction.HIDE_CHANNELS -> { channelPanelOpen = false; fullscreen = true }
+                LiveBackAction.SHOW_MENU -> liveMenuOpen = true
+                LiveBackAction.SHOW_CHANNELS -> { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
+                LiveBackAction.CONFIRM_EXIT -> exitPrompt = true
+            }
         }
-        BackHandler(tab == 0 && !immersive && !exitPrompt) {
-            if (activePlayback && wide && channelPanelOpen) { channelPanelOpen = false; fullscreen = true; tvBackArmed = true }
-            else exitPrompt = true
-        }
-        BackHandler(!immersive && tab != 0) { tab = 0 }
+        BackHandler(tab != 0) { tab = 0; if (wide) liveMenuOpen = true }
         PlaybackOrientation(immersive || options.alwaysLandscape, tv && !options.alwaysLandscape)
         PlaybackSystemBars(immersive || tv || (theater && activePlayback))
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
@@ -179,7 +180,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             }) { padding ->
             Row(Modifier.fillMaxSize().padding(padding).onPreviewKeyEvent { event ->
                 if (wide && event.type == KeyEventType.KeyDown && event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_MENU) {
-                    if (tab == 0) { tvBackArmed = false; channelPanelOpen = !channelPanelOpen; fullscreen = !channelPanelOpen }
+                    if (event.nativeKeyEvent.repeatCount > 0) return@onPreviewKeyEvent true
+                    if (tab == 0) liveMenuOpen = !liveMenuOpen
                     else pageMenuOpen = true
                     true
                 } else false
@@ -207,7 +209,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         }
                         val select: (Channel) -> Unit = {
                             if (status.channelId != it.id || model.playback.player.value == null) model.play(it)
-                            if (wide) { channelPanelOpen = false; tvBackArmed = false }
+                            if (wide) { channelPanelOpen = false }
                         }
                         val channels: @Composable (Modifier) -> Unit = { modifier ->
                             channelMemory.SaveableStateProvider("channel-browser") {
@@ -215,15 +217,17 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             }
                         }
                         when {
+                            library.channels.isEmpty() && !activePlayback -> StartupPage(startup, model::retryStartup, { tab = 1 }, { logsOpen = true })
                             immersive -> video(Modifier.fillMaxSize())
                             wide && !activePlayback -> LiveHomeLayout(
                                 channelName = library.channels.firstOrNull { it.id == status.channelId }?.name,
                                 message = status.message,
-                                onReplay = { library.channels.firstOrNull { it.id == status.channelId }?.let(model::play) },
+                                onReplay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, forceRestart = true) } },
                                 channels = { channels(Modifier.fillMaxSize()) })
                             wide -> TvBrowseLayout(tv, library.channels.firstOrNull { it.id == status.channelId }?.name,
                                 channels = { channels(Modifier.fillMaxSize()) },
                                 picture = { video(Modifier.fillMaxSize()) },
+                                onNavigation = { liveMenuOpen = true },
                                 navigation = { dismiss -> TvNavigation(tab, { dismiss(); tab = it }, Modifier.fillMaxSize()) })
                             else -> MobileLiveLayout(status.channelId != null, Modifier.fillMaxSize(), picture = video,
                                 channels = { channels(it) })
@@ -252,6 +256,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                             cloud.shares.size
                         }
                         val vodFeedState by model.vodSubscriptions.state.collectAsStateWithLifecycle()
+                        val sourceHealth by model.vodHealth.state.collectAsStateWithLifecycle()
+                        val sourceChecks by model.recheckingVod.collectAsStateWithLifecycle()
+                        val sourceRoute by model.vodRoute.collectAsStateWithLifecycle()
+                        val sourceLabels by produceState<Map<String, String>>(emptyMap(), vodFeedState.sources, sourceHealth, sourceChecks, sourceRoute) {
+                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { vodFeedState.sources.associate { it.api to model.vodHealthLabel(it.api) } }
+                        }
                         LaunchedEffect(Unit) { model.syncVodSubscriptions() }
                         var configuringVodSource by remember { mutableStateOf<String?>(null) }
                         configuringVodSource?.let { source ->
@@ -263,8 +273,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                         { mediaRequestedCatalog = false; mediaRequestId++; tab = 4 },
                         vodSources = vodFeedState.sources.map { it.name to it.api },
                         vodSubscriptionStatus = vodFeedState.message, vodSubscriptionBusy = vodFeedState.busy,
-                        onSyncVod = { model.syncVodSubscriptions(manual = true) },
-                        onBrowseVod = { api -> requestedVodSource = api; vodSourceRequest++; mediaRequestedCatalog = true; mediaRequestId++; tab = 4 },
+                        onSyncVod = { model.syncVodSubscriptions(manual = true) }, vodHealth = sourceLabels, onRecheckVod = model::recheckVodSource,
+                        mediaSubscriptions = vodFeedState.subscriptions, onAddMedia = { addMediaSubscription = true }, onRemoveMedia = model::removeMediaSubscription,
+                        onBrowseVod = { _ -> mediaRequestedCatalog = true; mediaRequestId++; tab = 4 },
                         onConfigureVod = { api -> model.selectVodSource(api); configuringVodSource = api })
                     }
                     2 -> {
@@ -281,7 +292,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     }
                     3 -> SettingsPage(diagnostics, model::showDiagnostics, update, model::checkUpdate, model::openUpdateDownload,
                         { logsOpen = true }, model::openRepository, library.profiles, updateRoute, model::setUpdateRoute, model::installUpdate, model::cancelUpdate,
-                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, testingContent = {
+                        trafficContent = { TrafficStatistics(model.traffic, library.profiles, subscriptions) }, playbackContent = { FeatureSettings(model, "playback") }, backupContent = { FeatureSettings(model, "backup") }, onUploadApk = { apkUploadOpen = true }, testingContent = {
                             TranslationSettings(model, returnToLive = { tab = 0 })
                         }, interfaceContent = { LandscapePreference(options.alwaysLandscape) { enabled -> model.editOptions { it.copy(alwaysLandscape = enabled) } }; DisplayModePicker(options.displayMode) { mode -> model.editOptions { it.copy(displayMode = mode) } } })
                 }
@@ -289,6 +300,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 }
                 }
             }
+        }
+        LaunchedEffect(tab, immersive, liveMenuOpen) {
+            model.debugLog.event("INFO", "NAVIGATION", "page=$tab fullscreen=$immersive mainMenu=$liveMenuOpen")
+        }
+        if (liveMenuOpen) LiveNavigationDrawer(onDismiss = { liveMenuOpen = false },
+            onExit = { liveMenuOpen = false; exitPrompt = true }, focusReturn = false) { dismiss ->
+            TvNavigation(tab, { dismiss(); tab = it; channelPanelOpen = true; fullscreen = false }, Modifier.fillMaxSize(), requestSelectedFocus = true)
         }
         if (pageMenuOpen) AlertDialog(onDismissRequest = { pageMenuOpen = false }, title = { Text("页面操作") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -303,15 +321,22 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         if (exitPrompt) ExitConfirmation({ exitPrompt = false }) { model.stopPlayback(); (context as? android.app.Activity)?.finish() }
         run {
             val vod by model.vod.state.collectAsStateWithLifecycle()
-            if (vod.item != null) VodPlaybackDialog(vod, model.vod, model::toggleVod, model::restartVod)
+            val nextEpisode by model.nextVodEpisode.collectAsStateWithLifecycle()
+            val preparingVod by model.vodSelecting.collectAsStateWithLifecycle()
+            if (vod.item != null) VodPlaybackDialog(vod, model.vod, model::toggleVod, model::restartVod,
+                nextEpisode, preparingVod, options.vodAutoNext, { enabled -> model.editOptions { it.copy(vodAutoNext = enabled) } }, model::advanceVodEpisode)
         }
         if (pendingPlay != null || pendingDownload || pendingCloud) AlertDialog(onDismissRequest = model::dismissMetered, title = { Text("当前为移动数据网络") },
             text = { Text(if (pendingDownload) "下载 APK 会消耗移动数据。确认继续？" else "播放及网盘访问可能消耗较多移动数据。继续后，本次运行允许使用移动数据。") },
             confirmButton = { TvTextButton(onClick = model::approveMetered) { Text("继续播放") } },
             dismissButton = { TvTextButton(onClick = model::dismissMetered) { Text("取消") } })
+        if (apkUploadOpen) ApkUploadDialog { apkUploadOpen = false }
         if (logsOpen) {
             val logLines by model.debugLog.lines.collectAsStateWithLifecycle()
             DebugLogDialog(logLines, model.debugLog::snapshot, { logsOpen = false }, model::clearLogs, { logExporter.launch("tvatlas-debug-v${BuildConfig.VERSION_NAME}.txt") })
+        }
+        if (addMediaSubscription) MediaSubscriptionDialog({ addMediaSubscription = false }) { name, url ->
+            addMediaSubscription = false; model.addMediaSubscription(name, url)
         }
         if (addPlaylist) PlaylistDialog(busy, { addPlaylist = false }) { name, url -> model.addPlaylist(name, url); addPlaylist = false }
         val editPlaylist = library.playlists.firstOrNull { it.id == editPlaylistId }
@@ -361,12 +386,13 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     var selectedRegion by rememberSaveable { mutableStateOf<String?>(null) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(searchRequest) { if (searchRequest > 0) { searchOpen = true; mode = 0 } }
-    LaunchedEffect(autoExpand, library.channels.isNotEmpty()) {
-        if (autoExpand && !initialized && library.channels.isNotEmpty()) {
+    val channelIndex = rememberChannelBrowseIndex(library.channels)
+    LaunchedEffect(autoExpand, channelIndex) {
+        if (autoExpand && !initialized && channelIndex != null && channelIndex.channels.isNotEmpty()) {
             val first = library.channels.firstOrNull { it.id == status.channelId }
-                ?: library.channels.hongKongFirst().first()
-            selectedRegion = first.browseRegion()
-            expanded = listOf("region:${first.browseRegion()}", "type:${first.browseRegion()}:${first.browseType()}")
+                ?: channelIndex.channels.first()
+            selectedRegion = channelIndex.region(first)
+            expanded = listOf("region:${channelIndex.region(first)}", "type:${channelIndex.region(first)}:${channelIndex.type(first)}")
             initialized = true
         }
     }
@@ -375,15 +401,17 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     var lastFocusedChannel by rememberSaveable { mutableStateOf<String?>(null) }
     val listPosition = rememberLazyListState()
     val inputMode = LocalInputModeManager.current
+    if (channelIndex == null) { LinearProgressIndicator(modifier.fillMaxWidth()); return }
+    val sortedChannels = channelIndex.channels
     Column(modifier.padding(horizontal = 8.dp)) {
         if (autoExpand && library.channels.isNotEmpty()) {
-            val regions = library.channels.hongKongFirst().map { it.browseRegion() }.distinct()
+            val regions = channelIndex.regions
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     regions.forEachIndexed { index, region ->
                         AtlasChip(region, region == (selectedRegion ?: regions.first()), {
                             selectedRegion = region
-                            val firstType = library.channels.first { it.browseRegion() == region }.browseType()
+                            val firstType = library.channels.first { channelIndex.region(it) == region }.browseType()
                             expanded = listOf("region:$region", "type:$region:$firstType")
                         }, if (tv && index == 0) Modifier.focusRequester(firstFocus) else Modifier)
                     }
@@ -404,15 +432,15 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 TvButton(onClick = onAdd) { Text("添加播放列表") }
             }
         } else {
-            val filtered = remember(library.channels, query, mode, favorites, recent, selectedRegion, autoExpand) {
-                val items = library.channels.filter { (it.name.contains(query, true) || it.group.contains(query, true) || it.browseRegion().contains(query, true) || it.browseType().contains(query, true)) &&
+            val filtered = remember(channelIndex, query, mode, favorites, recent, selectedRegion, autoExpand) {
+                val items = sortedChannels.filter { (it.name.contains(query, true) || it.group.contains(query, true) || channelIndex.region(it).contains(query, true) || channelIndex.type(it).contains(query, true)) &&
                     (mode == 0 || mode == 1 && it.id in favorites || mode == 2 && it.id in recent) &&
-                    (!autoExpand || mode != 0 || query.isNotBlank() || it.browseRegion() == (selectedRegion ?: library.channels.hongKongFirst().firstOrNull()?.browseRegion())) }
-                if (mode == 2) items.sortedBy { recent.indexOf(it.id) } else items.hongKongFirst()
+                    (!autoExpand || mode != 0 || query.isNotBlank() || channelIndex.region(it) == (selectedRegion ?: channelIndex.regions.firstOrNull())) }
+                if (mode == 2) { val positions = recent.withIndex().associate { it.value to it.index }; items.sortedBy { positions[it.id] ?: Int.MAX_VALUE } } else items
             }
             Text("${filtered.size} 个频道" + if (filtered.size != library.channels.size) " / 共 ${library.channels.size} 个" else "", Modifier.padding(vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
             if (filtered.isEmpty()) Text(if (mode == 1) "尚无收藏频道" else if (mode == 2) "尚无成功观看记录" else "没有匹配频道", style = MaterialTheme.typography.bodySmall)
-            val grouped = remember(filtered, mode) { filtered.groupBy { it.browseRegion() }.mapValues { (_, channels) -> channels.groupBy { it.browseType() }.mapValues { (_, items) -> if (mode == 2) items else items.primaryChannelsFirst() } } }
+            val grouped = remember(channelIndex, filtered, mode) { filtered.groupBy { channelIndex.region(it) }.mapValues { (_, channels) -> channels.groupBy { channelIndex.type(it) }.mapValues { (_, items) -> if (mode == 2) items else channelIndex.primaryFirst(items) } } }
             fun open(key: String) = query.isNotBlank() || if (mode != 0) key !in collapsed else key in expanded
             fun toggle(key: String) {
                 if (query.isNotBlank()) return
@@ -507,7 +535,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         onDispose { current?.removeListener(listener) }
     }
     LaunchedEffect(player) { tracksOpen = false; subtitlesOpen = false }
-    val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId) }; Unit }
+    val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId, forceRestart = true) }; Unit }
     val picture: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize()) {
             if (player == null) AtlasIdlePicture(if (compact && status.error != null && !status.loading) "播放未成功" else status.message,
@@ -533,7 +561,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         }
         }
     val controls: @Composable () -> Unit = {
-        if (tv && pictureFocused && !immersive) Text("画面 ↑↓ 换台 · 确认 显示操作 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 频道菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
+        if (tv && pictureFocused && !immersive) Text("画面 ↑↓ 换台 · 确认 频道列表 · 操作栏 ↑ 收起 · 长按确认 线路 · 返回 主菜单", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.bodySmall)
         val displayedAttempt = status.attempt ?: status.lastAttempt
         VideoControls(if (compact && status.error != null && !status.loading) "播放未成功" else if (status.attempt != null && status.successAt == null && status.attemptNumber > 0) "第${status.attemptNumber}次／最多${status.candidateCount}条 · ${status.message}" else status.message, displayedAttempt?.let { attempt ->
             library.channels.firstOrNull { it.id == status.channelId }?.let { streamName(it, attempt.streamId, library.playlists) }
@@ -570,7 +598,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             (if (player != null) status.error?.let { "\n$it" } ?: "" else ""), Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), style = MaterialTheme.typography.bodySmall)
         }
     if (immersive) ImmersivePlaybackLayout(player != null || status.loading, tv, modifier, status.channelId,
-        onChannel, onDetails, picture, controls, keepControlsVisible = panelLabel == "收起")
+        onChannel, onDetails, picture, controls, keepControlsVisible = panelLabel == "收起", onShowChannels = onShowChannels, acceptRemoteFocus = !tv || pictureFocused)
     else PlayerPaneLayout(fillPicture, modifier, picture, controls)
     if (translationOpen) AlertDialog(onDismissRequest = { translationOpen = false }, title = { Text("字幕翻译") },
         text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) { TranslationSettings(model, livePictureVisible = true) } },
@@ -703,10 +731,12 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         mutableStateOf((status.attempt ?: status.lastAttempt)?.takeIf { status.channelId == channel.id }?.streamId)
     }
     val selectedStream = channel.streams.firstOrNull { it.id == selectedStreamId }
+    var advanced by remember(channel.id) { mutableStateOf(false) }
+    var historyOpen by remember(channel.id) { mutableStateOf(false) }
+    val availableHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(channel.name) }, text = {
-        Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.heightIn(max = (availableHeight - 180.dp).coerceIn(120.dp, 420.dp)).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             favorite()
-            history()
             Text("播放源", style = MaterialTheme.typography.labelLarge)
             var lineMenu by remember { mutableStateOf(false) }
             Box {
@@ -730,9 +760,14 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             Text(if (effective?.type == RouteType.PROXY) "首选节点：${routeLabel(effective, profiles)}"
                 else if (effective?.type == RouteType.DIRECT) "当前使用直连"
                 else "按当前规则与频道地区自动选择节点", style = MaterialTheme.typography.bodySmall)
-            Text("播放源代理优先于频道代理。手动节点为首选，失败后尝试同地区备用节点。", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TvOutlinedButton(onClick = { onResetRoutes(); selectedStreamId = null }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("恢复自动路由") }
+            TvTextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "收起高级设置" else "高级设置") }
+            if (advanced) {
+                Text("播放源代理优先于频道代理。手动节点为首选，失败后尝试同地区备用节点。", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TvOutlinedButton(onClick = { onResetRoutes(); selectedStreamId = null }, enabled = !busy) { Text("恢复自动路由") }
+            }
+            TvTextButton(onClick = { historyOpen = !historyOpen }) { Text(if (historyOpen) "收起线路记录" else "查看线路记录") }
+            if (historyOpen) history()
         }
     }, confirmButton = { TvTextButton(onClick = { onPlay(selectedStream?.id) }, enabled = !busy && channel.streams.isNotEmpty()) { Text("播放") } },
         dismissButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
@@ -809,10 +844,12 @@ internal fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNu
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var shareOpen by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("调试日志（${lines.size} 条）") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("最近 500 条，重启后保留；不记录完整地址、认证标头或响应正文。失败后导出即可排查。", style = MaterialTheme.typography.bodySmall)
-            Row {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TvTextButton(onClick = { shareOpen = true }) { Text("手机扫码获取") }
                 TvTextButton(onClick = { clipboard.setText(AnnotatedString(snapshot())); copied = true }) { Text(if (copied) "已复制" else "复制日志") }
                 TvTextButton(onClick = onExport) { Text("导出 TXT") }
                 TvTextButton(onClick = { confirmClear = true }) { Text("清空") }
@@ -827,6 +864,7 @@ internal fun matchLabel(m: com.tvatlas.core.routing.Match): String = listOfNotNu
             }
         }
     }, confirmButton = { TvTextButton(onClick = onDismiss) { Text("关闭") } })
+    if (shareOpen) LogShareDialog(snapshot) { shareOpen = false }
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清空日志？") },
         text = { Text("将删除已保存的诊断记录。") },
         confirmButton = { TvTextButton(onClick = { onClear(); copied = false; confirmClear = false }) { Text("确认清空") } },

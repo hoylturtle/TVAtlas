@@ -33,7 +33,7 @@ import com.tvatlas.player.update.*
 @Composable internal fun SettingsPage(diagnostics: Boolean, onDiagnostics: (Boolean) -> Unit,
     update: UpdateState, onCheckUpdate: () -> Unit, onDownload: () -> Unit, onLogs: () -> Unit = {},
     onRepository: () -> Unit = {}, profiles: List<ProxyProfile> = emptyList(),
-    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}, interfaceContent: @Composable () -> Unit = {}, testingContent: @Composable () -> Unit = {}) {
+    updateRoute: RouteTarget = RouteTarget.AUTO, onUpdateRoute: (RouteTarget) -> Unit = {}, onInstall: () -> Unit = {}, onCancel: () -> Unit = {}, trafficContent: @Composable () -> Unit = {}, extrasContent: @Composable () -> Unit = {}, playbackContent: @Composable () -> Unit = {}, backupContent: @Composable () -> Unit = {}, interfaceContent: @Composable () -> Unit = {}, testingContent: @Composable () -> Unit = {}, onUploadApk: () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val tv = LocalTvMode.current ?: ((context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager).currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -64,7 +64,7 @@ import com.tvatlas.player.update.*
             if (!tv) {
                 if (category == null) AtlasHeader("设置", "播放、网络与应用偏好")
                 else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { category = null }) {
+                    TvIconButton(onClick = { category = null }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回设置",
                             tint = MaterialTheme.colorScheme.onSurface)
                     }
@@ -155,6 +155,11 @@ import com.tvatlas.player.update.*
             }
             if (category == 0) trafficContent()
             if (category == 3) { backupContent(); extrasContent() }
+            if (category == 1) SettingsCard {
+                Text("手机传安装包", style = MaterialTheme.typography.titleMedium)
+                Text("手机扫码上传 APK，在本机通过系统安装器确认安装。")
+                TvOutlinedButton(onClick = onUploadApk) { Text("手机扫码传安装包") }
+            }
             if (category == 1) SettingsCard { testingContent() }
             if (category == 1) SettingsCard {
                 Text("诊断与日志", style = MaterialTheme.typography.titleMedium)
@@ -176,10 +181,10 @@ import com.tvatlas.player.update.*
                 AtlasKeyRow("← →", "切换区域", "在导航、列表与详情间移动")
                 AtlasKeyRow("OK", "确认", "播放频道或打开当前项目")
                 AtlasKeyRow("长按 OK", "查看线路", "查看频道来源与代理设置")
-                AtlasKeyRow("返回", "返回与收起", "先关闭浮层；直播首页确认退出")
-                AtlasKeyRow("菜单", "更多操作", "打开频道菜单或页面操作")
+                AtlasKeyRow("返回", "返回与收起", "先关闭浮层；播放画面返回主菜单，再返回确认退出")
+                AtlasKeyRow("菜单", "更多操作", "直播打开主菜单，其他页面打开页面操作")
                 AtlasKeyRow("主页", "系统主页", "返回电视系统主页")
-                Text("白色边框表示遥控器焦点，紫色表示当前选择；正在播放的频道显示播放标记。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("紫色色块跟随遥控器焦点；已选页面用侧边标记，当前播放频道用播放标记区分。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("手机／平板进入全屏时横屏播放；停止后可重新播放。", style = MaterialTheme.typography.bodyMedium)
             }
             if (category == 3) SettingsCard {
@@ -192,7 +197,7 @@ import com.tvatlas.player.update.*
                 Text("仓库由浏览器打开，使用浏览器自身的网络设置。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 HorizontalDivider()
                 SettingsDisclosure("操作帮助", help, { help = !help }) {
-                    Text(if (tv) "频道列表：方向键选择，OK 播放，长按 OK 查看线路。\n播放器：上下换台，长按 OK 查看线路；返回退出全屏。"
+                    Text(if (tv) "频道列表：方向键选择，OK 播放，长按 OK 查看线路。\n播放器：上下换台，OK 打开频道列表；返回主菜单，长按 OK 查看线路。"
                         else "直播：点频道播放，点线路选择播放源与代理。\n频道源：管理频道播放列表。\n代理：添加订阅、查看节点；香港频道默认优先香港节点。\n设置：更新应用与导出日志。", style = MaterialTheme.typography.bodySmall)
                 }
                 SettingsDisclosure("配置与隐私", privacy, { privacy = !privacy }) {

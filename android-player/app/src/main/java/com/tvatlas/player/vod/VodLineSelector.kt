@@ -10,13 +10,16 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 /** A small media-prefix probe ranks reachable lines; playback still verifies manifests and segments. */
-internal class VodLineSelector(private val client: OkHttpClient, private val clients: ((CatalogEpisode) -> OkHttpClient)? = null) {
+internal class VodLineSelector(private val client: OkHttpClient, private val cache: VodQualityCache? = null, private val context: (CatalogEpisode) -> String = { "direct" },
+    private val clients: ((CatalogEpisode) -> OkHttpClient)? = null) {
     suspend fun order(candidates: List<CatalogEpisode>): List<CatalogEpisode> = coroutineScope {
         val unique = candidates.distinctBy { it.url }.sortedByDescending { it.qualityHeight }
         if (unique.size <= 1) return@coroutineScope unique
         val permits = Semaphore(4)
         val measured = unique.take(8).map { episode -> async(Dispatchers.IO) {
             permits.withPermit {
+                val cached = cache?.get(episode.url, context(episode))
+                if (cached != null) return@withPermit Triple(episode, if (cached.playable) cached.latencyMs * 1_000_000 else Long.MAX_VALUE, cached.height.takeIf { it > 0 } ?: episode.qualityHeight)
                 val started = System.nanoTime()
                 var height = episode.qualityHeight
                 val network = (clients?.invoke(episode) ?: client).newBuilder().callTimeout(4, TimeUnit.SECONDS).readTimeout(3, TimeUnit.SECONDS).build()
@@ -41,7 +44,9 @@ internal class VodLineSelector(private val client: OkHttpClient, private val cli
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { false }
-                Triple(episode, if (valid) (System.nanoTime() - started) else Long.MAX_VALUE, height)
+                val elapsed = System.nanoTime() - started
+                if (valid) cache?.record(episode.url, context(episode), height, elapsed / 1_000_000)
+                Triple(episode, if (valid) elapsed else Long.MAX_VALUE, height)
             }
         } }.awaitAll()
         measured.filter { it.second != Long.MAX_VALUE }.sortedWith(compareByDescending<Triple<CatalogEpisode, Long, Int>> { it.third }.thenBy { it.second }).map { it.first } +

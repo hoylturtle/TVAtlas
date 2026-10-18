@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VodEpisodeChoicesTest {
+    @org.junit.Test fun nextEpisodeUsesNumberNotProviderOrderAndNeverSkipsGapsOrSpecials() {
+        fun choice(name: String) = VodEpisodeChoice(name, emptyList())
+        val choices = listOf(choice("第03集"), choice("花絮"), choice("EP2"), choice("第01集"))
+        org.junit.Assert.assertEquals("EP2", VodEpisodeChoices.next(choices, "第01集")!!.name)
+        org.junit.Assert.assertEquals("第03集", VodEpisodeChoices.next(choices, "02")!!.name)
+        org.junit.Assert.assertNull(VodEpisodeChoices.next(choices, "第03集"))
+        org.junit.Assert.assertNull(VodEpisodeChoices.next(listOf(choice("第03集")), "第01集"))
+        org.junit.Assert.assertNull(VodEpisodeChoices.next(choices, "正片"))
+        org.junit.Assert.assertNull(VodEpisodeChoices.next(choices, "花絮"))
+    }
     @Test fun mergesSameEpisodeAcrossLinesWithoutMergingOtherEpisodes() {
         val episodes = listOf(
             CatalogEpisode("第01集", "https://a.test/1.m3u8", "a"),

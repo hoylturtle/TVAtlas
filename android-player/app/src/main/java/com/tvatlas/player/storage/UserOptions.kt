@@ -15,6 +15,7 @@ import com.tvatlas.core.model.RouteTarget
     val displayMode: DisplayMode = DisplayMode.AUTO,
     val alwaysLandscape: Boolean = false,
     val liveSubtitles: Boolean = false,
+    val vodAutoNext: Boolean = true,
 )
 @Serializable data class SavedPreferences(val options: UserOptions = UserOptions(), val diagnostics: Boolean = false,
     val updateRoute: RouteTarget = RouteTarget.AUTO, val subscriptionRoute: RouteTarget = RouteTarget.AUTO)

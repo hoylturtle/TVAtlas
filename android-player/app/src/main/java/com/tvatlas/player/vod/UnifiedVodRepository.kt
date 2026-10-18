@@ -24,7 +24,9 @@ internal data class UnifiedVodState(val items: List<UnifiedMovie> = emptyList(),
 
 /** Incremental, bounded catalogue browsing. Only metadata is persisted; playable URLs are refreshed on selection. */
 internal class UnifiedVodRepository(private var sources: List<String>, private val directory: File,
-    private val scope: CoroutineScope, private val log: com.tvatlas.player.debug.DebugLog? = null, private val client: suspend (String) -> VodCatalogClient) {
+    private val scope: CoroutineScope, private val log: com.tvatlas.player.debug.DebugLog? = null,
+    private val health: VodSourceHealth? = null, private val healthContext: (String) -> String = { "direct" },
+    private val canRecordHealth: (Boolean) -> Boolean = { true }, private val client: suspend (String) -> VodCatalogClient) {
     private val _state = MutableStateFlow(UnifiedVodState())
     val state = _state.asStateFlow()
     private val types = ConcurrentHashMap<String, List<CatalogType>>()
@@ -38,27 +40,48 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
     private var lastFilter: VodFilter? = null
     private var lastQuery = ""
     private var refreshedAt = 0L
+    private var visible = true
+    private var interrupted = false
+    fun setVisible(value: Boolean) {
+        if (visible == value) return
+        visible = value
+        if (!value) {
+            interrupted = interrupted || job?.isActive == true
+            job?.cancel(); generation++
+            _state.value = _state.value.copy(loading = false)
+            log?.event("INFO", "VOD_BROWSE", "paused; browsing cancelled, loaded items retained")
+        }
+    }
     /** Called by the existing idle/background refresh loop; never instantiates this repository at startup. */
     fun updateSources(value: List<String>) {
         val next = value.distinct().take(60)
-        if (next.isEmpty() || next == sources) return
+        if (next == sources) return
         sources = next
         offers = offers.filter { it.source in next }
+        if (next.isEmpty()) {
+            job?.cancel(); generation++
+            _state.value = UnifiedVodState(canLoadMore = false, notice = "尚未添加影视源，可在频道源中导入统一订阅。")
+            return
+        }
         // Subscription discovery may finish after the page's first browse has already started.
         // The repository owns restarting that request; a UI effect must not race this cancellation.
         val filter = lastFilter
-        if (filter != null) browse(filter, lastQuery, force = true)
+        if (filter != null && visible) browse(filter, lastQuery, force = true)
         else _state.value = _state.value.copy(total = next.size)
     }
     fun refreshDue(interval: Long = 86400000L) {
+        if (!visible) return
         val filter = lastFilter ?: return
+        if (interrupted) { browse(filter, lastQuery); return }
         if (lastQuery.isBlank() && !_state.value.loading && System.currentTimeMillis() - refreshedAt >= interval)
             browse(filter, lastQuery, force = true)
     }
     fun browse(filter: VodFilter, query: String, more: Boolean = false, force: Boolean = false) {
+        if (!visible) return
         val key = "$filter|$query"
         if (more && (_state.value.loading || !_state.value.canLoadMore)) return
-        val append = more && currentKey == key
+        val append = more && currentKey == key && !interrupted
+        interrupted = false
         val previous = if (currentKey == key) offers else emptyList()
         lastFilter = filter; lastQuery = query
         job?.cancel(); val token = ++generation
@@ -75,19 +98,32 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                 if (token != generation) return@launch
                 _state.value = _state.value.copy(showingCache = saved.isNotEmpty(), items = cachedItems)
             }
+            val sourceSnapshot = sources
+            val contexts = sourceSnapshot.associateWith(healthContext)
+            val available = withContext(Dispatchers.Default) { sourceSnapshot.filter { health?.eligible(it, contexts.getValue(it)) != false }
+                .sortedBy { health?.get(it, contexts.getValue(it))?.latencyMs ?: Long.MAX_VALUE } }
+            val cooling = sources.size - available.size
+            _state.value = _state.value.copy(total = available.size)
+            if (cooling > 0) _state.value = _state.value.copy(notice = "$cooling 个来源暂缓访问，可在频道源中重新检查")
             val permits = Semaphore(3)
             var completed = 0; var failed = 0; var hasMore = false
             try {
                 log?.event("INFO", "VOD_BROWSE", "start round=$requestedRound sources=${sources.size} search=${query.isNotBlank()}")
                 coroutineScope {
-                    sources.map { source -> launch {
+                    available.map { source -> launch {
+                        val context = contexts.getValue(source)
+                        var contacted = false
+                        var started = 0L
                         val result = permits.withPermit {
+                            started = System.nanoTime()
                             try {
-                                withTimeout(12000) { fetch(source, requestedRound, filter, query, force) }
+                                withTimeout(12000) { fetch(source, requestedRound, filter, query, force) { contacted = true } }
                             } catch (timeout: TimeoutCancellationException) { null }
                             catch (cancelled: CancellationException) { throw cancelled }
                             catch (_: Exception) { null }
                         }
+                        if (token != generation) return@launch
+                        if (contacted && canRecordHealth(result != null)) health?.record(source, context, result != null, (System.nanoTime() - started) / 1_000_000)
                         if (token != generation) return@launch
                         completed++; if (result == null) failed++
                         if (result != null && result.page < result.pages) hasMore = true
@@ -101,29 +137,31 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                     } }.joinAll()
                 }
                 if (token == generation) log?.event("INFO", "VOD_BROWSE", "complete round=$requestedRound items=${offers.size} failed=$failed hasMore=$hasMore")
-                if (token == generation && failed < sources.size) {
+                if (token == generation && failed < available.size) {
                     refreshedAt = System.currentTimeMillis()
                     saveShelf(key, offers)
                 }
             } finally {
                 if (token == generation) _state.value = _state.value.copy(loading = false,
                     canLoadMore = hasMore && offers.size < 1200,
-                    error = _state.value.error ?: if (failed == sources.size && _state.value.items.isEmpty()) "暂时无法加载片单，请检查网络或稍后重试" else null,
-                    notice = if (failed == sources.size && _state.value.items.isNotEmpty()) "当前显示上次浏览的片单，连接恢复后可刷新。"
-                        else if (failed > 0 && _state.value.items.isNotEmpty()) "已显示当前可用片单，部分内容可稍后再刷新。" else null)
+                    error = _state.value.error ?: if (available.isNotEmpty() && failed == available.size && _state.value.items.isEmpty()) "暂时无法加载片单，请检查网络或稍后重试" else null,
+                    notice = if (sources.isEmpty()) "尚未添加影视源，可在频道源中导入统一订阅。"
+                        else if (available.isEmpty()) "来源暂缓访问，可在频道源中点击重新检查；已有片单仍可浏览。"
+                        else if (failed == available.size && _state.value.items.isNotEmpty()) "当前显示上次浏览的片单，连接恢复后可刷新。"
+                        else if (failed > 0 && _state.value.items.isNotEmpty()) "已显示当前可用片单，部分内容可稍后再刷新。" else if (cooling > 0) "$cooling 个来源暂缓访问，可在频道源中重新检查" else null)
             }
         }
     }
-    private suspend fun fetch(source: String, number: Int, filter: VodFilter, query: String, force: Boolean): CatalogPage {
+    private suspend fun fetch(source: String, number: Int, filter: VodFilter, query: String, force: Boolean, networkUsed: () -> Unit): CatalogPage {
         // Recent feed first: avoid waiting for taxonomy and rotating an arbitrary genre on entry.
         if (query.isBlank() && filter.genre == "全部" && filter.region == "全部" && filter.year == "全部") {
             val key = "recent|$number"
-            val recent = (if (force) null else cached(source, key)) ?: client(source).load(source, number, "").also { save(source, key, it) }
+            val recent = (if (force) null else cached(source, key)) ?: run { networkUsed(); client(source).load(source, number, "") }.also { save(source, key, it) }
             if (recent.movies.any { UnifiedVod.matches(it, filter) }) return recent
         }
         val sourceTypes = (if (force) null else types[source]) ?: run {
             val cached = if (force) null else cached(source, "types")
-            val found = cached ?: try { client(source).load(source, 1, "", listingOnly = true).also { save(source, "types", it) } }
+            val found = cached ?: try { run { networkUsed(); client(source).load(source, 1, "", listingOnly = true) }.also { save(source, "types", it) } }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { CatalogPage(emptyList(), 1, 1) }
             found.types.also { types[source] = it }
@@ -132,7 +170,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         val category = ids.takeIf { it.isNotEmpty() }?.let { it[(number - 1 + sources.indexOf(source).coerceAtLeast(0)) % it.size] }
         val page = if (ids.isNotEmpty()) (number - 1) / ids.size + 1 else number
         val key = "$category|$page|$query|${filter.year}|${filter.region}"
-        val result = (if (force) null else cached(source, key)) ?: client(source).load(source, page, query, type = category, year = filter.year.takeIf { it.matches(Regex("\\d{4}")) }, area = filter.region.takeUnless { it in listOf("全部", "其他", "欧美", "日韩", "港台") }).also { save(source, key, it) }
+        val result = (if (force) null else cached(source, key)) ?: run { networkUsed(); client(source).load(source, page, query, type = category, year = filter.year.takeIf { it.matches(Regex("\\d{4}")) }, area = filter.region.takeUnless { it in listOf("全部", "其他", "欧美", "日韩", "港台") }) }.also { save(source, key, it) }
         return result.copy(page = number, pages = (result.pages * ids.size.coerceAtLeast(1)).coerceAtMost(100000))
     }
     suspend fun details(selected: UnifiedMovie): UnifiedMovie = coroutineScope {
@@ -141,6 +179,10 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         withTimeoutOrNull(9000) {
             sources.sortedBy { source -> selected.offers.none { it.source == source } }.map { source -> launch {
                 permits.withPermit {
+                    val context = healthContext(source)
+                    if (health?.eligible(source, context) == false) return@withPermit
+                    var failed = false
+                    val started = System.nanoTime()
                     val results = try {
                         withTimeout(6000) {
                             val api = client(source)
@@ -149,9 +191,16 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                                 else api.load(source, 1, selected.movie.name).movies.take(30)
                             movies.filter { UnifiedVod.identity(it) == UnifiedVod.identity(selected.movie) }.map { VodOffer(source, it) }
                         }
-                    } catch (timeout: TimeoutCancellationException) { emptyList() }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { emptyList() }
+                    } catch (timeout: TimeoutCancellationException) {
+                        failed = true
+                        emptyList()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        failed = true
+                        emptyList()
+                    }
+                    if (canRecordHealth(!failed)) health?.record(source, context, !failed, (System.nanoTime() - started) / 1_000_000)
                     found.addAll(results)
                 }
             } }.joinAll()

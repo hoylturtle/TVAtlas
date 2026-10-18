@@ -10,6 +10,85 @@ import org.junit.Test
 import java.nio.file.Files
 
 class UnifiedVodRepositoryTest {
+    @Test fun leavingPageCancelsBrowseAndSubscriptionChangesCannotRestartIt() = runBlocking {
+        val directory = Files.createTempDirectory("pause-vod").toFile()
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        var attempts = 0
+        try {
+            val repository = UnifiedVodRepository(listOf("https://fixture.test/old"), directory, this) {
+                attempts++
+                started.complete(Unit)
+                try { awaitCancellation() } finally { cancelled.complete(Unit) }
+            }
+            repository.browse(VodFilter(), "")
+            withTimeout(3000) { started.await() }
+            repository.setVisible(false)
+            withTimeout(3000) { cancelled.await() }
+            repository.updateSources(listOf("https://fixture.test/new"))
+            repository.refreshDue(0)
+            repository.browse(VodFilter(), "late consent callback")
+            yield()
+            assertEquals(1, attempts)
+            assertFalse(repository.state.value.loading)
+            repository.setVisible(true)
+            repository.browse(VodFilter(), "")
+            withTimeout(3000) { while (attempts < 2) delay(10) }
+            repository.setVisible(false)
+        } finally { directory.deleteRecursively() }
+    }
+    @Test fun leavingPageKeepsAlreadyLoadedItems() = runBlocking {
+        MockWebServer().use { server ->
+            val directory = Files.createTempDirectory("retain-vod").toFile()
+            try {
+                server.enqueue(MockResponse().setBody("""{"page":1,"pagecount":1,"list":[{"vod_id":"1","vod_name":"保留影片","type_name":"动作片"}]}"""))
+                val repository = UnifiedVodRepository(listOf(server.url("/vod").toString()), directory, this) { VodCatalogClient(OkHttpClient()) }
+                repository.browse(VodFilter(), "")
+                withTimeout(3000) { repository.state.first { !it.loading && it.items.isNotEmpty() } }
+                repository.setVisible(false)
+                repository.refreshDue(0)
+                assertEquals("保留影片", repository.state.value.items.single().movie.name)
+                assertEquals(1, server.requestCount)
+            } finally { directory.deleteRecursively() }
+        }
+    }
+    @Test fun removingAllSourcesCancelsBrowseAndClearsOldResults() = runBlocking {
+        val directory = Files.createTempDirectory("remove-vod").toFile()
+        val started = CompletableDeferred<Unit>()
+        try {
+            val repository = UnifiedVodRepository(listOf("https://fixture.test/api"), directory, this) {
+                started.complete(Unit); awaitCancellation()
+            }
+            repository.browse(VodFilter(), "")
+            withTimeout(3000) { started.await() }
+            repository.updateSources(emptyList())
+            val state = repository.state.value
+            assertFalse(state.loading); assertTrue(state.items.isEmpty()); assertFalse(state.canLoadMore)
+            assertTrue(state.notice!!.contains("尚未添加"))
+        } finally { directory.deleteRecursively() }
+    }
+    @Test fun coolingSourceIsSkippedUntilExplicitResetWithoutScanningOtherSources() = runBlocking {
+        MockWebServer().use { server ->
+            val directory = Files.createTempDirectory("health-browse").toFile()
+            try {
+                val source = server.url("/vod").toString()
+                val health = VodSourceHealth(directory.resolve("health.json"), this)
+                health.record(source, "wifi", false); health.record(source, "wifi", false)
+                val repository = UnifiedVodRepository(listOf(source), directory.resolve("catalog"), this,
+                    health = health, healthContext = { "wifi" }) { VodCatalogClient(OkHttpClient()) }
+                repository.browse(VodFilter(), "", force = true)
+                val cooled = withTimeout(3000) { repository.state.first { !it.loading } }
+                assertTrue(cooled.notice!!.contains("暂缓")); assertEquals(0, server.requestCount)
+                health.reset(source, "wifi")
+                server.enqueue(MockResponse().setBody("""{"page":1,"pagecount":1,"list":[{"vod_id":"1","vod_name":"恢复影片","type_name":"动作片"}]}"""))
+                repository.browse(VodFilter(), "", force = true)
+                val good = withTimeout(5000) { repository.state.first { !it.loading && it.completed == 1 } }
+                assertEquals("恢复影片", good.items.single().movie.name)
+                assertEquals(1, server.requestCount); assertEquals(0, health.get(source, "wifi")!!.failures)
+            } finally { directory.deleteRecursively() }
+        }
+    }
+
     @Test fun subscriptionChangeRestartsInFlightInitialBrowseWithoutLoadMore() = runBlocking {
         MockWebServer().use { server ->
             val directory = Files.createTempDirectory("vod-source-race").toFile()

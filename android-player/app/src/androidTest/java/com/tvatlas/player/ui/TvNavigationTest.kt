@@ -47,6 +47,39 @@ class TvNavigationTest {
         compose.onNodeWithTag("live-navigation-drawer").assertDoesNotExist()
         compose.onNodeWithText("频道列表测试").assertIsDisplayed()
     }
+    @Test fun mainMenuBackDismissesAndExitRequiresItsOwnButton() {
+        var open by mutableStateOf(true)
+        var exited = false
+        compose.setContent { AtlasTheme {
+            if (open) LiveNavigationDrawer(onDismiss = { open = false }, onExit = { exited = true }) { Text("导航测试") }
+        } }
+        compose.onNodeWithTag("live-navigation-window").performKeyInput { pressKey(Key.Back) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(false, open); assertEquals(false, exited); open = true }
+        compose.onNodeWithText("退出应用").performClick()
+        compose.runOnIdle { assertEquals(true, exited) }
+    }
+    @Test fun openingMainMenuFocusesTheCurrentPage() {
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            TvNavigation(2, {}, requestSelectedFocus = true)
+        } } }
+        compose.onNodeWithTag("main-nav:2").assertIsFocused().assertIsSelected()
+    }
+    @Test fun closingProgrammePanelRestoresItsChannelWithoutPlaying() {
+        val channel = Channel("restore", "测试台", "香港", streams = emptyList())
+        var plays = 0
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            ChannelList(Library(emptyList(), listOf(channel), emptyList(), RuleConfig()), PlaybackStatus(), true,
+                Modifier.requiredSize(960.dp, 540.dp), { plays++ }, {}, {})
+        } } }
+        compose.waitUntil(5000) { compose.onAllNodesWithTag("channel:restore").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("channel:restore").performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNodeWithTag("channel:restore").performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNodeWithTag("channel-guide").assertIsDisplayed()
+        compose.onNodeWithText("收起节目单").performClick()
+        compose.onNodeWithTag("channel:restore").assertIsFocused()
+        compose.runOnIdle { assertEquals(0, plays) }
+    }
     @Test fun browsingKeepsPictureSeparateAndRemoteCanSelectChannel() {
         val channel = Channel("fixture", "翡翠台", "香港 · 综合", streams = listOf(Stream("s", "https://example.com/live.m3u8", "p")))
         val library = Library(emptyList(), listOf(channel), emptyList(), RuleConfig())
@@ -93,8 +126,8 @@ class TvNavigationTest {
             val pixels = compose.onNodeWithText(label).captureToImage().toPixelMap()
             return pixels[pixels.width - 12, pixels.height / 2].toArgb()
         }
-        assertEquals(colors.primary.toArgb(), background("设置"))
-        org.junit.Assert.assertNotEquals(colors.primary.toArgb(), background("直播"))
+        assertEquals(colors.primary.toArgb(), background("直播"))
+        org.junit.Assert.assertNotEquals(colors.primary.toArgb(), background("设置"))
     }
     @Test fun remoteCanMoveAndConfirmWithoutTouch() {
         var selected = 0

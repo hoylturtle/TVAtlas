@@ -8,6 +8,12 @@ object VodEpisodeChoices {
         movie.episodes.forEach { episode -> groups.getOrPut(key(episode.name)) { mutableListOf() }.add(episode) }
         return groups.entries.sortedBy { it.key.removePrefix("episode:").toLongOrNull() ?: Long.MAX_VALUE }.map { (key, episodes) -> VodEpisodeChoice(if (key == "feature") "正片" else episodes.first().name, episodes.sortedByDescending { it.qualityHeight }.distinctBy { it.url }) }
     }
+    /** Only a contiguous, explicit episode number can advance automatically; no guessing for extras or feature films. */
+    fun next(choices: List<VodEpisodeChoice>, currentName: String): VodEpisodeChoice? {
+        val current = key(currentName).takeIf { it.startsWith("episode:") }?.substringAfter(':')?.toIntOrNull() ?: return null
+        if (current == Int.MAX_VALUE) return null
+        return choices.singleOrNull { key(it.name) == "episode:${current + 1}" }
+    }
     fun identity(name: String): String = key(name)
     private fun key(name: String): String {
         val compact = name.lowercase().replace(Regex("\\s+"), "")

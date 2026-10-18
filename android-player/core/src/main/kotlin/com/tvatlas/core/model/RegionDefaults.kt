@@ -5,12 +5,19 @@ private val hongKongLabel = Regex("(?i)(?<![a-z])(?:hk|hkg|hong[ _-]*kong)(?![a-
 fun isHongKongLabel(value: String): Boolean =
     value.contains("香港") || value.contains("🇭🇰") || hongKongLabel.containsMatchIn(value)
 
+private val cctvPrefix = Regex("(?i)^cctv[ -]?\\d")
+private val channelNameSeparators = Regex("[\\s_·-]")
+private val channelQualitySuffix = Regex("(?:高清|超高清|hd|fhd|uhd)$")
+private val cctvNumber = Regex("^cctv(\\d{1,2})(?:[+频道套].*)?$")
 private val hongKongChannelNames = setOf("翡翠台", "明珠台", "TVB Plus", "翡翠台PLUS", "ViuTV", "ViuTVsix", "HOY TV", "HOY Infotainment")
 fun Channel.isHongKong(): Boolean = isHongKongLabel(group) || tvgId?.substringBefore('@')?.endsWith(".hk", true) == true ||
     (playbackRegion() == null && name in hongKongChannelNames)
 
 /** Stable sort keeps the playlist order within each region. */
-fun List<Channel>.hongKongFirst(): List<Channel> = sortedBy { if (it.isHongKong()) 0 else 1 }
+fun List<Channel>.hongKongFirst(): List<Channel> {
+    val (hongKong, remaining) = partition { it.isHongKong() }
+    return hongKong + remaining
+}
 
 /** Normalize legacy bare region groups without rewriting saved channel IDs or manual routes. */
 fun Channel.normalizeHongKongGroup(): Channel {
@@ -41,7 +48,7 @@ fun Channel.browseRegion(): String = when {
     isHongKong() -> "香港"
     group.contains("澳门") || group.contains("澳門") || tvgId?.substringBefore('@')?.endsWith(".mo", true) == true -> "澳门"
     playbackRegion() != null -> requireNotNull(playbackRegion()).label
-    Regex("(?i)^cctv[ -]?\\d").containsMatchIn(name) || name.contains("央视") -> "大陆"
+    cctvPrefix.containsMatchIn(name) || name.contains("央视") -> "大陆"
     else -> group.substringBefore('·').substringBefore('|').trim().takeIf {
         it in setOf("美国", "英国", "加拿大", "澳大利亚", "法国", "德国", "新加坡", "马来西亚", "泰国", "印度")
     } ?: "其他"
@@ -89,12 +96,13 @@ fun Channel.browseType(): String {
 }
 
 /** Presentation only: flagship channels lead each type; equal ranks retain source order. */
-fun List<Channel>.primaryChannelsFirst(): List<Channel> = sortedBy { it.primaryChannelRank() }
+fun List<Channel>.primaryChannelsFirst(): List<Channel> = map { it to it.primaryChannelRank() }
+    .sortedBy { it.second }.map { it.first }
 
-private fun Channel.primaryChannelRank(): Int {
-    val key = name.lowercase().replace(Regex("[\\s_·-]"), "")
-        .replace(Regex("(?:高清|超高清|hd|fhd|uhd)$"), "")
-    val names = when (browseType()) {
+internal fun Channel.primaryChannelRank(type: String = browseType()): Int {
+    val key = name.lowercase().replace(channelNameSeparators, "")
+        .replace(channelQualitySuffix, "")
+    val names = when (type) {
         "TVB" -> listOf(listOf("翡翠台", "翡翠", "tvbjade", "jade"), listOf("明珠台", "明珠", "tvbpearl", "pearl"), listOf("tvbplus", "翡翠台plus"))
         "ViuTV" -> listOf(listOf("viutv"), listOf("viutvsix", "viutv6"))
         "港台" -> listOf(listOf("港台电视31", "港台電視31", "rthk31"), listOf("港台电视32", "港台電視32", "rthk32"), listOf("港台电视33", "港台電視33", "rthk33"))
@@ -105,11 +113,11 @@ private fun Channel.primaryChannelRank(): Int {
         "中天" -> listOf(listOf("中天综合", "中天綜合", "中天综合台", "中天綜合台"), listOf("中天新闻", "中天新聞"))
         "三立" -> listOf(listOf("三立台湾台", "三立台灣台"), listOf("三立都会台", "三立都會台"))
         "NHK" -> listOf(listOf("nhk総合", "nhk综合", "nhkg", "nhkgeneral"), listOf("nhkeテレ", "nhke", "nhk教育"), listOf("nhkbs"))
-        "KBS", "MBC", "SBS", "EBS" -> listOf(listOf(browseType().lowercase() + "1", browseType().lowercase()), listOf(browseType().lowercase() + "2"))
+        "KBS", "MBC", "SBS", "EBS" -> listOf(listOf(type.lowercase() + "1", type.lowercase()), listOf(type.lowercase() + "2"))
         else -> emptyList()
     }
-    if (browseType() == "CCTV") {
-        val number = Regex("^cctv(\\d{1,2})(?:[+频道套].*)?$").matchEntire(key)?.groupValues?.get(1)?.toIntOrNull()
+    if (type == "CCTV") {
+        val number = cctvNumber.matchEntire(key)?.groupValues?.get(1)?.toIntOrNull()
         if (number != null && number in 1..17) return number
     }
     val rank = names.indexOfFirst { key in it }

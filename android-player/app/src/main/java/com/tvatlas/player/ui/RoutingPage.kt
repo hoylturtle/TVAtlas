@@ -66,7 +66,7 @@ import com.tvatlas.player.storage.*
     }
     Column(Modifier.weight(1f)) {
         AtlasHeader(listOf("代理订阅", "代理节点", "路由规则", "流量统计", "代理内核")[section],
-            if (section == 1) "卡片查看详情 · 紫色为使用中 · 白框为遥控器焦点" else "地区自动匹配 · 失败自动回退") {
+            if (section == 1) "卡片查看详情 · 色块跟随焦点 · 使用中节点另有标记" else "地区自动匹配 · 失败自动回退") {
             TvTextButton(onClick = onSubscribe, enabled = !busy) { Text("＋ 订阅") }
         }
         if (!tv) AtlasTabs(listOf("订阅", "节点", "规则", "流量", "内核"), section) { section = it; nodeSubscription = null; inspectedNode = null }
@@ -152,7 +152,7 @@ import com.tvatlas.player.storage.*
                 Card(onClick = { inspectedNode = p.id; nodeDialog = true },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp)
                         .testTag("proxy-node:${p.id}").tvFocusOutline(),
-                    colors = CardDefaults.cardColors(containerColor = if (active) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer)) {
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                     Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(p.name, style = MaterialTheme.typography.bodyMedium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(subscriptionNames[p.subscriptionId] ?: "手动节点",

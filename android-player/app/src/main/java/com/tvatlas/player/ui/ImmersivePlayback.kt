@@ -87,30 +87,37 @@ private fun Context.activity(): Activity? = when (this) {
 @Composable internal fun ImmersivePlaybackLayout(
     playing: Boolean, tv: Boolean, modifier: Modifier = Modifier, contentKey: Any? = null,
     onChannel: (Int) -> Unit = {}, onDetails: () -> Unit = {},
-    picture: @Composable () -> Unit, controls: @Composable () -> Unit, keepControlsVisible: Boolean = false,
+    picture: @Composable () -> Unit, controls: @Composable () -> Unit, keepControlsVisible: Boolean = false, onShowChannels: (() -> Unit)? = null, acceptRemoteFocus: Boolean = true,
 ) {
     var visible by remember(contentKey) { mutableStateOf(true) }
     var controlsRequest by remember { mutableIntStateOf(0) }
     var controlsFocused by remember { mutableStateOf(false) }
+    val confirmPress = remember { RemoteConfirmPress() }
     val pictureFocus = remember { FocusRequester() }
     val controlsFocus = remember { FocusRequester() }
     val shown = keepControlsVisible || visible || !playing
     LaunchedEffect(playing, visible, controlsFocused, contentKey, keepControlsVisible) {
         if (playing && visible && !controlsFocused && !keepControlsVisible) { delay(5000); visible = false }
     }
-    LaunchedEffect(shown, tv, controlsRequest, playing) {
-        if (shown && tv && (controlsRequest > 0 || !playing)) controlsFocus.requestFocus()
+    LaunchedEffect(shown, tv, controlsRequest, playing, acceptRemoteFocus) {
+        if (tv && !acceptRemoteFocus) return@LaunchedEffect
+        if (shown && tv && controlsRequest > 0) controlsFocus.requestFocus()
         else pictureFocus.requestFocus()
     }
     Box(modifier.background(Color.Black).testTag("immersive-player")) {
         Box(Modifier.fillMaxSize().focusRequester(pictureFocus)
+            .onFocusChanged { if (!it.isFocused) confirmPress.cancel() }
             .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) false else when (event.key) {
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (event.nativeKeyEvent.isLongPress) onDetails()
-                        else { visible = true; controlsRequest++ }
-                        true
+                if (event.key in listOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)) {
+                    when (confirmPress.event(event.type == KeyEventType.KeyDown, event.nativeKeyEvent.repeatCount, event.nativeKeyEvent.isLongPress)) {
+                        ConfirmAction.LONG -> onDetails()
+                        ConfirmAction.SHORT -> if (tv && onShowChannels != null) onShowChannels() else { visible = true; controlsRequest++ }
+                        ConfirmAction.NONE -> Unit
                     }
+                    true
+                } else if (event.type != KeyEventType.KeyDown) false
+                else if (event.nativeKeyEvent.repeatCount > 0 && event.key in listOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft)) true
+                else when (event.key) {
                     Key.DirectionUp -> { onChannel(-1); true }
                     Key.DirectionDown -> { onChannel(1); true }
                     Key.DirectionLeft -> { visible = true; controlsRequest++; true }

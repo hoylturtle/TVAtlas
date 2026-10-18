@@ -67,17 +67,9 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
 
 /** Small painted label, with a separate 48dp touch/remote target. */
 @Composable internal fun AtlasChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val tv = atlasTv()
-    var focused by remember { mutableStateOf(false) }
-    TextButton(onClick, modifier.heightIn(min = 48.dp).semantics { this.selected = selected }
-        .onFocusChanged { focused = it.hasFocus }
-        .border(if (tv && focused) 2.dp else 0.dp, if (tv && focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp)),
-        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
+    TvTextButton(onClick, modifier.heightIn(min = 44.dp).selectionOutline(selected),
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) {
-        Text(label, Modifier.clip(RoundedCornerShape(9.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = .6f))
-            .padding(horizontal = 14.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+        Text(label, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
     }
 }
 @Composable internal fun AtlasTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
@@ -145,7 +137,7 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         AtlasBrand(Modifier.weight(1f))
         if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-        IconButton(onSearch) { Icon(androidx.compose.material.icons.Icons.Default.Search, "搜索频道") }
-        IconButton(onSettings) { Icon(androidx.compose.material.icons.Icons.Default.Settings, "打开设置") }
+        TvIconButton(onSearch) { Icon(androidx.compose.material.icons.Icons.Default.Search, "搜索频道") }
+        TvIconButton(onSettings) { Icon(androidx.compose.material.icons.Icons.Default.Settings, "打开设置") }
     }
 }

@@ -9,6 +9,24 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 
 class VodLineSelectorTest {
+    @Test fun repeatedSelectionUsesRouteScopedCacheAndActualPlayerResolution() = runBlocking {
+        MockWebServer().use { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest) = MockResponse().setBody("#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1920x1080\nvideo.m3u8")
+            }
+            val dir = java.nio.file.Files.createTempDirectory("line-quality").toFile()
+            try {
+                val cache = VodQualityCache(dir.resolve("quality.json"))
+                val a = CatalogEpisode("正片", server.url("/a").toString(), "a", 2160)
+                val b = CatalogEpisode("正片", server.url("/b").toString(), "b", 720)
+                val selector = VodLineSelector(OkHttpClient(), cache, { "direct" })
+                selector.order(listOf(a, b)); assertEquals(2, server.requestCount)
+                cache.record(a.url, "direct", 480, 10, actual = true)
+                assertEquals(b, selector.order(listOf(a, b)).first())
+                assertEquals(2, server.requestCount)
+            } finally { dir.deleteRecursively() }
+        }
+    }
     @Test fun ranksReachableMediaBeforeHtmlAndHttpErrorsAndPreservesSignedUrls() = runBlocking {
         MockWebServer().use { server ->
             server.dispatcher = object : Dispatcher() {

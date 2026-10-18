@@ -21,11 +21,16 @@ data class Library(val playlists: List<Playlist>, val channels: List<Channel>, v
 
 class PlayerRepository(private val db: PlayerDatabase, private val directClient: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null,
     private val regionalCatalog: String = "",
+    private val regionalCatalogLoader: (() -> String)? = null,
     private val fetch: (suspend (String) -> String)? = null) {
     private val dao = db.dao()
+    private val regionalText by lazy { regionalCatalogLoader?.invoke() ?: regionalCatalog }
     private fun route(text: String?): RouteTarget? = text?.let { RuleCodec.json.decodeFromString<RouteTarget>(it) }
     private fun encoded(route: RouteTarget?) = route?.let { RuleCodec.json.encodeToString(it) }
-    suspend fun initializeDefaults(defaults: List<Playlist> = DefaultPlaylists.entries) {
+    suspend fun initializeDefaults(defaults: List<Playlist> = DefaultPlaylists.entries,
+        onProgress: (completed: Int, total: Int) -> Unit = { _, _ -> }) = withContext(Dispatchers.IO) {
+        val started = System.nanoTime()
+        log?.event("INFO", "STARTUP_DEFAULTS", "begin")
         // Persist entries before downloading, so offline first launches still offer refresh.
         val pending = db.withTransaction {
             defaults.mapNotNull { entry ->
@@ -40,17 +45,20 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         // Install the small local repair table before any network work, including on upgrades.
         defaults.firstOrNull { it.url == DefaultPlaylists.CHANNELS_URL }?.let { entry ->
             val row = dao.playlist(entry.id)
-            if (row?.enabled == true && regionalCatalog.isNotBlank()) {
+            if (row?.enabled == true && regionalText.isNotBlank()) {
                 val playlist = Playlist(row.id, row.name, row.url, row.enabled, row.refreshIntervalHours, row.lastUpdatedAt)
-                persist(playlist, M3uParser.parse(regionalCatalog, entry.id), partial = true)
+                persist(playlist, M3uParser.parse(regionalText, entry.id), partial = true)
             }
         }
-        for (playlist in pending) {
+        log?.event("INFO", "STARTUP_DEFAULTS", "local ready elapsedMs=${(System.nanoTime() - started) / 1_000_000} networkPending=${pending.size}")
+        onProgress(0, pending.size)
+        for ((index, playlist) in pending.withIndex()) {
             try {
                 refresh(playlist)
                 log?.event("INFO", "DEFAULT_PLAYLIST", "loaded ${playlist.name}")
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { log?.error("DEFAULT_PLAYLIST", error) }
+            onProgress(index + 1, pending.size)
         }
     }
     val ruleFiles = dao.ruleFiles()
@@ -96,8 +104,12 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         require(body.toByteArray(Charsets.UTF_8).size <= 8 * 1024 * 1024) { "播放列表超过 8 MB" }
         val base = M3uParser.parse(body, playlist.id)
         val parsed = if (playlist.url == DefaultPlaylists.CHANNELS_URL)
-            com.tvatlas.core.playlist.RegionalLiveCatalog.merge(base, M3uParser.parse(regionalCatalog, playlist.id)) else base
+            com.tvatlas.core.playlist.RegionalLiveCatalog.merge(base, M3uParser.parse(regionalText, playlist.id)) else base
         require(parsed.isNotEmpty()) { "没有有效的 HTTP(S) 频道，已保留旧列表" }
+        if (playlist.id.startsWith("unified-live:")) {
+            val otherStreams = (dao.managedStreamCount() - dao.sourceStreams(playlist.id).size).coerceAtLeast(0)
+            com.tvatlas.core.vod.MediaSubscription.checkedLiveBudget(parsed.size, parsed.sumOf { it.streams.size }, otherStreams)
+        }
         persist(playlist, parsed)
     }
 
@@ -105,27 +117,79 @@ class PlayerRepository(private val db: PlayerDatabase, private val directClient:
         db.withTransaction {
             val oldStreams = dao.sourceStreams(playlist.id).associateBy { it.id }
             val previousChannels = dao.channelsSnapshot()
+            val previousById = previousChannels.associateBy { it.id }
+            val previousByName = previousChannels.groupBy { it.name }
+            val oldByIdentity = oldStreams.values.groupBy { it.channelId to M3uParser.streamIdentity(it.url) }
             val rows = parsed.flatMap { ch ->
                 // Retain legacy IDs only when identity/region is unambiguous, preserving favorites and routes.
-                val previous = dao.channel(ch.id) ?: previousChannels.filter { row -> row.name == ch.name &&
+                val previous = previousById[ch.id] ?: previousByName[ch.name].orEmpty().filter { row ->
                     (ch.tvgId == null || row.tvgId == null || ch.tvgId == row.tvgId) &&
                     Channel(row.id, row.name, row.channelGroup, row.logo, row.tvgId, emptyList()).playbackRegion() == ch.playbackRegion()
                 }.singleOrNull()
                 val channelId = previous?.id ?: ch.id
-                dao.saveChannel(ChannelRow(channelId, ch.name, ch.group, ch.logo, ch.tvgId, previous?.manualRoute))
+                val nextChannel = ChannelRow(channelId, ch.name, ch.group, ch.logo, ch.tvgId, previous?.manualRoute)
+                if (nextChannel != previous) dao.saveChannel(nextChannel)
                 ch.streams.map { stream ->
-                    val old = oldStreams[stream.id] ?: oldStreams.values.filter { it.channelId == channelId &&
-                        M3uParser.streamIdentity(it.url) == M3uParser.streamIdentity(stream.url) }.singleOrNull()
+                    val old = oldStreams[stream.id] ?: oldByIdentity[channelId to M3uParser.streamIdentity(stream.url)]?.singleOrNull()
                     old?.copy(url = stream.url, channelId = channelId, headers = RuleCodec.json.encodeToString(stream.headers)) ?: StreamRow(stream.id, channelId, stream.url, playlist.id, headers = RuleCodec.json.encodeToString(stream.headers))
                 }
             }
             val affected = rows.map { it.channelId }.toSet()
             val removable = if (partial) oldStreams.values.filter { it.channelId in affected }.map { it.id } else oldStreams.keys.toList()
-            dao.deleteStreams(removable - rows.map { it.id }.toSet())
-            dao.saveStreams(rows)
+            val deleted = removable - rows.map { it.id }.toSet()
+            if (deleted.isNotEmpty()) dao.deleteStreams(deleted)
+            val changed = rows.filter { it != oldStreams[it.id] }
+            if (changed.isNotEmpty()) dao.saveStreams(changed)
             dao.pruneHistory(); dao.pruneFailures()
             if (!partial) dao.savePlaylist(PlaylistRow(playlist.id, playlist.name, playlist.url, playlist.enabled,
                 playlist.refreshIntervalHours, System.currentTimeMillis()))
+        }
+    }
+
+    /** Download new lists before entering the transaction. Other subscriptions and manual playlists are never owned here. */
+    suspend fun syncUnifiedLive(sources: List<com.tvatlas.core.vod.SubscribedLiveSource>, removedUrls: Set<String> = emptySet()) = withContext(Dispatchers.IO) {
+        val old = dao.playlists().first()
+        val removedCount = old.filter { it.id.startsWith("unified-live:") && it.url in removedUrls }
+            .sumOf { dao.sourceStreams(it.id).size }
+        var stagedStreams = (dao.managedStreamCount() - removedCount).coerceAtLeast(0)
+        val wanted = sources.distinctBy { it.url }.mapNotNull { source ->
+            if (old.any { it.url == source.url && !it.id.startsWith("unified-live:") }) return@mapNotNull null
+            val id = "unified-live:" + stableId(source.url)
+            val previous = old.firstOrNull { it.id == id }
+            val playlist = Playlist(id, source.name, source.url, previous?.enabled ?: true, previous?.refreshIntervalHours ?: 24, previous?.lastUpdatedAt)
+            val parsed = if (previous == null) {
+                val body = kotlinx.coroutines.withTimeout(10000) {
+                    fetch?.invoke(source.url) ?: directClient.newCall(Request.Builder().url(source.url).build()).readCancellable { response ->
+                        require(response.isSuccessful)
+                        val input = requireNotNull(response.body).byteStream()
+                        input.use { stream ->
+                            val output = ByteArrayOutputStream(); val buffer = ByteArray(8192)
+                            while (true) { val count = stream.read(buffer); if (count < 0) break
+                                require(output.size() + count <= 8 * 1024 * 1024); output.write(buffer, 0, count) }
+                            output.toByteArray().toString(Charsets.UTF_8)
+                        }
+                    }
+                }
+                require(body.toByteArray().size <= 8 * 1024 * 1024)
+                M3uParser.parse(body, id).also { parsed ->
+                    require(parsed.isNotEmpty()) { "直播列表暂不可用，保留旧列表" }
+                    stagedStreams = com.tvatlas.core.vod.MediaSubscription.checkedLiveBudget(parsed.size, parsed.sumOf { it.streams.size }, stagedStreams)
+                }
+            } else null
+            playlist to parsed
+        }
+        db.withTransaction {
+            wanted.forEach { (playlist, parsed) ->
+                if (parsed != null) persist(playlist, parsed)
+                else old.firstOrNull { it.id == playlist.id }?.let { previous ->
+                    if (previous.name != playlist.name) dao.savePlaylist(previous.copy(name = playlist.name))
+                }
+            }
+            val desiredIds = sources.map { "unified-live:" + stableId(it.url) }.toSet()
+            old.filter { it.id.startsWith("unified-live:") && it.id !in desiredIds && it.url in removedUrls }.forEach { row ->
+                dao.deleteStreams(dao.sourceStreams(row.id).map { it.id }); dao.deletePlaylist(row.id)
+            }
+            dao.pruneHistory(); dao.pruneFailures()
         }
     }
 

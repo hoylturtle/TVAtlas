@@ -15,6 +15,9 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
     private val lock = Any()
     private val _lines = MutableStateFlow<List<String>>(emptyList())
     val lines = _lines.asStateFlow()
+    private val byteSizes = java.util.ArrayDeque<Int>()
+    private var totalBytes = 0L
+    private val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
     private var closed = false
     private var generation = 0L
     private var writeScheduled = false
@@ -23,15 +26,23 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
             val saved = runCatching {
                 if (file.isFile && file.length() <= MAX_BYTES) file.readLines(Charsets.UTF_8).map(::sanitize) else emptyList()
             }.getOrDefault(emptyList())
-            synchronized(lock) { if (generation == 0L) _lines.value = bounded(saved + _lines.value) }
+            synchronized(lock) { if (generation == 0L) {
+                _lines.value = bounded(saved + _lines.value)
+                byteSizes.clear(); totalBytes = 0
+                _lines.value.forEach { line -> val size = line.toByteArray(Charsets.UTF_8).size + 1; byteSizes.addLast(size); totalBytes += size }
+            } }
         }
         event("INFO", "APP", environment)
     }
     fun event(level: String, stage: String, message: String) = synchronized(lock) {
         if (closed) return@synchronized
-        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US).format(Date())
-        val line = sanitize("$time ${level.take(8)} ${stage.take(32)} $message")
-        _lines.value = bounded(_lines.value + line)
+        val time = timestamp.format(Date())
+        val line = sanitize("$time ${level.take(8)} ${stage.take(32)} thread=${Thread.currentThread().name.take(32)} $message")
+        val size = line.toByteArray(Charsets.UTF_8).size + 1
+        byteSizes.addLast(size); totalBytes += size
+        var removed = 0
+        while (byteSizes.size > MAX_LINES || totalBytes > MAX_BYTES) { totalBytes -= byteSizes.removeFirst(); removed++ }
+        _lines.value = (_lines.value + line).drop(removed)
         persistLater()
     }
     fun error(stage: String, error: Throwable) {
@@ -49,7 +60,7 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
     }
     fun clear() = synchronized(lock) {
         generation++
-        _lines.value = emptyList()
+        _lines.value = emptyList(); byteSizes.clear(); totalBytes = 0
         persistLater()
     }
     private fun persistLater() {

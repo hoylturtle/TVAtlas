@@ -47,6 +47,7 @@ import com.tvatlas.player.transfer.TransferKind
     val current = state.selected
     var pathOpen by remember(current?.key) { mutableStateOf(false) }
     BackHandler(state.selected != null && !importing && !phoneInput && deleting == null && selectedFile == null && !showAuthorization && !directVideo && !videoPhoneInput && !pathOpen, onBack)
+    BackHandler(state.selected == null && !importing && !phoneInput && deleting == null && selectedFile == null && !showAuthorization && !directVideo && !videoPhoneInput && !pathOpen, onCatalog)
     BoxWithConstraints(Modifier.fillMaxSize().padding(16.dp)) {
         val split = maxWidth >= 700.dp && maxWidth > maxHeight
         val sidebarWidth = (maxWidth * .29f).coerceIn(220.dp, 300.dp)

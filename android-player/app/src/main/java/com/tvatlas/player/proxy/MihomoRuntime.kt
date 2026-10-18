@@ -24,7 +24,7 @@ class MihomoRuntime(private val context: Context, private val vault: CredentialV
     private var process: Process? = null
     private var endpoints = emptyMap<String, CoreEndpoint>()
     private val executable get() = File(context.applicationInfo.nativeLibraryDir, "libmihomo.so")
-    private val home = File(context.noBackupFilesDir, "mihomo").apply { mkdirs() }
+    private val home by lazy { File(context.noBackupFilesDir, "mihomo").apply { mkdirs() } }
 
     @Synchronized fun info() = CoreInfo(com.tvatlas.player.BuildConfig.MIHOMO_VERSION,
         android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(), executable.canExecute(), process?.let(::alive) == true)

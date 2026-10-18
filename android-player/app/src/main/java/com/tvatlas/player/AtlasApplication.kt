@@ -8,6 +8,18 @@ import coil.decode.SvgDecoder
 
 /** App-private, bounded persistent logo cache; never included in configuration backups. */
 class AtlasApplication : Application(), ImageLoaderFactory {
+    lateinit var debugLog: com.tvatlas.player.debug.DebugLog
+        private set
+    internal val channelBrowseCache by lazy { com.tvatlas.player.browse.ChannelBrowseCache(java.io.File(noBackupFilesDir, "channel-browse.json")) }
+    lateinit var startupDiagnostics: com.tvatlas.player.debug.StartupDiagnostics
+        private set
+    override fun onCreate() {
+        super.onCreate()
+        debugLog = com.tvatlas.player.debug.DebugLog(java.io.File(noBackupFilesDir, "debug/player.log"),
+            "TVAtlas ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) Android ${android.os.Build.VERSION.SDK_INT} ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        debugLog.event("INFO", "STARTUP", "application created elapsedRealtimeMs=${android.os.SystemClock.elapsedRealtime()}")
+        startupDiagnostics = com.tvatlas.player.debug.StartupDiagnostics(debugLog)
+    }
     override fun newImageLoader(): ImageLoader = createArtworkImageLoader(this)
 }
 

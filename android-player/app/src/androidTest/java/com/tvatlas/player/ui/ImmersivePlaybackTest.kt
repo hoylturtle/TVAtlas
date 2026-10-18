@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
@@ -40,6 +41,19 @@ class ImmersivePlaybackTest {
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    @Test fun tvConfirmOpensChannelsOnlyOnRelease() {
+        var channels = 0
+        var details = 0
+        compose.setContent { AtlasTheme {
+            ImmersivePlaybackLayout(true, true, Modifier.size(640.dp, 360.dp),
+                onDetails = { details++ }, onShowChannels = { channels++ },
+                picture = { Text("画面") }, controls = { Text("控制") })
+        } }
+        compose.onNodeWithTag("immersive-player").performKeyInput { keyDown(Key.Enter) }
+        compose.runOnIdle { assertEquals(0, channels) }
+        compose.onNodeWithTag("immersive-player").performKeyInput { keyUp(Key.Enter) }
+        compose.runOnIdle { assertEquals(1, channels); assertEquals(0, details) }
+    }
     @Test fun pictureUsesWholeViewportAndTouchTogglesOverlay() {
         compose.mainClock.autoAdvance = false
         compose.setContent { MaterialTheme(colorScheme = colors) {
@@ -115,6 +129,30 @@ class ImmersivePlaybackTest {
         compose.onNodeWithText("重新播放").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.mainClock.advanceTimeByFrame()
         compose.runOnIdle { assertEquals(1, replays) }
+    }
+
+    @Test fun confirmationOpensChannelsAndBackgroundPlayerDoesNotStealTheirFocus() {
+        var channels by mutableStateOf(false)
+        var opened = 0
+        compose.setContent { CompositionLocalProvider(LocalTvMode provides true) {
+            MaterialTheme(colorScheme = colors) {
+                Box(Modifier.fillMaxSize()) {
+                    ImmersivePlaybackLayout(true, true, Modifier.size(640.dp, 360.dp),
+                        picture = { Box(Modifier.fillMaxSize().testTag("picture")) }, controls = { Text("播放操作") },
+                        onShowChannels = { opened++; channels = true }, acceptRemoteFocus = !channels)
+                    if (channels) {
+                        val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+                        TvTextButton(onClick = {}, modifier = Modifier.then(Modifier.focusRequester(focus)).testTag("channel-choice")) { Text("频道选择") }
+                        LaunchedEffect(Unit) { withFrameNanos { }; focus.requestFocus() }
+                    }
+                }
+            }
+        } }
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.onNodeWithTag("channel-choice").assertIsFocused()
+        compose.mainClock.advanceTimeBy(6000)
+        compose.onNodeWithTag("channel-choice").assertIsFocused()
+        compose.runOnIdle { assertEquals(1, opened) }
     }
 
     @Test fun systemBarsHideInFullscreenAndRestoreOnBack() {

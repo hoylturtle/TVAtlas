@@ -21,17 +21,18 @@ data class PublishedUpdate(val versionCode: Int, val versionName: String, val mi
 data class UpdateState(val checking: Boolean = false, val checked: Boolean = false, val release: PublishedUpdate? = null,
     val error: String? = null, val downloading: Boolean = false, val downloadProgress: Int = 0, val apkReady: Boolean = false)
 
-/** Public Release assets only; previews are included for this testing build. */
+/** Public verified stable releases. Preview builds do not connect to this update channel. */
 class UpdateRepository(
     private val client: OkHttpClient,
     private val api: String = "https://api.github.com/repos/hoylturtle/TVAtlas",
     private val web: String = REPOSITORY_URL,
     private val signingCertificateSha256: String = RELEASE_CERTIFICATE_SHA256,
     private val log: DebugLog? = null,
+    private val includePrereleases: Boolean = false,
 ) {
     fun latest(): PublishedUpdate = runBlocking { latestAsync() }
     suspend fun latestAsync(): PublishedUpdate = withContext(Dispatchers.IO) {
-        // /latest excludes prereleases. This app deliberately follows the public testing channel.
+        // Inspect recent stable assets so one incomplete release does not erase a verified update.
         val releases = read("$api/releases?per_page=10", stage = "release-list") as? JsonArray
             ?: throw UpdateException("更新信息无效，请稍后重试")
         val deadline = System.nanoTime() + 20_000_000_000L
@@ -39,9 +40,11 @@ class UpdateRepository(
         var complete = true
         for (element in releases) {
             if (System.nanoTime() > deadline) { complete = false; break }
-            val release = element as? JsonObject ?: continue
+            if (element !is JsonObject) continue
+            val release = element
             if (release["draft"]?.jsonPrimitive?.booleanOrNull != false) continue
             val tag = release.text("tag_name")
+            if (!includePrereleases && (release["prerelease"]?.jsonPrimitive?.booleanOrNull != false || tag.contains("-"))) continue
             if (!tag.matches(Regex("v[0-9]+\\.[0-9]+\\.[0-9]+(?:-beta\\.[0-9]+)?"))) continue
             val assets = release["assets"] as? JsonArray ?: continue
             val uploaded = assets.mapNotNull { it as? JsonObject }.filter {

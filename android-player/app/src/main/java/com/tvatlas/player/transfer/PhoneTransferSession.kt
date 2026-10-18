@@ -15,7 +15,7 @@ import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicReference
 
 enum class TransferKind(val title: String, val defaultName: String) {
-    PLAYLIST("频道订阅", "手机频道订阅"), PROXY("Clash / Mihomo 代理订阅", "手机代理订阅"), CLOUD("网盘分享", "手机网盘分享"), VIDEO("视频直链", "手机视频")
+    MEDIA("统一影视与直播订阅", "手机统一订阅"), PLAYLIST("频道订阅", "手机频道订阅"), PROXY("Clash / Mihomo 代理订阅", "手机代理订阅"), CLOUD("网盘分享", "手机网盘分享"), VIDEO("视频直链", "手机视频")
 }
 data class TransferInput(val name: String, val url: String)
 data class TransferState(val active: Boolean = true, val received: TransferInput? = null, val error: String? = null)

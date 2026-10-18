@@ -119,7 +119,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (movie != null) IconButton(onClick = ::showList) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
+                    if (movie != null) TvIconButton(onClick = ::showList) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
                     Column(Modifier.weight(1f)) {
                         Text(if (movie != null) "影片详情" else "影视片库", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(sources[selected].first, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
@@ -205,19 +205,23 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
             runCatching { focus.requestFocus() }
         }
     }
-    LazyVerticalGrid(columns = GridCells.Adaptive(136.dp), state = state, modifier = modifier.fillMaxWidth().testTag("vod-movie-grid"),
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+    val compact = tv || maxWidth >= 600.dp
+    val columns = if (compact) (maxWidth.value / 112f).toInt().coerceIn(3, 7) else (maxWidth.value / 136f).toInt().coerceIn(2, 4)
+    LazyVerticalGrid(columns = GridCells.Fixed(columns), state = state, modifier = Modifier.fillMaxSize().testTag("vod-movie-grid"),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
         gridItems(movies, key = { it.id }) { movie ->
             Card(onClick = { onSelect(movie) }, modifier = Modifier.fillMaxWidth().testTag("vod-movie:${movie.id}")
                     .then(if (tv && movie.id == restoreFocusId) Modifier.focusRequester(focus) else Modifier).tvFocusOutline(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                MoviePoster(movie, loader, allowNetwork, Modifier.fillMaxWidth().aspectRatio(.72f))
-                Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                MoviePoster(movie, loader, allowNetwork, Modifier.fillMaxWidth().aspectRatio(if (compact) 1.1f else .85f))
+                Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(movie.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(movie.category.ifBlank { "影片" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
+    }
     }
 }
 

@@ -15,13 +15,16 @@ import okhttp3.OkHttpClient
 
 data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
     val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
-    val error: String? = null, val resumeWarning: String? = null, val routeLabel: String = "直连")
+    val error: String? = null, val qualityHeight: Int? = null, val resumeWarning: String? = null, val routeLabel: String = "直连")
 
 /** All player commands run on the main thread. Source URLs never enter logs or persistence. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class VodPlaybackController(private val context: Context, private val scope: CoroutineScope,
     client: OkHttpClient, private val storeFactory: () -> VodProgressStorage, private val canPlay: () -> Boolean,
-    private val log: com.tvatlas.player.debug.DebugLog? = null) {
+    private val log: com.tvatlas.player.debug.DebugLog? = null,
+    private val onEnded: () -> Unit = {}, private val onClosed: () -> Unit = {},
+    private val onMeasuredQuality: (VodItem, Int, String) -> Unit = { _, _, _ -> },
+    private val onMediaFailure: (VodItem, String, Int) -> Unit = { _, _, _ -> }) {
     private val _state = MutableStateFlow(VodState())
     val state = _state.asStateFlow()
     private var active: ExoPlayer? = null
@@ -37,7 +40,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     init { scope.launch { while (isActive) { delay(5000); checkpoint() } } }
     fun open(item: VodItem, client: OkHttpClient? = null, label: String? = null, alternatives: List<VodItem> = emptyList(), resumePosition: Long = 0,
         alternativeClients: Map<String, OkHttpClient> = emptyMap(), alternativeLabels: Map<String, String> = emptyMap()) {
-        close()
+        releasePlayer()
         if (alternativeClients[item.url] != null) transport = alternativeClients.getValue(item.url) else if (client != null) transport = client
         if (alternativeLabels[item.url] != null) routeLabel = alternativeLabels.getValue(item.url) else if (label != null) routeLabel = label
         log?.event("INFO", "VOD_PLAY", "requested host=${java.net.URI(item.url).host} route=$routeLabel")
@@ -79,6 +82,15 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                     }
                     if (playbackState == Player.STATE_ENDED) checkpoint(finished = true)
                     publish(player)
+                    if (playbackState == Player.STATE_ENDED && !player.isCurrentMediaItemLive) scope.launch {
+                        if (active === player && token == generation && canPlay()) onEnded()
+                    }
+                }
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if (active !== player || videoSize.width <= 0 || videoSize.height <= 0) return
+                    val height = minOf(videoSize.width, videoSize.height)
+                    _state.value = _state.value.copy(qualityHeight = height)
+                    onMeasuredQuality(item, height, routeLabel)
                 }
                 override fun onIsPlayingChanged(isPlaying: Boolean) { publish(player) }
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -90,6 +102,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                 }
                 override fun onPlayerError(error: PlaybackException) {
                     if (active !== player) return
+                    onMediaFailure(item, routeLabel, error.errorCode)
                     if (alternatives.isNotEmpty() && canPlay()) {
                         val position = player.currentPosition.coerceAtLeast(0)
                         log?.event("WARN", "VOD_FAILOVER", "remaining=${alternatives.size} code=${error.errorCode}")
@@ -163,8 +176,10 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
             catch (_: Exception) { if (token == generation) _state.value = _state.value.copy(resumeWarning = "续播记录保存失败，播放不受影响") }
         }
     }
-    fun close() {
-        checkpoint(); generation++; openJob?.cancel(); bufferJob?.cancel()
+    fun notice(message: String) { _state.value = _state.value.copy(resumeWarning = message) }
+    fun close() { releasePlayer(); onClosed() }
+    private fun releasePlayer() {
+        checkpoint(finished = active?.playbackState == Player.STATE_ENDED); generation++; openJob?.cancel(); bufferJob?.cancel()
         val old = active; active = null; old?.release()
         _state.value = VodState()
     }

@@ -86,7 +86,7 @@ class PlaybackCoordinator(
 
     fun preparing(channel: Channel, streamId: String? = null) {
         _speed.value = 0L
-        _status.value = PlaybackStatus(channel.id, "正在检测地区节点，选择低延迟线路…", loading = true, selectedStreamId = streamId)
+        _status.value = PlaybackStatus(channel.id, "正在准备播放线路…", loading = true, selectedStreamId = streamId)
     }
 
     fun preparationFailed(channel: Channel, streamId: String? = null) {

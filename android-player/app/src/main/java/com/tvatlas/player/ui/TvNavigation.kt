@@ -11,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRequester
@@ -26,36 +28,40 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.filled.PlayArrow
 
-/** A visible focus ring independent of the subtle Material touch state layer. */
+/** Card/row focus gets a filled overlay, so Material surfaces cannot paint over the indication. */
 internal fun Modifier.tvFocusOutline(): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
-    onFocusChanged { focused = it.hasFocus }
-        .border(if (focused) 3.dp else 0.dp,
-            if (focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
-
+    val color = MaterialTheme.colorScheme.primary
+    onFocusChanged { focused = it.hasFocus }.drawWithContent {
+        drawContent()
+        if (focused) drawRoundRect(color.copy(alpha = .34f), cornerRadius = CornerRadius(12.dp.toPx()))
+    }.border(if (focused) 2.dp else 0.dp, if (focused) color else Color.Transparent, RoundedCornerShape(12.dp))
 }
 
-
-/** Selection uses a purple fill; only actual TV remote focus has an outline. */
+/** Committed selection is a leading marker; the full purple fill belongs exclusively to focus. */
 internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
-    val context = LocalContext.current
-    val tv = LocalTvMode.current ?: ((context.getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
+    val color = MaterialTheme.colorScheme.primary
+    val selectedOnFocus = MaterialTheme.colorScheme.onPrimary
     var focused by remember { mutableStateOf(false) }
-    onFocusChanged { focused = it.hasFocus }
-        .semantics { this.selected = selected }
-        .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(12.dp))
-        .border(if (tv && focused) 3.dp else 0.dp,
-            if (tv && focused) Color.White else Color.Transparent, RoundedCornerShape(12.dp))
+    onFocusChanged { focused = it.hasFocus }.semantics { this.selected = selected }.drawWithContent {
+        drawContent()
+        if (focused) drawRoundRect(color.copy(alpha = .34f), cornerRadius = CornerRadius(12.dp.toPx()))
+        if (selected) drawRoundRect(if (focused) selectedOnFocus else color,
+            size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height), cornerRadius = CornerRadius(2.dp.toPx()))
+    }
 }
 
-@Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+@Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier, requestSelectedFocus: Boolean = false) {
+    val selectedFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(requestSelectedFocus) {
+        if (requestSelectedFocus) { withFrameNanos { }; selectedFocus.requestFocus() }
+    }
     Column(modifier.width(132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AtlasBrand(Modifier.padding(vertical = 16.dp))
         atlasNavigationItems.forEach { (index, label) ->
-            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("main-nav:$index").selectionOutline(selected == index),
-                colors = ButtonDefaults.textButtonColors(containerColor = if (selected == index)
-                    MaterialTheme.colorScheme.primary else Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface)) {
+            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("main-nav:$index").then(if (selected == index) Modifier.focusRequester(selectedFocus) else Modifier).selectionOutline(selected == index),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) {
                 AppNavigationIcon(index)
                 Spacer(Modifier.width(6.dp))
                 Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)
@@ -64,11 +70,7 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     }
 }
 
-internal fun Modifier.liveFocusOutline(): Modifier = composed {
-    var focused by remember { mutableStateOf(false) }
-    onFocusChanged { focused = it.hasFocus }
-        .border(if (focused) 2.dp else 0.dp, if (focused) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
-}
+internal fun Modifier.liveFocusOutline(): Modifier = tvFocusOutline()
 
 internal val LocalLiveOverlay = staticCompositionLocalOf { false }
 
@@ -77,7 +79,7 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
 /** Playback remains full size; navigation and channels float above it. */
 @Composable internal fun TvBrowseLayout(tv: Boolean, channelName: String?,
     channels: @Composable () -> Unit, picture: @Composable () -> Unit,
-    navigation: @Composable (() -> Unit) -> Unit = {}) {
+    navigation: @Composable (() -> Unit) -> Unit = {}, onNavigation: (() -> Unit)? = null) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         var guideExpanded by remember { mutableStateOf(false) }
         var navigationOpen by remember { mutableStateOf(false) }
@@ -92,7 +94,7 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
                 Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                     AtlasBrand()
                     Text("  |  直播", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = { navigationOpen = true }) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "导航") }
+                    TvIconButton(onClick = { if (onNavigation != null) onNavigation() else navigationOpen = true }) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "导航") }
                 }
                 Box(Modifier.weight(1f).testTag("live-channel-overlay")) {
                     CompositionLocalProvider(LocalLiveOverlay provides true, LocalLiveGuideOpen provides { guideExpanded = it }) { channels() }
@@ -104,10 +106,10 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
 }
 
 /** A left-edge modal drawer, never a narrow dialog centered over the channel list. */
-@Composable internal fun LiveNavigationDrawer(onDismiss: () -> Unit, navigation: @Composable (() -> Unit) -> Unit) {
+@Composable internal fun LiveNavigationDrawer(onDismiss: () -> Unit, onExit: (() -> Unit)? = null, focusReturn: Boolean = true, navigation: @Composable (() -> Unit) -> Unit) {
     val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
         Box(Modifier.fillMaxSize().testTag("live-navigation-window")) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)).clickable(onClick = onDismiss))
             Surface(Modifier.align(Alignment.CenterStart).widthIn(max = 260.dp).fillMaxHeight().testTag("live-navigation-drawer"),
@@ -115,8 +117,9 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
                 Column(Modifier.fillMaxSize()) {
                     TvTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(12.dp)
                         .then(Modifier.focusRequester(returnFocus))) { Text("返回直播") }
-                    LaunchedEffect(Unit) { withFrameNanos { }; returnFocus.requestFocus() }
+                    LaunchedEffect(focusReturn) { if (focusReturn) { withFrameNanos { }; returnFocus.requestFocus() } }
                     Box(Modifier.weight(1f).fillMaxWidth()) { navigation(onDismiss) }
+                    if (onExit != null) TvTextButton(onClick = onExit, modifier = Modifier.fillMaxWidth().padding(12.dp)) { Text("退出应用") }
                 }
             }
         }

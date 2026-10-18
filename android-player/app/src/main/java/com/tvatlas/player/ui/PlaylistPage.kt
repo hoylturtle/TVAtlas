@@ -29,8 +29,17 @@ import com.tvatlas.player.storage.*
     onEdit: (Playlist) -> Unit = {}, onEnable: (Playlist) -> Unit = {}, onDelete: (Playlist) -> Unit = {},
     cloudShareCount: Int? = null, onImportCloud: () -> Unit = {}, onBrowseCloud: () -> Unit = {},
     vodSources: List<Pair<String, String>> = emptyList(), onBrowseVod: (String) -> Unit = {}, onConfigureVod: (String) -> Unit = {},
-    vodSubscriptionStatus: String = "", vodSubscriptionBusy: Boolean = false, onSyncVod: () -> Unit = {}) {
+    vodSubscriptionStatus: String = "", vodSubscriptionBusy: Boolean = false, onSyncVod: () -> Unit = {},
+    vodHealth: Map<String, String> = emptyMap(), onRecheckVod: (String) -> Unit = {},
+    mediaSubscriptions: Map<String, String> = emptyMap(), onAddMedia: () -> Unit = {}, onRemoveMedia: (String) -> Unit = {}) {
     var details by remember { mutableStateOf(false) }
+    var subscriptionsExpanded by remember { mutableStateOf(false) }
+    var removeFeed by remember { mutableStateOf<String?>(null) }
+    removeFeed?.let { address -> AlertDialog(onDismissRequest = { removeFeed = null }, title = { Text("移除统一订阅？") },
+        text = { Text("移除此订阅独占的影视与直播来源。其他订阅共享的来源、手动添加的频道及代理配置会保留。") },
+        confirmButton = { TvTextButton(onClick = { removeFeed = null; onRemoveMedia(address) }) { Text("移除") } },
+        dismissButton = { TvTextButton(onClick = { removeFeed = null }) { Text("取消") } }) }
+
     var inspected by remember { mutableStateOf<String?>(null) }
     val tv = atlasTv()
     val builtIn = library.playlists.filter(DefaultPlaylists::contains)
@@ -51,7 +60,7 @@ import com.tvatlas.player.storage.*
                         modifier = Modifier.padding(bottom = 8.dp))
                     Card(onClick = { inspected = null; if (!tv) details = true },
                         modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.hasFocus) inspected = null }.tvFocusOutline(),
-                        colors = CardDefaults.cardColors(containerColor = if (tv && inspected == null) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer)) {
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 SourceIcon()
@@ -70,15 +79,35 @@ import com.tvatlas.player.storage.*
                         }
                     }
                 }
+                item(key = "media-subscriptions") {
+                    AtlasPanel(Modifier.fillMaxWidth()) {
+                        Text("统一影视与直播订阅", style = MaterialTheme.typography.titleMedium)
+                        Text("按需加载，默认 24 小时到期更新；同步不会覆盖手动来源或自动恢复已删除的直播列表。", style = MaterialTheme.typography.bodySmall)
+                        if (vodSubscriptionStatus.isNotBlank()) Text(vodSubscriptionStatus, style = MaterialTheme.typography.bodySmall)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TvOutlinedButton(onClick = onAddMedia, enabled = !busy && !vodSubscriptionBusy) { Text("添加统一订阅 / 手机扫码") }
+                            TvTextButton(onClick = onSyncVod, enabled = !vodSubscriptionBusy) { Text(if (vodSubscriptionBusy) "同步中…" else "同步订阅") }
+                            TvTextButton(onClick = { subscriptionsExpanded = !subscriptionsExpanded }) { Text("管理 ${mediaSubscriptions.size} 个订阅") }
+                        }
+                        if (subscriptionsExpanded) mediaSubscriptions.forEach { (url, name) ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(name, Modifier.weight(1f), maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                TvTextButton(onClick = { removeFeed = url }, enabled = !busy && !vodSubscriptionBusy) { Text("移除") }
+                            }
+                        }
+                    }
+                }
                 if (vodSources.isNotEmpty()) item(key = "vod-sources") {
                     AtlasPanel(Modifier.fillMaxWidth()) {
                         Text("影视源", style = MaterialTheme.typography.titleMedium)
                         Text("${vodSources.size} 个片库 · 从原始订阅同步可用原生接口", style = MaterialTheme.typography.bodySmall)
-                        if (vodSubscriptionStatus.isNotBlank()) Text(vodSubscriptionStatus, style = MaterialTheme.typography.bodySmall)
-                        TvOutlinedButton(onClick = onSyncVod, enabled = !vodSubscriptionBusy) { Text(if (vodSubscriptionBusy) "同步中…" else "同步影视订阅") }
                         vodSources.forEach { (name, api) ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                Column(Modifier.weight(1f)) {
+                                    Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    vodHealth[api]?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+                                }
+                                TvTextButton(onClick = { onRecheckVod(api) }, enabled = vodHealth[api] != "正在检查") { Text("重检") }
                                 TvTextButton(onClick = { onConfigureVod(api) }) { Text("网络") }
                                 TvTextButton(onClick = { onBrowseVod(api) }) { Text("片库") }
                             }
@@ -103,7 +132,7 @@ import com.tvatlas.player.storage.*
                     var menu by remember { mutableStateOf(false) }
                     Card(onClick = { inspected = playlist.id }, modifier = Modifier.fillMaxWidth()
                         .onFocusChanged { if (it.hasFocus) inspected = playlist.id }.tvFocusOutline(),
-                        colors = CardDefaults.cardColors(containerColor = if (tv && selectedSourceId == playlist.id) MaterialTheme.colorScheme.primary.copy(alpha = .24f) else MaterialTheme.colorScheme.surfaceContainer)) {
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 SourceIcon()

@@ -88,6 +88,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     @Query("DELETE FROM subscriptions WHERE id = :id") suspend fun deleteSubscription(id: String)
     @Query("DELETE FROM proxies WHERE id IN (:ids)") suspend fun deleteProxies(ids: List<String>)
     @Query("SELECT * FROM channels WHERE id = :id") suspend fun channel(id: String): ChannelRow?
+    @Query("SELECT COUNT(*) FROM streams WHERE sourcePlaylistId LIKE 'unified-live:%'") suspend fun managedStreamCount(): Int
     @Query("SELECT * FROM streams WHERE sourcePlaylistId = :id") suspend fun sourceStreams(id: String): List<StreamRow>
     @Query("SELECT * FROM streams WHERE id = :id") suspend fun stream(id: String): StreamRow?
     @Query("SELECT * FROM history WHERE channelId = :channelId") suspend fun history(channelId: String): HistoryRow?

@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.background
@@ -23,7 +24,8 @@ import com.tvatlas.player.vod.VodState
 /** Native Media3 controls provide seeking, pause and remote navigation. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable internal fun VodPlaybackDialog(state: VodState, controller: VodPlaybackController,
-    onToggle: () -> Unit, onRestart: () -> Unit) {
+    onToggle: () -> Unit, onRestart: () -> Unit, nextEpisode: String? = null,
+    preparing: Boolean = false, autoNext: Boolean = true, onAutoNext: (Boolean) -> Unit = {}, onNext: () -> Unit = {}) {
     val tv = atlasTv()
     var controlsVisible by remember { mutableStateOf(true) }
     var tracks by remember(state.player) { mutableStateOf(false) }
@@ -53,17 +55,25 @@ import com.tvatlas.player.vod.VodState
                     update = { it.player = player; it.keepScreenOn = state.playing },
                     onRelease = { it.player = null; it.keepScreenOn = false })
             }
-            if (controlsVisible || state.player == null || state.error != null) Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = .65f)).padding(horizontal = 8.dp)) {
+            if (controlsVisible || preparing || state.player == null || state.error != null || state.resumeWarning != null) Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = .65f)).padding(horizontal = 8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(8.dp)) {
                         Text(state.item?.title.orEmpty(), color = Color.White, maxLines = 1)
-                        Text(if (state.live) "${state.routeLabel} · 直播媒体不记录续播" else "${state.routeLabel} · 视频直链点播", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
+                        Text(if (state.live) "${state.routeLabel} · 直播媒体不记录续播" else "${state.routeLabel} · 影视点播", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
+                    }
+                    TvTextButton(onClick = controller::close) { Text("关闭点播") }
+                }
+                FlowRow(Modifier.fillMaxWidth()) {
+                    if (nextEpisode != null) {
+                        TvTextButton(onClick = { onAutoNext(!autoNext) }) { Text(if (autoNext) "连播：开" else "连播：关") }
+                        TvTextButton(onClick = onNext, enabled = !preparing) { Text("下一集") }
                     }
                     TvTextButton(onClick = onToggle) { Text(if (state.playing) "暂停" else "播放") }
                     TvTextButton(onClick = onRestart, enabled = state.ready && !state.live) { Text("从头") }
                     TvTextButton(onClick = { tracks = true }, enabled = state.ready) { Text("音轨／字幕") }
-                    TvTextButton(onClick = controller::close) { Text("关闭点播") }
                 }
+                if (preparing) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在准备播放…", color = Color.LightGray) }
+                state.qualityHeight?.let { Text("实际视频分辨率：${it}P", color = Color.LightGray, style = MaterialTheme.typography.labelSmall) }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 state.resumeWarning?.let { Text(it, color = Color.LightGray, style = MaterialTheme.typography.bodySmall) }
             }

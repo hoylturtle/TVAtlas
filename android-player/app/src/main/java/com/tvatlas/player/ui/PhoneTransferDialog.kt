@@ -73,7 +73,7 @@ internal fun phoneQrBitmap(url: String): Bitmap {
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer); session?.close() }
     }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("手机扫码输入${when (kind) { TransferKind.PLAYLIST -> "频道订阅"; TransferKind.PROXY -> "代理订阅"; TransferKind.CLOUD -> "网盘分享"; TransferKind.VIDEO -> "视频直链" }}") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("手机扫码输入${when (kind) { TransferKind.MEDIA -> "统一订阅"; TransferKind.PLAYLIST -> "频道订阅"; TransferKind.PROXY -> "代理订阅"; TransferKind.CLOUD -> "网盘分享"; TransferKind.VIDEO -> "视频直链" }}") }, text = {
         Column(Modifier.fillMaxWidth().heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("手机与电视连接同一局域网，扫码后粘贴地址，发送到电视确认。")

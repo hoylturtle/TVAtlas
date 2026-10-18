@@ -46,7 +46,7 @@ import kotlinx.coroutines.launch
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
-    var lastFocused by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastFocused by rememberSaveable { mutableStateOf(status.channelId) }
     val grid = rememberLazyListState()
     var guideOpen by rememberSaveable { mutableStateOf(false) }
     var guideChannel by rememberSaveable { mutableStateOf<String?>(null) }
@@ -56,25 +56,31 @@ import kotlinx.coroutines.launch
     val scope = rememberCoroutineScope()
     val restoreFocus = remember { FocusRequester() }
     val firstFocus = remember { FocusRequester() }
-    BackHandler(guideOpen) { guideOpen = false; runCatching { restoreFocus.requestFocus() } }
-    LaunchedEffect(guideOpen) { guideVisibility?.invoke(guideOpen); if (guideOpen) { withFrameNanos { }; runCatching { guideFocus.requestFocus() } } }
+    var restoreRequested by remember { mutableStateOf(false) }
+    fun closeGuide() { guideOpen = false; restoreRequested = true }
+    fun showGuide(channel: Channel) { lastFocused = channel.id; guideChannel = channel.id; guideOpen = true }
+    BackHandler(search && !guideOpen) { search = false; query = ""; restoreRequested = true }
+    BackHandler(guideOpen) { closeGuide() }
     val input = LocalInputModeManager.current
-    val sorted = remember(library.channels) { library.channels.hongKongFirst() }
-    val regions = remember(sorted) { sorted.map { it.browseRegion() }.distinct() }
-    val selectedRegion = region?.takeIf { it in regions } ?: sorted.firstOrNull { it.id == status.channelId }?.browseRegion() ?: regions.firstOrNull()
-    val types = remember(sorted, selectedRegion) { sorted.filter { it.browseRegion() == selectedRegion }.map { it.browseType() }.distinct() }
+    val index = rememberChannelBrowseIndex(library.channels)
+    if (index == null) { LinearProgressIndicator(modifier.fillMaxWidth()); return }
+    LaunchedEffect(guideOpen, index) { guideVisibility?.invoke(guideOpen); if (guideOpen) { withFrameNanos { }; runCatching { guideFocus.requestFocus() } } }
+    val sorted = index.channels
+    val regions = index.regions
+    val selectedRegion = region?.takeIf { it in regions } ?: sorted.firstOrNull { it.id == status.channelId }?.let(index::region) ?: regions.firstOrNull()
+    val types = remember(index, selectedRegion) { sorted.filter { index.region(it) == selectedRegion }.map { index.type(it) }.distinct() }
     val selectedType = type?.takeIf { it in types || (overlay && it == "全部类型") } ?: if (overlay) "全部类型" else types.firstOrNull()
-    val shown = remember(sorted, selectedRegion, selectedType, query, mode, favorites, recent) {
+    val shown = remember(index, selectedRegion, selectedType, query, mode, favorites, recent, overlay) {
         val base = sorted.filter { channel ->
             when (mode) {
                 1 -> channel.id in favorites
                 2 -> channel.id in recent
-                else -> if (query.isBlank()) channel.browseRegion() == selectedRegion && (selectedType == "全部类型" || channel.browseType() == selectedType) else true
-            } && (query.isBlank() || channel.name.contains(query, true) || channel.browseRegion().contains(query, true) || channel.browseType().contains(query, true))
+                else -> if (query.isBlank()) index.region(channel) == selectedRegion && (selectedType == "全部类型" || index.type(channel) == selectedType) else true
+            } && (query.isBlank() || channel.name.contains(query, true) || index.region(channel).contains(query, true) || index.type(channel).contains(query, true))
         }
-        if (mode == 2) base.sortedBy { recent.indexOf(it.id) }
-        else if (overlay && mode == 0 && query.isBlank() && selectedType == "全部类型") base.groupBy { it.browseType() }.values.flatMap { it.primaryChannelsFirst() }
-        else base.primaryChannelsFirst()
+        if (mode == 2) { val positions = recent.withIndex().associate { it.value to it.index }; base.sortedBy { positions[it.id] ?: Int.MAX_VALUE } }
+        else if (overlay && mode == 0 && query.isBlank() && selectedType == "全部类型") base.groupBy { index.type(it) }.values.flatMap { index.primaryFirst(it) }
+        else index.primaryFirst(base)
     }
     LaunchedEffect(searchRequest) { if (searchRequest > 0) { search = true; mode = 0 } }
     Row(modifier.padding(if (overlay) 0.dp else 8.dp), horizontalArrangement = Arrangement.spacedBy(if (overlay) 0.dp else 12.dp)) {
@@ -119,18 +125,15 @@ import kotlinx.coroutines.launch
                 verticalArrangement = Arrangement.spacedBy(if (overlay) 0.dp else 2.dp), contentPadding = PaddingValues(if (overlay) 0.dp else 4.dp)) {
                 itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     val playing = status.channelId == channel.id
-                    Surface(color = if (playing) MaterialTheme.colorScheme.primary.copy(alpha = .22f) else Color.Transparent,
+                    Surface(color = Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         shape = if (overlay) RoundedCornerShape(6.dp) else MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth().height(if (overlay) 64.dp else 72.dp).testTag("channel:${channel.id}")
                             .then(if (lastFocused == channel.id) Modifier.focusRequester(restoreFocus) else Modifier)
-                            .onFocusChanged { if (it.isFocused) { lastFocused = channel.id; guideChannel = channel.id } }.then(if (overlay) Modifier.liveFocusOutline() else Modifier.tvFocusOutline())
+                            .onFocusChanged { if (it.hasFocus) { lastFocused = channel.id; guideChannel = channel.id } }.then(if (overlay) Modifier.liveFocusOutline() else Modifier.tvFocusOutline())
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
-                                    guideChannel = channel.id; guideOpen = true; true
-                                } else if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.isLongPress &&
-                                    event.nativeKeyEvent.keyCode in listOf(android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER)) {
-                                    onDetails(channel); true
+                                    showGuide(channel); true
                                 } else false
                             }
                             .combinedClickable(onClick = { onPlay(channel) }, onLongClick = { onDetails(channel) })) {
@@ -145,11 +148,11 @@ import kotlinx.coroutines.launch
                                     fontWeight = if (playing) FontWeight.Bold else FontWeight.Medium)
                                 programme(channel)
                             }
-                            if (overlay) IconButton(onClick = { guideChannel = channel.id; guideOpen = true }) {
+                            if (overlay) TvIconButton(onClick = { showGuide(channel) }) {
                                 Icon(if (playing) Icons.Default.PlayArrow else Icons.AutoMirrored.Filled.List,
                                     contentDescription = "${channel.name}节目单", tint = if (playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp))
-                            } else TvTextButton(onClick = { guideChannel = channel.id; guideOpen = true }) { Text("节目", style = MaterialTheme.typography.labelSmall) }
+                            } else TvTextButton(onClick = { showGuide(channel) }) { Text("节目", style = MaterialTheme.typography.labelSmall) }
                         }
                     }
                     if (overlay) HorizontalDivider(color = Color.White.copy(alpha = .14f))
@@ -161,10 +164,10 @@ import kotlinx.coroutines.launch
             Column(Modifier.widthIn(min = 180.dp, max = if (overlay) 260.dp else 240.dp).fillMaxHeight().testTag("channel-guide")
                 .focusGroup().onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionLeft) {
-                        guideOpen = false; runCatching { restoreFocus.requestFocus() }; true
+                        closeGuide(); true
                     } else false
                 }.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TvTextButton(onClick = { guideOpen = false; runCatching { restoreFocus.requestFocus() } }, modifier = Modifier.focusRequester(guideFocus)) { Text("收起节目单") }
+                TvTextButton(onClick = { closeGuide() }, modifier = Modifier.focusRequester(guideFocus)) { Text("收起节目单") }
                 library.channels.firstOrNull { it.id == guideChannel }?.let { channel ->
                     if (!overlay) Text(channel.name, style = MaterialTheme.typography.titleMedium)
                     guide(channel)
@@ -174,13 +177,30 @@ import kotlinx.coroutines.launch
             }
         }
     }
+    LaunchedEffect(restoreRequested, guideOpen, shown) {
+        if (restoreRequested && !guideOpen) {
+            val target = shown.indexOfFirst { it.id == lastFocused }
+            if (target >= 0) {
+                grid.scrollToItem(target)
+                withFrameNanos { }
+                runCatching { restoreFocus.requestFocus() }
+            } else { withFrameNanos { }; runCatching { firstFocus.requestFocus() } }
+            restoreRequested = false
+        }
+    }
     LaunchedEffect(library.channels.isNotEmpty()) {
         if (library.channels.isNotEmpty()) {
             input.requestInputMode(InputMode.Keyboard)
-            withFrameNanos { }
-            val visible = lastFocused != null && grid.layoutInfo.visibleItemsInfo.any { it.key == lastFocused }
-            val restored = visible && runCatching { restoreFocus.requestFocus() }.getOrDefault(false)
-            if (!restored) runCatching { firstFocus.requestFocus() }
+            val target = shown.indexOfFirst { it.id == (lastFocused ?: status.channelId) }
+            if (target >= 0) {
+                lastFocused = shown[target].id
+                grid.scrollToItem(target)
+                withFrameNanos { }
+                runCatching { restoreFocus.requestFocus() }
+            } else {
+                withFrameNanos { }
+                runCatching { firstFocus.requestFocus() }
+            }
         }
     }
 }

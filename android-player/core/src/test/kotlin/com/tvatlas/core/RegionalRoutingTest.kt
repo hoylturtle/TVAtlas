@@ -17,16 +17,22 @@ class RegionalRoutingTest {
             assertEquals(RouteTarget.proxy("$index"), resolver.resolve(StreamContext(channel(group), stream)).attempts.single().target)
         assertEquals(PlaybackRegion.JAPAN, channel("其他").copy(tvgId = "NHK.jp@HD").playbackRegion())
     }
-    @Test fun latencyBeatsHistoryAndDeadNodeFallsBackWithoutCrossingRegion() {
+    @Test fun recentSuccessStartsImmediatelyAndFailureFallsBackWithinRegion() {
         val extra = nodes[0].copy(id = "fast", name = "HK 02")
-        val now = 1000L
+        val now = 4_000_000L
         val health = mapOf("0" to NodeHealth(90, now), "fast" to NodeHealth(10, now))
         val resolver = DefaultRouteResolver(RuleConfig(), nodes + extra, health, now)
-        val plan = resolver.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), 1))
-        assertEquals(listOf("fast", "0"), plan.attempts.map { it.target.profile })
+        val plan = resolver.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), now - 1))
+        assertEquals(listOf("0", "fast"), plan.attempts.map { it.target.profile })
+        val expired = resolver.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), 1))
+        assertEquals(listOf("fast", "0"), expired.attempts.map { it.target.profile })
+        val disabled = DefaultRouteResolver(RuleConfig(), nodes.map { if (it.id == "0") it.copy(enabled = false) else it } + extra, health, now)
+        assertEquals(listOf("fast"), disabled.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), now)).attempts.map { it.target.profile })
+        val failedHealth = DefaultRouteResolver(RuleConfig(), nodes + extra, health + ("0" to NodeHealth(null, now)), now)
+        assertEquals("fast", failedHealth.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), now)).attempts.first().target.profile)
         val session = FailoverSession(plan)
-        assertEquals("fast", session.start()!!.target.profile)
-        assertEquals("0", session.fail(PlaybackFailure(FailureKind.NETWORK))!!.target.profile)
+        assertEquals("0", session.start()!!.target.profile)
+        assertEquals("fast", session.fail(PlaybackFailure(FailureKind.NETWORK))!!.target.profile)
         assertNull(session.fail(PlaybackFailure(FailureKind.NETWORK)))
         val dead = resolver.run { DefaultRouteResolver(RuleConfig(), nodes + extra, health + ("fast" to NodeHealth(null, now)), now) }
         assertEquals("0", dead.channelPlan(channel("香港"), null).attempts.first().target.profile)
