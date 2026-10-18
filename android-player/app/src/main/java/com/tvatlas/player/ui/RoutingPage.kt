@@ -39,6 +39,8 @@ import com.tvatlas.player.storage.*
     trafficContent: @Composable () -> Unit = {}, currentTarget: RouteTarget? = null, currentSpeed: Long = 0, currentUsage: Map<String, Long> = emptyMap(),
     nodeTestProgress: NodeTestProgress = NodeTestProgress()) {
     var section by rememberSaveable { mutableIntStateOf(if (library.profiles.isEmpty()) 0 else 1) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val short = maxHeight < 420.dp
     val tv = atlasTv()
     val sectionMemory = rememberSaveableStateHolder()
     var inspectedNode by rememberSaveable { mutableStateOf<String?>(null) }
@@ -58,7 +60,7 @@ import com.tvatlas.player.storage.*
         { val sample = orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
         { orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-    if (tv) Column(Modifier.width(AtlasPageStyle.sidebarWidth).fillMaxHeight().background(AtlasPageStyle.navigation, AtlasPageStyle.corner).padding(8.dp).focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (tv) Column(Modifier.width(if (short) 96.dp else AtlasPageStyle.sidebarWidth).fillMaxHeight().background(AtlasPageStyle.navigation, AtlasPageStyle.corner).padding(8.dp).focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("代理管理", style = MaterialTheme.typography.titleMedium)
         listOf("订阅", "节点", "规则", "流量", "内核").forEachIndexed { index, label ->
             TvTextButton(onClick = { section = index; nodeSubscription = null; inspectedNode = null },
@@ -151,7 +153,7 @@ import com.tvatlas.player.storage.*
             gridItems(shownNodes, key = { it.id }) { p ->
                 val active = currentTarget?.profile == p.id
                 AtlasCard(onClick = { inspectedNode = p.id; nodeDialog = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = if (short) 96.dp else 112.dp)
                         .testTag("proxy-node:${p.id}").tvFocusOutline(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                     Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -249,6 +251,7 @@ import com.tvatlas.player.storage.*
                 }
             }
         }, confirmButton = { TvTextButton(onClick = { inspectedRuleFile = null }) { Text("关闭") } })
+    }
     }
 }
 

@@ -224,7 +224,7 @@ import kotlinx.coroutines.*
 @Composable internal fun VodLibraryFooter(count: Int, cached: Boolean, loading: Boolean, more: Boolean,
     onRefresh: () -> Unit, onMore: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text((if (cached) "上次浏览 · " else "") + "已显示 $count 部", style = MaterialTheme.typography.labelMedium)
+        Text((if (cached) "上次浏览 · " else "") + "已显示 $count 部", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
         TvTextButton(onClick = onRefresh, enabled = !loading) { Text("刷新", style = MaterialTheme.typography.labelLarge) }
         TvTextButton(onClick = onMore, enabled = !loading && more) { Text("加载更多", style = MaterialTheme.typography.labelLarge) }
     }
