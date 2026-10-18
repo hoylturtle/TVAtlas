@@ -18,7 +18,8 @@ private data class BrowseSnapshot(val input: List<Channel>, val index: ChannelBr
 @Composable internal fun rememberChannelBrowseIndex(channels: List<Channel>): ChannelBrowseIndex? {
     val app = LocalContext.current.applicationContext as? AtlasApplication
     val log = app?.debugLog
-    val index by produceState<BrowseSnapshot?>(null, channels) {
+    val initial = app?.channelBrowseCache?.peek(channels)?.let { BrowseSnapshot(channels, it) }
+    val index by produceState<BrowseSnapshot?>(initial, channels) {
         value = withContext(Dispatchers.Default) {
             val started = System.nanoTime()
             val cached = app?.channelBrowseCache?.get(channels)

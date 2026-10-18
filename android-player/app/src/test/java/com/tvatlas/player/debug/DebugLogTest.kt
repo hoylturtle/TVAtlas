@@ -7,6 +7,16 @@ import java.io.File
 
 class DebugLogTest {
     private fun file() = File(Files.createTempDirectory("tvatlas-log-test").toFile(), "player.log")
+    @Test fun startupSummarySurvivesPlaybackLogRotationAndIsClearedOnRequest() {
+        val log = DebugLog(file(), "fixture")
+        log.event("INFO", "STARTUP_COMPONENT", "database elapsedMs=5 token=private")
+        repeat(600) { log.event("INFO", "MANIFEST", "refresh=$it") }
+        assertTrue(log.snapshot().contains("database elapsedMs=5"))
+        assertFalse(log.snapshot().contains("token=private"))
+        log.clear()
+        assertFalse(log.snapshot().contains("database elapsedMs=5"))
+        log.close()
+    }
     @Test fun removesUrlsJwtHeadersAndQueryCredentials() {
         val text = "https://user:pass@example.com/private?sig=signature-secret token=plain-secret\n" +
             "Authorization: Bearer header-secret\nCookie: auth=cookie-secret; other=second-secret\n" +

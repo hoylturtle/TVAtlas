@@ -16,6 +16,9 @@ internal data class CachedBrowseResult(val index: ChannelBrowseIndex, val reused
 
 /** Lazy app-private advisory cache. A failed read/write never prevents browsing. */
 internal class ChannelBrowseCache(private val file: File, private val ruleVersion: Int = ChannelBrowseIndex.RULE_VERSION) {
+    private data class Snapshot(val channels: List<Channel>, val result: CachedBrowseResult)
+    @Volatile private var snapshot: Snapshot? = null
+    fun peek(channels: List<Channel>): ChannelBrowseIndex? = snapshot?.takeIf { it.channels == channels }?.result?.index
     private val mutex = Mutex()
     private val json = Json { ignoreUnknownKeys = true }
     private var loaded = false
@@ -23,6 +26,7 @@ internal class ChannelBrowseCache(private val file: File, private val ruleVersio
     private var persisted: Map<String, ChannelBrowseMetadata>? = null
 
     suspend fun get(channels: List<Channel>): CachedBrowseResult = mutex.withLock {
+        snapshot?.takeIf { it.channels == channels }?.let { return@withLock it.result.copy(diskRead = false, saved = false) }
         var diskRead = false
         if (!loaded) {
             entries = withContext(Dispatchers.IO) {
@@ -57,7 +61,9 @@ internal class ChannelBrowseCache(private val file: File, private val ruleVersio
             finally { part.delete() }
         }
         if (saved) persisted = entries
-        CachedBrowseResult(built.index, built.reused, built.calculated, diskRead, saved)
+        CachedBrowseResult(built.index, built.reused, built.calculated, diskRead, saved).also {
+            snapshot = Snapshot(channels.toList(), it.copy(reused = channels.size, calculated = 0))
+        }
     }
 
     companion object { private const val MAX_BYTES = 8 * 1024 * 1024; private const val MAX_ENTRIES = 30000 }

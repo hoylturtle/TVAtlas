@@ -17,6 +17,7 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
     val lines = _lines.asStateFlow()
     private val byteSizes = java.util.ArrayDeque<Int>()
     private var totalBytes = 0L
+    private val startup = ArrayList<String>()
     private val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
     private var closed = false
     private var generation = 0L
@@ -38,6 +39,7 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
         if (closed) return@synchronized
         val time = timestamp.format(Date())
         val line = sanitize("$time ${level.take(8)} ${stage.take(32)} thread=${Thread.currentThread().name.take(32)} $message")
+        if ((stage == "APP" || stage.startsWith("STARTUP")) && startup.size < 64) startup.add(line)
         val size = line.toByteArray(Charsets.UTF_8).size + 1
         byteSizes.addLast(size); totalBytes += size
         var removed = 0
@@ -52,15 +54,16 @@ class DebugLog(private val file: File, private val environment: String) : AutoCl
         event("ERROR", stage, "$causes frames=$frames")
     }
     fun snapshot(): String {
-        val rows = synchronized(lock) { _lines.value }
+        val (rows, launch) = synchronized(lock) { _lines.value to startup.toList() }
         val current = rows.indexOfLast { it.contains(" INFO APP ") }.coerceAtLeast(0)
         return "TVAtlas debug log\n${sanitize(environment)}\nURLs, headers and bodies omitted; no automatic upload.\n\n" +
+            "--- Startup summary / 本次启动摘要 ---\n" + launch.joinToString("\n") + "\n\n" +
             "--- Current launch / 本次启动 ---\n" + rows.drop(current).joinToString("\n") + "\n" +
             if (current > 0) "\n--- Earlier launches / 历史记录（可能来自旧版本）---\n" + rows.take(current).joinToString("\n") + "\n" else ""
     }
     fun clear() = synchronized(lock) {
         generation++
-        _lines.value = emptyList(); byteSizes.clear(); totalBytes = 0
+        _lines.value = emptyList(); byteSizes.clear(); totalBytes = 0; startup.clear()
         persistLater()
     }
     private fun persistLater() {

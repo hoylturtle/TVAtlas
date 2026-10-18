@@ -13,6 +13,18 @@ class ChannelBrowseCacheTest {
         Channel("h", "翡翠台", "香港", streams = listOf(Stream("s", "https://video.test/live?token=secret", "p"))),
         Channel("j", "NHK", "日本", streams = emptyList()),
     )
+    @Test fun unchangedInputReusesIndexButChangedInputCannotReadStaleChannels() = runBlocking {
+        val store = ChannelBrowseCache(folder.root.resolve("memory.json"))
+        val input = channels()
+        assertNull(store.peek(input))
+        val first = store.get(input)
+        assertSame(first.index, store.peek(input.toList()))
+        assertSame(first.index, store.get(input.toList()).index)
+        val changed = input.map { it.copy(name = it.name + "新") }
+        assertNull(store.peek(changed))
+        assertNotSame(first.index, store.get(changed).index)
+        assertNull(store.peek(input))
+    }
     @Test fun coldRestartReusesEveryClassificationAndDoesNotStorePlaybackUrls() = runBlocking {
         val file = folder.root.resolve("browse.json")
         val first = ChannelBrowseCache(file).get(channels())
