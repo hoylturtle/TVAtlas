@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
@@ -25,24 +25,25 @@ internal val LocalTvMode = staticCompositionLocalOf<Boolean?> { null }
 @Composable internal fun TvTextButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
     colors: ButtonColors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface), content: @Composable RowScope.() -> Unit) {
     val tv = isTv()
-    var focused by remember { mutableStateOf(false) }
-    androidx.compose.material3.TextButton(onClick, modifier.then(if (tv) Modifier.heightIn(min = 48.dp)
-        .onFocusChanged { focused = it.hasFocus }
-         else Modifier),
-        enabled = enabled, shape = RoundedCornerShape(12.dp),
-        colors = if (tv && focused) ButtonDefaults.textButtonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) else colors, content = content)
+    val paint = if (tv) Modifier.heightIn(min = 48.dp).then(ImmediateFocusPaint(
+        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary,
+        buttonBackground = if (enabled) colors.containerColor else colors.disabledContainerColor)) else Modifier
+    androidx.compose.material3.TextButton(onClick, modifier.then(paint), enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        colors = if (tv) colors.copy(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent) else colors,
+        content = content)
 }
 
 @Composable internal fun TvButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit) {
     val tv = isTv()
-    var focused by remember { mutableStateOf(false) }
-    androidx.compose.material3.Button(onClick, modifier.then(if (tv) Modifier.heightIn(min = 48.dp)
-        .onFocusChanged { focused = it.hasFocus } else Modifier),
-        enabled = enabled, shape = RoundedCornerShape(12.dp),
-        colors = if (tv && focused) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
-            else if (tv) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface)
-            else ButtonDefaults.buttonColors(), content = content)
+    val colors = if (tv) ButtonDefaults.buttonColors(containerColor = Color.Transparent,
+        disabledContainerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) else ButtonDefaults.buttonColors()
+    val paint = if (tv) Modifier.heightIn(min = 48.dp).then(ImmediateFocusPaint(
+        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary,
+        buttonBackground = MaterialTheme.colorScheme.surfaceContainerHigh)) else Modifier
+    androidx.compose.material3.Button(onClick, modifier.then(paint), enabled = enabled,
+        shape = RoundedCornerShape(12.dp), colors = colors, content = content)
 }
 
 @Composable internal fun TvOutlinedButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,

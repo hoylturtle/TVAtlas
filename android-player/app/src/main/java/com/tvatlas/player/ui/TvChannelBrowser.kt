@@ -54,11 +54,11 @@ import kotlinx.coroutines.launch
     val guideVisibility = LocalLiveGuideOpen.current
 
     val scope = rememberCoroutineScope()
-    val restoreFocus = remember { FocusRequester() }
+    val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
     val firstFocus = remember { FocusRequester() }
     var restoreRequested by remember { mutableStateOf(false) }
     fun closeGuide() { guideOpen = false; restoreRequested = true }
-    fun showGuide(channel: Channel) { lastFocused = channel.id; guideChannel = channel.id; guideOpen = true }
+    fun showGuide(channel: Channel) { lastFocused = channel.id; if (guideOpen) guideChannel = channel.id; guideOpen = true }
     BackHandler(search && !guideOpen) { search = false; query = ""; restoreRequested = true }
     BackHandler(guideOpen) { closeGuide() }
     val input = LocalInputModeManager.current
@@ -125,12 +125,17 @@ import kotlinx.coroutines.launch
                 verticalArrangement = Arrangement.spacedBy(if (overlay) 0.dp else 2.dp), contentPadding = PaddingValues(if (overlay) 0.dp else 4.dp)) {
                 itemsIndexed(shown, key = { _, channel -> channel.id }) { index, channel ->
                     val playing = status.channelId == channel.id
+                    val channelFocus = remember(channel.id) { FocusRequester() }
+                    DisposableEffect(channel.id, channelFocus) {
+                        rowFocus[channel.id] = channelFocus
+                        onDispose { if (rowFocus[channel.id] === channelFocus) rowFocus.remove(channel.id) }
+                    }
                     Surface(color = Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         shape = if (overlay) RoundedCornerShape(6.dp) else MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth().height(if (overlay) 64.dp else 72.dp).testTag("channel:${channel.id}")
-                            .then(if (lastFocused == channel.id) Modifier.focusRequester(restoreFocus) else Modifier)
-                            .onFocusChanged { if (it.hasFocus) { lastFocused = channel.id; guideChannel = channel.id } }.then(if (overlay) Modifier.liveFocusOutline() else Modifier.tvFocusOutline())
+                            .focusRequester(channelFocus)
+                            .onFocusChanged { if (it.hasFocus) { lastFocused = channel.id; if (guideOpen) guideChannel = channel.id } }.then(if (overlay) Modifier.liveFocusOutline() else Modifier.tvFocusOutline())
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
                                     showGuide(channel); true
@@ -183,7 +188,7 @@ import kotlinx.coroutines.launch
             if (target >= 0) {
                 grid.scrollToItem(target)
                 withFrameNanos { }
-                runCatching { restoreFocus.requestFocus() }
+                runCatching { rowFocus[lastFocused]?.requestFocus() }
             } else { withFrameNanos { }; runCatching { firstFocus.requestFocus() } }
             restoreRequested = false
         }
@@ -196,7 +201,7 @@ import kotlinx.coroutines.launch
                 lastFocused = shown[target].id
                 grid.scrollToItem(target)
                 withFrameNanos { }
-                runCatching { restoreFocus.requestFocus() }
+                runCatching { rowFocus[lastFocused]?.requestFocus() }
             } else {
                 withFrameNanos { }
                 runCatching { firstFocus.requestFocus() }

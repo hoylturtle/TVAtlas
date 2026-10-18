@@ -167,7 +167,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 LiveBackAction.CONFIRM_EXIT -> exitPrompt = true
             }
         }
-        BackHandler(tab != 0) { tab = 0; if (wide) liveMenuOpen = true }
+        BackHandler(tab != 0 && !liveMenuOpen) { if (wide) liveMenuOpen = true else tab = 0 }
         PlaybackOrientation(immersive || options.alwaysLandscape, tv && !options.alwaysLandscape)
         PlaybackSystemBars(immersive || tv || (theater && activePlayback))
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
@@ -305,7 +305,8 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
             model.debugLog.event("INFO", "NAVIGATION", "page=$tab fullscreen=$immersive mainMenu=$liveMenuOpen")
         }
         if (liveMenuOpen) LiveNavigationDrawer(onDismiss = { liveMenuOpen = false },
-            onExit = { liveMenuOpen = false; exitPrompt = true }, focusReturn = false) { dismiss ->
+            onExit = { liveMenuOpen = false; exitPrompt = true }, focusReturn = false,
+            returnLabel = if (tab == 0) "返回直播" else "返回当前页面") { dismiss ->
             TvNavigation(tab, { dismiss(); tab = it; channelPanelOpen = true; fullscreen = false }, Modifier.fillMaxSize(), requestSelectedFocus = true)
         }
         if (pageMenuOpen) AlertDialog(onDismissRequest = { pageMenuOpen = false }, title = { Text("页面操作") }, text = {

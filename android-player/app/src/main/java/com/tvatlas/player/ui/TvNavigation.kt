@@ -29,27 +29,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.filled.PlayArrow
 
-/** Card/row focus gets a filled overlay, so Material surfaces cannot paint over the indication. */
+/** Focus paints on the next draw without waiting for a composition pass. */
 internal fun Modifier.tvFocusOutline(): Modifier = composed {
-    var focused by remember { mutableStateOf(false) }
-    val color = MaterialTheme.colorScheme.primary
-    onFocusChanged { focused = it.hasFocus }.drawWithContent {
-        drawContent()
-        if (focused) drawRoundRect(color.copy(alpha = .34f), cornerRadius = CornerRadius(12.dp.toPx()))
-    }.border(if (focused) 2.dp else 0.dp, if (focused) color else Color.Transparent, RoundedCornerShape(12.dp))
+    then(ImmediateFocusPaint(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary))
 }
 
-/** Committed selection is a leading marker; the full purple fill belongs exclusively to focus. */
+/** Committed selection stays marked while keyboard focus moves independently. */
 internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
-    val color = MaterialTheme.colorScheme.primary
-    val selectedOnFocus = MaterialTheme.colorScheme.onPrimary
-    var focused by remember { mutableStateOf(false) }
-    onFocusChanged { focused = it.hasFocus }.semantics { this.selected = selected }.drawWithContent {
-        drawContent()
-        if (focused) drawRoundRect(color.copy(alpha = .34f), cornerRadius = CornerRadius(12.dp.toPx()))
-        if (selected) drawRoundRect(if (focused) selectedOnFocus else color,
-            size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height), cornerRadius = CornerRadius(2.dp.toPx()))
-    }
+    semantics { this.selected = selected }.then(ImmediateFocusPaint(
+        MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, selected))
 }
 
 @Composable internal fun TvNavigation(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier, requestSelectedFocus: Boolean = false) {
@@ -107,7 +95,7 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
 }
 
 /** A left-edge modal drawer, never a narrow dialog centered over the channel list. */
-@Composable internal fun LiveNavigationDrawer(onDismiss: () -> Unit, onExit: (() -> Unit)? = null, focusReturn: Boolean = true, navigation: @Composable (() -> Unit) -> Unit) {
+@Composable internal fun LiveNavigationDrawer(onDismiss: () -> Unit, onExit: (() -> Unit)? = null, focusReturn: Boolean = true, returnLabel: String = "返回直播", navigation: @Composable (() -> Unit) -> Unit) {
     val returnFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
@@ -122,7 +110,7 @@ internal val LocalLiveGuideOpen = staticCompositionLocalOf<((Boolean) -> Unit)?>
                 color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {
                 Column(Modifier.fillMaxSize()) {
                     TvTextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(12.dp)
-                        .then(Modifier.focusRequester(returnFocus))) { Text("返回直播") }
+                        .then(Modifier.focusRequester(returnFocus))) { Text(returnLabel) }
                     LaunchedEffect(focusReturn) { if (focusReturn) { withFrameNanos { }; returnFocus.requestFocus() } }
                     Box(Modifier.weight(1f).fillMaxWidth()) { navigation(onDismiss) }
                     if (onExit != null) TvTextButton(onClick = onExit, modifier = Modifier.fillMaxWidth().padding(12.dp)) { Text("退出应用") }

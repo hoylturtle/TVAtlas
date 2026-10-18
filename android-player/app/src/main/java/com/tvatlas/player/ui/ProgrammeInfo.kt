@@ -23,7 +23,7 @@ private fun clock(at: Long) = SimpleDateFormat("HH:mm", Locale.getDefault()).for
     val state by store.state.collectAsStateWithLifecycle()
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(channel.id) { while (true) { now = System.currentTimeMillis(); delay(60000) } }
-    val programmes = state.entries(channel)
+    val programmes = remember(state, channel.id, channel.name, channel.tvgId) { state.entries(channel) }
     val current = programmes.firstOrNull { now >= it.start && now < it.end }
     val next = programmes.firstOrNull { it.start > now }
     if (detailed) {
