@@ -69,24 +69,29 @@ class NodeLatencyTester(private val client: (RouteTarget) -> OkHttpClient,
         _testing.value = true
         val token = synchronized(this) { generation }
         try {
-            val candidates = profiles.distinctBy { it.id }.filter { it.enabled && (!staleOnly || _health.value[it.id]?.fresh(System.currentTimeMillis()) != true) }
+            val candidates = profiles.distinctBy { it.id }.filter { it.enabled && !(it.subscriptionId != null && com.tvatlas.core.subscription.ClashSubscription.isNoticeName(it.name)) && (!staleOnly || _health.value[it.id]?.fresh(System.currentTimeMillis()) != true) }
             synchronized(this) {
                 if (token == generation) _progress.value = NodeTestProgress(total = candidates.size, running = true, samplesPerNode = if (staleOnly) 1 else 3)
             }
             val semaphore = Semaphore(4)
-            withTimeoutOrNull(if (staleOnly) 10_000L else 120_000L) {
+            suspend fun runBatch() {
                 coroutineScope { candidates.map { profile -> launch(Dispatchers.IO) {
                     semaphore.withPermit {
                         started(profile.id, token)
                         val values = mutableListOf<Long>()
-                        repeat(if (staleOnly) 1 else 3) {
-                            val delay = probe(RouteTarget.proxy(profile.id))
-                            if (delay != null) values.add(delay)
+                        withTimeoutOrNull(if (staleOnly) 5_000L else 15_000L) {
+                            repeat(if (staleOnly) 1 else 3) {
+                                val delay = try { probe(RouteTarget.proxy(profile.id)) }
+                                    catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (_: Exception) { null }
+                                if (delay != null) values.add(delay)
+                            }
                         }
                         save(profile.id, NodeHealth(values.sorted().let { it.getOrNull(it.size / 2) }, System.currentTimeMillis()), token)
                     }
                 } }.joinAll() }
             }
+            if (staleOnly) withTimeoutOrNull(10_000L) { runBatch() } else runBatch()
         } finally { finish(token); _testing.value = false; mutex.unlock() }
     }
     private suspend fun probe(target: RouteTarget): Long? {

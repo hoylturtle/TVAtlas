@@ -126,12 +126,19 @@ import kotlinx.coroutines.*
                     }
                     if (state.loading) {
                         LinearProgressIndicator(progress = { if (state.total > 0) state.completed.toFloat() / state.total else 0f }, modifier = Modifier.fillMaxWidth(), drawStopIndicator = {})
-                        Text("正在整理片库…", style = MaterialTheme.typography.labelSmall)
+                        Text(if (state.showingCache && state.items.isNotEmpty()) "已显示缓存片单，后台更新中 · ${state.completed}/${state.total} 个来源"
+                            else if (state.items.isNotEmpty()) "已显示 ${state.items.size} 部，继续加载 · ${state.completed}/${state.total} 个来源"
+                            else "正在加载${filter.kind.label}片单 · ${state.completed}/${state.total} 个来源", style = MaterialTheme.typography.bodyMedium)
+                        if (state.items.isEmpty()) Text("首次打开此分类可能较慢，已返回的影片会陆续显示。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     }
                     if (!state.loading) state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     state.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                    if (state.items.isEmpty() && !state.loading) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("暂未加载到符合筛选的影片\n可调整条件、搜索片名或继续加载。", style = MaterialTheme.typography.bodyMedium)
+                    if (state.items.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        if (state.loading) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            CircularProgressIndicator(Modifier.size(40.dp))
+                            Text("正在加载${filter.kind.label}片单…", style = MaterialTheme.typography.titleLarge)
+                            Text("已完成 ${state.completed}/${state.total} 个来源，影片会陆续显示", style = MaterialTheme.typography.bodyMedium)
+                        } else Text("暂未加载到符合筛选的影片\n可调整条件、搜索片名或继续加载。", style = MaterialTheme.typography.bodyMedium)
                     } else VodMovieGrid(state.items.map { it.movie }, loader, model.canLoadChannelArtwork(), Modifier.weight(1f), scroll, returnFocusId) { movie ->
                         state.items.firstOrNull { it.id == movie.id }?.let(::showDetails)
                     }

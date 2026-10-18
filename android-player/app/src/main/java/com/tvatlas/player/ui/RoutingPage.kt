@@ -52,7 +52,7 @@ import com.tvatlas.player.storage.*
     // Keep card positions stable while individual results arrive.
     val orderingHealth = remember(nodeTesting, library.profiles) { nodeHealth }
     val subscriptionNames = remember(subscriptions) { subscriptions.associate { it.id to it.name } }
-    val shownNodes = remember(library.profiles, nodeSubscription, hongKongOnly, query, orderingHealth, nodeRegion) { library.profiles.filter { (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
+    val shownNodes = remember(library.profiles, nodeSubscription, hongKongOnly, query, orderingHealth, nodeRegion) { library.profiles.filter { !(it.subscriptionId != null && com.tvatlas.core.subscription.ClashSubscription.isNoticeName(it.name)) && (nodeSubscription == null || it.subscriptionId == nodeSubscription) &&
         (!hongKongOnly || isHongKongLabel(it.name)) && (nodeRegion == null || (playbackRegion(it.name)?.label ?: "其他") == nodeRegion) && it.name.contains(query, true) }.sortedWith(compareBy<ProxyProfile>(
         { val sample = orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
         { orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
@@ -163,7 +163,7 @@ import com.tvatlas.player.storage.*
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text(if (active) "● 使用中" else if (!p.enabled) "已停用" else p.type.name,
                                 style = MaterialTheme.typography.labelSmall, color = if (active) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(when { measuring -> "测试中"; sample == null -> "未测试"; !sample.fresh(System.currentTimeMillis()) -> "已过期"; sample.delayMs == null -> "失败"; else -> "${sample.delayMs} ms" },
+                            Text(when { !p.enabled -> "已停用"; measuring -> "测试中"; sample == null && nodeTestProgress.running -> "等待测试"; sample == null -> "未测试"; !sample.fresh(System.currentTimeMillis()) -> "已过期"; sample.delayMs == null -> "失败"; else -> "${sample.delayMs} ms" },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (sample?.delayMs == null && sample != null && !measuring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary)
                         }

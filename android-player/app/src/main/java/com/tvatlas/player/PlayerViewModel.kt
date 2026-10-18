@@ -871,7 +871,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             debugLog.event("INFO", "SUBSCRIPTION", "import requested")
             var skipped = 0
             coordinatedSubscriptionChange { skipped = subscriptionRepository.add(name, url) }
-            val message = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个不支持的节点" else ""
+            val message = "订阅导入成功" + if (skipped > 0) "，已忽略 $skipped 个说明或不支持的条目" else ""
             _subscriptionFeedback.value = SubscriptionFeedback(null, message)
             _message.value = message
         } catch (error: SubscriptionException) {
@@ -886,7 +886,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             debugLog.event("INFO", "SUBSCRIPTION", "refresh requested")
             var skipped = 0
             coordinatedSubscriptionChange { skipped = subscriptionRepository.refresh(id) }
-            val message = "订阅已更新，节点设置已保留" + if (skipped > 0) "；忽略 $skipped 个不支持的节点" else ""
+            val message = "订阅已更新，节点设置已保留" + if (skipped > 0) "；忽略 $skipped 个说明或不支持的条目" else ""
             _subscriptionFeedback.value = SubscriptionFeedback(id, message)
             _message.value = message
         } catch (error: SubscriptionException) {

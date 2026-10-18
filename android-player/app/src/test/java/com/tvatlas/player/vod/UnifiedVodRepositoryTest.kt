@@ -201,4 +201,21 @@ class UnifiedVodRepositoryTest {
             } finally { directory.deleteRecursively() }
         }
     }
+    @Test fun matchingMetadataFromOtherShelfAppearsBeforeNetworkAndPlaybackUrlsAreDiscarded() = runBlocking {
+        val directory = Files.createTempDirectory("cross-filter-shelf").toFile()
+        val source = "https://fixture.test/api"
+        java.io.File(directory, "shelf-another-filter.json").writeText("""{"updated":${System.currentTimeMillis()},"offers":[{"source":"$source","movie":{"id":"1","name":"缓存电影","category":"动作片","episodes":[]}}]}""")
+        val repository = UnifiedVodRepository(listOf(source), directory, this) { awaitCancellation() }
+        try {
+            repository.browse(VodFilter(genre = "动作"), "")
+            val cached = withTimeout(3000) { repository.state.first { it.loading && it.items.isNotEmpty() } }
+            assertTrue(cached.showingCache)
+            assertEquals("缓存电影", cached.items.single().movie.name)
+            assertTrue(cached.items.single().movie.episodes.isEmpty())
+            repository.browse(VodFilter(kind = VodKind.SHORT_DRAMA), "")
+            delay(100)
+            assertTrue(repository.state.value.items.isEmpty())
+        } finally { repository.setVisible(false); directory.deleteRecursively() }
+    }
+
 }

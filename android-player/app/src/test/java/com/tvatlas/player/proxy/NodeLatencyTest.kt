@@ -71,4 +71,21 @@ class NodeLatencyTest {
             assertFalse(tester.testing.value)
         }
     }
+    @Test fun oneBrokenClientDoesNotAbortQueuedNodesAndSubscriptionNoticesAreExcluded() = runBlocking {
+        MockWebServer().use { server ->
+            repeat(18) { server.enqueue(MockResponse().setResponseCode(204)) }
+            val tester = NodeLatencyTester({ target ->
+                if (target.profile == "bad") throw IllegalArgumentException("broken fixture")
+                OkHttpClient()
+            }, server.url("/generate_204").toString())
+            val nodes = (0..5).map { ProxyProfile("p$it", "节点$it", ProxyType.HTTP, "localhost", 80) }
+            tester.measure(nodes + nodes.first().copy(id = "bad") + nodes.first().copy(id = "notice", name = "到期：2027-01-15", subscriptionId = "fixture"))
+            assertEquals(7, tester.progress.value.total)
+            assertEquals(7, tester.progress.value.completed)
+            assertEquals(1, tester.progress.value.failed)
+            assertEquals(0, tester.progress.value.remaining)
+            assertFalse(tester.health.value.containsKey("notice"))
+        }
+    }
+
 }

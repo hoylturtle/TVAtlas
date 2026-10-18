@@ -11,6 +11,8 @@ data class SubscriptionNode(val profile: ProxyProfile, val config: JsonObject, v
 data class ParsedSubscription(val nodes: List<SubscriptionNode>, val skipped: Int)
 
 object ClashSubscription {
+    private val noticeName = Regex("^(?:剩余(?:流量)?|到期(?:时间)?|重置(?:时间)?|官网|官方网站)\\s*[:：]")
+    fun isNoticeName(name: String): Boolean = noticeName.containsMatchIn(name.trim())
     const val MAX_BYTES = 2 * 1024 * 1024
     const val MAX_NODES = 200
     private val protocols = setOf("ss", "ssr", "vmess", "vless", "trojan", "hysteria", "hysteria2", "tuic", "anytls", "http", "socks5", "snell")
@@ -35,6 +37,7 @@ object ClashSubscription {
                 val type = (raw["type"] as? String)?.lowercase().orEmpty()
                 if (type !in protocols) { skipped++; return@mapNotNull null }
                 val name = (raw["name"] as? String)?.trim().orEmpty()
+                if (isNoticeName(name)) { skipped++; return@mapNotNull null }
                 val server = (raw["server"] as? String)?.trim().orEmpty()
                 val port = (raw["port"] as? Number)?.toInt() ?: (raw["port"] as? String)?.toIntOrNull() ?: 0
                 if (name.isBlank() || name.length > 256 || !names.add(name)) throw SubscriptionException("节点名称为空、重复或过长")

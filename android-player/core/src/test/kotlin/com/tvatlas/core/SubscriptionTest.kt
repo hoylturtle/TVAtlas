@@ -55,4 +55,15 @@ class SubscriptionTest {
         val ports = nodes.associate { it.getValue("name").jsonPrimitive.content to 15000 }
         assertThrows(IllegalArgumentException::class.java) { MihomoConfig.build(nodes, ports, "a", "b") }
     }
+    @org.junit.Test fun subscriptionInformationIsNotImportedAsProxyNodes() {
+        val parsed = com.tvatlas.core.subscription.ClashSubscription.parse("""proxies:
+  - {name: '剩余：387 GB', type: http, server: localhost, port: 8080}
+  - {name: '到期：2027-01-15', type: http, server: localhost, port: 8080}
+  - {name: '香港真实节点', type: http, server: localhost, port: 8080}
+""", "fixture")
+        org.junit.Assert.assertEquals(listOf("香港真实节点"), parsed.nodes.map { it.profile.name })
+        org.junit.Assert.assertEquals(2, parsed.skipped)
+        org.junit.Assert.assertFalse(com.tvatlas.core.subscription.ClashSubscription.isNoticeName("香港 官网专线"))
+    }
+
 }
