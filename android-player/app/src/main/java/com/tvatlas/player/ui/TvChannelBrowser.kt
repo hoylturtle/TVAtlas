@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
     val firstFocus = remember { FocusRequester() }
     var restoreRequested by remember { mutableStateOf(false) }
     fun closeGuide() { guideOpen = false; restoreRequested = true }
-    fun showGuide(channel: Channel) { lastFocused = channel.id; if (guideOpen) guideChannel = channel.id; guideOpen = true }
+    fun showGuide(channel: Channel) { lastFocused = channel.id; guideChannel = channel.id; guideOpen = true }
     BackHandler(search && !guideOpen) { search = false; query = ""; restoreRequested = true }
     BackHandler(guideOpen) { closeGuide() }
     val input = LocalInputModeManager.current

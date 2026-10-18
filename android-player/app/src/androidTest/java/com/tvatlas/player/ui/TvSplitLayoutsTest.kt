@@ -162,12 +162,6 @@ class TvSplitLayoutsTest {
         compose.onNodeWithTag("channel:c1").performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithTag("channel-guide").assertIsDisplayed()
         compose.onNodeWithText("收起节目单").assertIsFocused()
-        // Guide focus can now update before the parent overlay has completed its width change.
-        try {
-            compose.waitUntil(5000) { runCatching { compose.onNodeWithText("今日节目").assertIsDisplayed(); true }.getOrDefault(false) }
-        } catch (error: Throwable) {
-            throw AssertionError("Guide layout: " + compose.onNodeWithTag("channel-guide").printToString(), error)
-        }
         compose.onNodeWithText("今日节目").assertIsDisplayed()
         val panelBottom = compose.onNodeWithTag("live-channel-overlay").fetchSemanticsNode().boundsInRoot.bottom
         val controlsTop = compose.onNodeWithTag("playback-controls").fetchSemanticsNode().boundsInRoot.top
