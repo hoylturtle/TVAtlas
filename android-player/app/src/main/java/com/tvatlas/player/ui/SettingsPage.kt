@@ -43,13 +43,15 @@ import com.tvatlas.player.update.*
     var privacy by rememberSaveable { mutableStateOf(false) }
     var licenses by rememberSaveable { mutableStateOf(false) }
     var category by rememberSaveable { mutableStateOf<Int?>(if (tv) 0 else null) }
-    BackHandler(category != null && !tv) { category = null }
     val categories = listOf("播放与网络", "更新与诊断", "界面与遥控器", "隐私与关于")
     val summaries = listOf("网络范围、流量保护、节目单与刷新", "版本更新、网络选择与调试日志", "焦点提示、遥控器按键与播放操作", "加密备份、配置隐私与开源许可")
     val networkBusy = update.checking || update.downloading
     val release = update.release
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        if (tv) Column(Modifier.align(Alignment.CenterStart).width(AtlasPageStyle.sidebarWidth).fillMaxHeight().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        val split = tv && maxWidth >= 760.dp && maxHeight >= 420.dp
+        LaunchedEffect(split) { if (!split) category = null }
+        BackHandler(category != null && !split) { category = null }
+        if (split) Column(Modifier.align(Alignment.CenterStart).width(AtlasPageStyle.sidebarWidth).fillMaxHeight().background(AtlasPageStyle.navigation, AtlasPageStyle.corner).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("设置", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp))
             categories.forEachIndexed { index, title ->
                 TvTextButton(onClick = { category = index }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectionOutline(category == index)) {
@@ -59,9 +61,9 @@ import com.tvatlas.player.update.*
                 }
             }
         }
-        Column(Modifier.padding(start = if (tv) AtlasPageStyle.sidebarWidth else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        Column(Modifier.padding(start = if (split) AtlasPageStyle.sidebarWidth else 0.dp).widthIn(max = 950.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (!tv) {
+            if (!split) {
                 if (category == null) AtlasHeader("设置", "播放、网络与应用偏好")
                 else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TvIconButton(onClick = { category = null }) {

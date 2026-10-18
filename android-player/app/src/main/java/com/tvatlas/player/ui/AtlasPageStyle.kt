@@ -10,6 +10,9 @@ import androidx.compose.ui.unit.dp
 
 /** Shared non-player surfaces; live playback keeps its own overlay layout. */
 internal object AtlasPageStyle {
+    val canvas = androidx.compose.ui.graphics.Color(0xFF101620)
+    val navigation = androidx.compose.ui.graphics.Color(0xFF1A2130)
+    val toolbar = androidx.compose.ui.graphics.Color(0xFF202A3B)
     val corner = RoundedCornerShape(12.dp)
     val sidebarWidth = 176.dp
     val gap = 12.dp

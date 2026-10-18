@@ -206,7 +206,9 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
         }
     }
     BoxWithConstraints(modifier.fillMaxWidth()) {
+    val short = maxHeight < 260.dp
     val compact = tv || maxWidth >= 600.dp
+    val posterHeight = (maxHeight - 64.dp).coerceIn(24.dp, 128.dp)
     val columns = if (compact) (maxWidth.value / 112f).toInt().coerceIn(3, 7) else (maxWidth.value / 136f).toInt().coerceIn(2, 4)
     LazyVerticalGrid(columns = GridCells.Fixed(columns), state = state, modifier = Modifier.fillMaxSize().testTag("vod-movie-grid"),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
@@ -214,10 +216,10 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
             AtlasCard(onClick = { onSelect(movie) }, modifier = Modifier.fillMaxWidth().testTag("vod-movie:${movie.id}")
                     .then(if (tv && movie.id == restoreFocusId) Modifier.focusRequester(focus) else Modifier).tvFocusOutline(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-                MoviePoster(movie, loader, allowNetwork, Modifier.fillMaxWidth().aspectRatio(if (compact) 1.1f else .85f))
+                MoviePoster(movie, loader, allowNetwork, Modifier.fillMaxWidth().then(if (short) Modifier.height(posterHeight) else Modifier.aspectRatio(if (compact) 1.1f else .85f)))
                 Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(movie.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(movie.category.ifBlank { "影片" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(movie.name, modifier = Modifier.testTag("vod-title:${movie.id}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (!short) Text(movie.category.ifBlank { "影片" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

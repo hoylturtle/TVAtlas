@@ -41,7 +41,8 @@ import com.tvatlas.player.storage.*
         dismissButton = { TvTextButton(onClick = { removeFeed = null }) { Text("取消") } }) }
 
     var inspected by remember { mutableStateOf<String?>(null) }
-    val tv = atlasTv()
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val tv = atlasTv() && maxWidth >= 760.dp && maxHeight >= 420.dp
     val builtIn = library.playlists.filter(DefaultPlaylists::contains)
     val custom = library.playlists.filterNot(DefaultPlaylists::contains)
     val selectedSourceId = inspected ?: custom.firstOrNull()?.id.takeIf { builtIn.isEmpty() }
@@ -51,7 +52,7 @@ import com.tvatlas.player.storage.*
     val updatedAt = if (timestamps.isNotEmpty() && timestamps.all { it != null }) timestamps.filterNotNull().minOrNull() else null
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         AtlasHeader("频道源", if (cloudShareCount != null) "频道订阅与网盘分享，统一管理" else "默认频道与自己的订阅，统一管理") {
-            if (tv) AtlasActionButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
+            AtlasActionButton(onClick = onAdd, enabled = !busy) { Text("＋ 添加频道源") }
         }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             LazyColumn(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -210,6 +211,7 @@ import com.tvatlas.player.storage.*
             }
         }, confirmButton = { TvTextButton(onClick = { details = false }) { Text("关闭") } })
 
+    }
 }
 
 @Composable private fun SourceIcon() {

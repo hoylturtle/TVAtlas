@@ -1,6 +1,7 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.*
@@ -57,7 +58,7 @@ import com.tvatlas.player.storage.*
         { val sample = orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }; if (sample == null) 1 else if (sample.delayMs != null) 0 else 2 },
         { orderingHealth[it.id]?.takeIf { h -> h.fresh(System.currentTimeMillis()) }?.delayMs ?: Long.MAX_VALUE })) }
     Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-    if (tv) Column(Modifier.width(AtlasPageStyle.sidebarWidth).fillMaxHeight().focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (tv) Column(Modifier.width(AtlasPageStyle.sidebarWidth).fillMaxHeight().background(AtlasPageStyle.navigation, AtlasPageStyle.corner).padding(8.dp).focusGroup().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("代理管理", style = MaterialTheme.typography.titleMedium)
         listOf("订阅", "节点", "规则", "流量", "内核").forEachIndexed { index, label ->
             TvTextButton(onClick = { section = index; nodeSubscription = null; inspectedNode = null },

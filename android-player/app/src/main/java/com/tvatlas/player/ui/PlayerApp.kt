@@ -188,7 +188,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 } else false
             }) {
                 MainNavigationRail(wide, immersive, activePlayback, tab, { tab = it; channelPanelOpen = true })
-                Box(Modifier.weight(1f).fillMaxHeight()) {
+                Box(Modifier.weight(1f).fillMaxHeight().then(if (tab != 0) Modifier.background(AtlasPageStyle.canvas) else Modifier)) {
                 CompositionLocalProvider(LocalTvMode provides (tv || wide)) {
                 pageMemory.SaveableStateProvider(tab) {
                 when (tab) {

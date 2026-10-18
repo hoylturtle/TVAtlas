@@ -3,6 +3,8 @@ package com.tvatlas.player.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -84,9 +86,10 @@ import kotlinx.coroutines.*
     DisposableEffect(loader) { val owned = loader; onDispose { owned?.shutdown() } }
     BackHandler(selected != null) { backToLibrary() }
     BoxWithConstraints(Modifier.fillMaxSize().padding(12.dp)) {
-        val wide = atlasTv() || maxWidth >= 720.dp
+        val short = maxHeight < 420.dp
+        val wide = maxHeight >= 480.dp && maxWidth >= 760.dp
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (wide) Column(Modifier.width(AtlasPageStyle.sidebarWidth).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (wide) Column(Modifier.width(144.dp).fillMaxHeight().background(AtlasPageStyle.navigation, AtlasPageStyle.corner).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("影视", style = MaterialTheme.typography.titleMedium)
                 UnifiedVod.browseKinds.forEach { kind ->
                     TvTextButton(onClick = { kindName = kind.name; genre = "全部"; region = "全部"; year = "全部" },
@@ -96,30 +99,21 @@ import kotlinx.coroutines.*
                 AtlasActionButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    if (selected != null) TvIconButton(onClick = ::backToLibrary) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
-                    Column(Modifier.weight(1f)) {
-                        Text(if (selected == null) "影视片库" else "影片详情", style = MaterialTheme.typography.titleLarge)
-                        Text(if (selected == null) "最近更新 · 分类浏览 · 高清优先" else listOf(selected!!.movie.year, selected!!.movie.area).filter { it.isNotBlank() }.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (selected == null) {
-                        TvTextButton(onClick = { searchDraft = query; searchOpen = true }, modifier = Modifier.testTag("vod-search-open")) { Text("搜索") }
-                        TvTextButton(onClick = { filtersOpen = true }) { Text("筛选") }
-                    }
-                    if (!wide) TvTextButton(onClick = onFiles) { Text("网盘") }
-                }
+                VodLibraryToolbar(
+                    title = if (selected == null) "影视片库" else "影片详情",
+                    subtitle = if (selected == null) "最近更新 · 分类浏览 · 高清优先" else listOf(selected!!.movie.year, selected!!.movie.area).filter { it.isNotBlank() }.joinToString(" · "),
+                    compact = short,
+                    onBack = if (selected != null) ({ backToLibrary() }) else null,
+                    onSearch = if (selected == null) ({ searchDraft = query; searchOpen = true }) else null,
+                    onFilter = if (selected == null) ({ filtersOpen = true }) else null,
+                    onFiles = if (!wide) onFiles else null)
                 if (!wide && selected == null) AtlasTabs(UnifiedVod.browseKinds.map { it.label }, UnifiedVod.browseKinds.indexOf(filter.kind)) { index ->
                     kindName = UnifiedVod.browseKinds[index].name; genre = "全部"; region = "全部"; year = "全部"
                 }
                 val current = selected
                 if (current == null) {
-                    if (wide) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("类型：${filter.genre}", "地区：${filter.region}", "年份：${filter.year}", "排序：${filter.sort.label}").forEach { label ->
-                            AtlasActionButton(onClick = { filtersOpen = true }) { Text(label) }
-                        }
-                    } else Text(listOf(filter.genre, filter.region, filter.year).filter { it != "全部" }.joinToString(" · ").ifBlank { "全部类型 · 全部地区 · 全部年份" },
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!short) Text(listOf(filter.genre, filter.region, filter.year).filter { it != "全部" }.joinToString(" · ").ifBlank { "全部地区 · 全部年份" } + " · ${filter.sort.label}",
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (search.isNotBlank()) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("搜索：$search", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                         TvTextButton(onClick = { query = ""; search = "" }) { Text("清除搜索") }
@@ -131,7 +125,7 @@ import kotlinx.coroutines.*
                             else "正在加载${filter.kind.label}片单 · ${state.completed}/${state.total} 个来源", style = MaterialTheme.typography.bodyMedium)
                         if (state.items.isEmpty()) Text("首次打开此分类可能较慢，已返回的影片会陆续显示。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     }
-                    if (!state.loading) state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (!state.loading && !short) state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     state.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     if (state.items.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         if (state.loading) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -142,11 +136,8 @@ import kotlinx.coroutines.*
                     } else VodMovieGrid(state.items.map { it.movie }, loader, model.canLoadChannelArtwork(), Modifier.weight(1f), scroll, returnFocusId) { movie ->
                         state.items.firstOrNull { it.id == movie.id }?.let(::showDetails)
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text((if (state.showingCache) "上次浏览 · " else "") + "已显示 ${state.items.size} 部", style = MaterialTheme.typography.labelMedium)
-                        TvTextButton(onClick = { browse(force = true) }, enabled = !state.loading) { Text("刷新") }
-                        AtlasActionButton(onClick = { browse(true) }, enabled = !state.loading && state.canLoadMore) { Text("加载更多") }
-                    }
+                    VodLibraryFooter(state.items.size, state.showingCache, state.loading, state.canLoadMore,
+                        onRefresh = { browse(force = true) }, onMore = { browse(true) })
                 } else {
                     if (detailLoading || selecting) {
                         LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -210,5 +201,31 @@ import kotlinx.coroutines.*
     LaunchedEffect(filter, search) {
         scroll.requestScrollToItem(0)
         currentBrowse()
+    }
+}
+
+/** Compact tools beside the page title; filtering never occupies a row of large tiles. */
+@Composable internal fun VodLibraryToolbar(title: String, subtitle: String, compact: Boolean,
+    onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, onFilter: (() -> Unit)? = null,
+    onFiles: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().background(AtlasPageStyle.toolbar, AtlasPageStyle.corner).padding(horizontal = 8.dp)
+        .testTag("vod-toolbar"), verticalAlignment = Alignment.CenterVertically) {
+        if (onBack != null) TvIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (!compact && subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (onSearch != null) TvIconButton(onClick = onSearch, modifier = Modifier.testTag("vod-search-open")) { Icon(Icons.Default.Search, "搜索") }
+        if (onFilter != null) TvTextButton(onClick = onFilter) { Text("筛选", style = MaterialTheme.typography.labelLarge) }
+        if (onFiles != null) TvTextButton(onClick = onFiles) { Text("网盘", style = MaterialTheme.typography.labelLarge) }
+    }
+}
+
+@Composable internal fun VodLibraryFooter(count: Int, cached: Boolean, loading: Boolean, more: Boolean,
+    onRefresh: () -> Unit, onMore: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Text((if (cached) "上次浏览 · " else "") + "已显示 $count 部", style = MaterialTheme.typography.labelMedium)
+        TvTextButton(onClick = onRefresh, enabled = !loading) { Text("刷新", style = MaterialTheme.typography.labelLarge) }
+        TvTextButton(onClick = onMore, enabled = !loading && more) { Text("加载更多", style = MaterialTheme.typography.labelLarge) }
     }
 }

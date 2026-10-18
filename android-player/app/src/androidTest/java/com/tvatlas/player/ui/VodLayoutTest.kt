@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
@@ -18,6 +19,19 @@ import org.junit.Test
 class VodLayoutTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
     private val movies = (0..11).map { CatalogMovie("m$it", "示例影片 $it", "电影", emptyList()) }
+    @Test fun shortLandscapeKeepsFirstRowMovieNamesInsideTheGrid() {
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            Box(Modifier.requiredSize(720.dp, 136.dp).testTag("short-viewport")) {
+                VodMovieGrid(movies, null, false, Modifier.fillMaxSize(), onSelect = {})
+            }
+        } } }
+        val viewport = compose.onNodeWithTag("short-viewport").getUnclippedBoundsInRoot()
+        for (id in 0..2) {
+            compose.onNodeWithTag("vod-title:m$id", useUnmergedTree = true).assertIsDisplayed()
+            val title = compose.onNodeWithTag("vod-title:m$id", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertTrue("Full movie title must fit below its poster", title.bottom <= viewport.bottom)
+        }
+    }
     @Test fun filterDialogAppliesGenreRegionAndYearTogether() {
         var selected: VodFilter? = null
         compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides false) {

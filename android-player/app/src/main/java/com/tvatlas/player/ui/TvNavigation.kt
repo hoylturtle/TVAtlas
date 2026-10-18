@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.filled.PlayArrow
@@ -45,17 +46,22 @@ internal fun Modifier.selectionOutline(selected: Boolean): Modifier = composed {
     LaunchedEffect(requestSelectedFocus) {
         if (requestSelectedFocus) { withFrameNanos { }; selectedFocus.requestFocus() }
     }
-    Column(modifier.width(132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(12.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AtlasBrand(Modifier.padding(vertical = 16.dp))
+    BoxWithConstraints(modifier) {
+    val compact = maxHeight < 420.dp && selected != 0
+    Column(Modifier.width(if (compact) 68.dp else 132.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)).padding(if (compact) 4.dp else 12.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 12.dp)) {
+        if (!compact) AtlasBrand(Modifier.padding(vertical = 16.dp))
         atlasNavigationItems.forEach { (index, label) ->
-            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("main-nav:$index").then(if (selected == index) Modifier.focusRequester(selectedFocus) else Modifier).selectionOutline(selected == index),
+            TvTextButton(onClick = { onSelect(index) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("main-nav:$index").semantics { contentDescription = label }.then(if (selected == index) Modifier.focusRequester(selectedFocus) else Modifier).selectionOutline(selected == index),
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)) {
                 AppNavigationIcon(index)
-                Spacer(Modifier.width(6.dp))
-                Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)
+                if (!compact) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(label, fontWeight = if (selected == index) FontWeight.Bold else FontWeight.Normal)
+                }
             }
         }
+    }
     }
 }
 

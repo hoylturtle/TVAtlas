@@ -37,6 +37,14 @@ class TvSplitLayoutsTest {
         val uri = requireNotNull(context.contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
         requireNotNull(context.contentResolver.openOutputStream(uri)).use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
     }
+    @Test fun shortLandscapeSourcePageDoesNotOpenAnAutomaticDetailColumn() {
+        val library = Library(DefaultPlaylists.entries, emptyList(), emptyList(), RuleConfig())
+        compose.setContent { AtlasTheme { CompositionLocalProvider(LocalTvMode provides true) {
+            Box(Modifier.requiredSize(772.dp, 320.dp)) { PlaylistPage(library, false, {}, {}, {}) }
+        } } }
+        compose.onAllNodesWithText("TVAtlas 默认频道").assertCountEquals(1)
+        compose.onNodeWithText("方向键选择来源 · 确认查看详情 · 返回直播").assertDoesNotExist()
+    }
     @Test fun openChannelPanelKeepsItsControlStripVisible() {
         var pinned by mutableStateOf(true)
         compose.mainClock.autoAdvance = false
