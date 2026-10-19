@@ -76,6 +76,7 @@ class PlaybackCoordinator(
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { log?.event("WARN", "ROUTE_HISTORY", "local history unavailable; playback continues") }
     }
+    private var savedRoute: Pair<String, RouteTarget>? = null
     private var session: FailoverSession? = null
     private var watcher: Job? = null
     private var preparation: Job? = null
@@ -106,6 +107,7 @@ class PlaybackCoordinator(
             }.map { it.id }.toSet()
             val orderedChannel = channel.copy(streams = channel.streams.sortedBy { if (it.id in officialIds) 0 else 1 })
             val preferred = history?.takeIf { streamId != null || officialIds.isEmpty() || it.streamId in officialIds }
+            savedRoute = preferred?.let { it.streamId to it.target }
             val basePlan = resolver.channelPlan(orderedChannel, preferred, streamId)
             val observations = try { reliability.load() }
                 catch (cancelled: CancellationException) { throw cancelled }
@@ -137,7 +139,11 @@ class PlaybackCoordinator(
         log?.event("INFO", "ROUTE", "channel=${channel.name} stream=${stream.id} route=${route.target.type} profile=${route.target.profile} proxy=${pool.label(route.target)} rule=${route.matchedRule} official=$official")
         _status.value = _status.value.copy(attempt = route, lastAttempt = route, successAt = null, loading = true,
             attemptNumber = session?.attemptCount ?: 0, candidateCount = session?.candidateCount ?: 0,
-            message = if (official) "正在获取官方访客会话" else "正在连接 ${channel.name}")
+            message = when {
+                (session?.attemptCount ?: 0) > 1 -> "连接失败，正在尝试备用线路"
+                savedRoute == (route.streamId to route.target) -> "正在使用上次成功线路"
+                else -> "正在连接可用线路"
+            } + if (official) " · 获取官方会话" else "")
         val source = if (official) try {
             if (viu) com.tvatlas.player.source.ViuTvSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
             else MyTvSuperSource.resolve(withContext(Dispatchers.IO) { pool.client(route.target) }, log, stream.url)
@@ -230,7 +236,7 @@ class PlaybackCoordinator(
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !subtitlesEnabled())
             .setSelectUndeterminedTextLanguage(true).build()
         _player.value = instance
-        _status.value = _status.value.copy(channelId = channel.id, message = "正在连接 ${channel.name}", attempt = route, successAt = null, loading = false)
+        _status.value = _status.value.copy(channelId = channel.id, message = _status.value.message + " · 正在缓冲", attempt = route, successAt = null, loading = false)
         log?.event("INFO", "PLAYER", "ExoPlayer created; DASH/DRM=${source != null}")
         var lastLoadType = C.DATA_TYPE_UNKNOWN
         var loadErrorAt = 0L

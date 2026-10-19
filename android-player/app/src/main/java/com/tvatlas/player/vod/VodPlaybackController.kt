@@ -15,6 +15,7 @@ import okhttp3.OkHttpClient
 
 data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
     val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
+    val feedback: String? = null, val insertionMarkers: Boolean? = null, val alternatives: Int = 0,
     val error: String? = null, val qualityHeight: Int? = null, val resumeWarning: String? = null, val routeLabel: String = "直连")
 
 /** All player commands run on the main thread. Source URLs never enter logs or persistence. */
@@ -31,7 +32,8 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private var reportAction: (() -> Unit)? = null
     private fun adKey(url: String): String = java.security.MessageDigest.getInstance("SHA-256")
         .digest(url.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
-    private fun reported(item: VodItem) = adPreferences.getBoolean(adKey(item.url), false)
+    private fun reported(item: VodItem) = adPreferences.getBoolean(item.advertisementKey, false) ||
+        adPreferences.getBoolean(adKey(item.url), false)
     private var active: ExoPlayer? = null
     private var generation = 0L
     private var openJob: Job? = null
@@ -41,7 +43,15 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private var lastSaved: Pair<String, VodBookmark>? = null
     private var transport = client
     private var routeLabel = "直连"
-    private fun mediaClient() = vodMediaClient(transport, canPlay, log)
+    private fun mediaClient(): OkHttpClient {
+        val token = generation
+        return vodMediaClient(transport, canPlay, log) { found ->
+            scope.launch {
+                if (token == generation) _state.value = _state.value.copy(
+                    insertionMarkers = found || _state.value.insertionMarkers == true)
+            }
+        }
+    }
     init { scope.launch { while (isActive) { delay(5000); checkpoint() } } }
     fun open(item: VodItem, client: OkHttpClient? = null, label: String? = null, alternatives: List<VodItem> = emptyList(), resumePosition: Long = 0,
         alternativeClients: Map<String, OkHttpClient> = emptyMap(), alternativeLabels: Map<String, String> = emptyMap()) {
@@ -58,11 +68,13 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         releasePlayer()
         reportAction = {
             val position = active?.currentPosition?.coerceAtLeast(0) ?: 0
-            val key = adKey(item.url)
+            val key = item.advertisementKey
             adPreferences.edit().putBoolean(key, true).apply()
             log?.event("INFO", "VOD_PLAYER", "user reported embedded advertisement; alternatives=${alternatives.size}")
-            if (alternatives.isNotEmpty() && canPlay()) {
-                open(alternatives.first(), transport, routeLabel, alternatives.drop(1), position, alternativeClients, alternativeLabels)
+            val available = alternatives.filterNot(::reported)
+            if (available.isNotEmpty() && canPlay()) {
+                open(available.first(), transport, routeLabel, available.drop(1), position, alternativeClients, alternativeLabels)
+                notice("已标记，正在尝试备用线路；不同版本进度可能有偏差，可快退调整")
             } else {
                 pause()
                 notice("已标记此视频地址有广告并暂停，暂无可用的其他线路。")
@@ -72,7 +84,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         if (alternativeLabels[item.url] != null) routeLabel = alternativeLabels.getValue(item.url) else if (label != null) routeLabel = label
         log?.event("INFO", "VOD_PLAY", "requested host=${java.net.URI(item.url).host} route=$routeLabel")
         val token = ++generation
-        _state.value = VodState(item = item, routeLabel = routeLabel)
+        _state.value = VodState(item = item, routeLabel = routeLabel, alternatives = alternatives.count { it.advertisementKey != item.advertisementKey })
         openJob = scope.launch {
             var warning: String? = null
             val saved = try { historyLock.withLock { withContext(Dispatchers.IO) {
@@ -97,6 +109,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                             delay(15000)
                             if (active === player && player.playWhenReady && player.playbackState == Player.STATE_BUFFERING && canPlay()) {
                                 open(alternatives.first(), transport, routeLabel, alternatives.drop(1), player.currentPosition.coerceAtLeast(0), alternativeClients, alternativeLabels)
+                                notice("缓冲较久，已切换备用线路")
                             }
                         }
                     }
@@ -114,7 +127,9 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                     }
                 }
                 override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    if (active !== player || videoSize.width <= 0 || videoSize.height <= 0) return
+                    if (active !== player || videoSize.width <= 0 || videoSize.height <= 0) {
+                        return
+                    }
                     val height = minOf(videoSize.width, videoSize.height)
                     _state.value = _state.value.copy(qualityHeight = height)
                     onMeasuredQuality(item, height, routeLabel)
@@ -134,7 +149,10 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                         val position = player.currentPosition.coerceAtLeast(0)
                         log?.event("WARN", "VOD_FAILOVER", "remaining=${alternatives.size} code=${error.errorCode}")
                         scope.launch {
-                            if (active === player) open(alternatives.first(), transport, routeLabel, alternatives.drop(1), position, alternativeClients, alternativeLabels)
+                            if (active === player) {
+                                open(alternatives.first(), transport, routeLabel, alternatives.drop(1), position, alternativeClients, alternativeLabels)
+                                notice("连接失败，已切换备用线路")
+                            }
                         }
                         return
                     }
@@ -208,7 +226,12 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         adPreferences.edit().clear().apply()
         notice("已清除本机的广告地址标记，可重新选择影片播放")
     }
-    fun notice(message: String) { _state.value = _state.value.copy(resumeWarning = message) }
+    fun dismissNotice() { _state.value = _state.value.copy(feedback = null) }
+    fun notice(message: String) {
+        _state.value = _state.value.copy(feedback = message)
+        val token = generation
+        scope.launch { delay(8000); if (token == generation && _state.value.feedback == message) dismissNotice() }
+    }
     fun close() { releasePlayer(); onClosed() }
     private fun releasePlayer() {
         checkpoint(finished = active?.playbackState == Player.STATE_ENDED); generation++; openJob?.cancel(); bufferJob?.cancel()

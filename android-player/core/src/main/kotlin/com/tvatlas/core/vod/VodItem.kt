@@ -5,13 +5,15 @@ import com.tvatlas.core.model.stableId
 import kotlinx.serialization.Serializable
 
 /** Temporary URLs stay in memory; only the opaque content key is used in resume storage. */
-class VodItem private constructor(val url: String, val title: String, val key: String) {
+class VodItem private constructor(val url: String, val title: String, val key: String, val advertisementKey: String) {
     override fun toString() = "VodItem(url=[redacted], key=[redacted])"
     companion object {
-        fun episode(url: String, title: String, identity: String): VodItem {
+        fun episode(url: String, title: String, identity: String, sourceIdentity: String? = null): VodItem {
             require(identity.isNotBlank() && identity.length <= 1024)
             val validated = direct(url, title)
-            return VodItem(validated.url, validated.title, stableId("episode\u0000$identity"))
+            require(sourceIdentity == null || sourceIdentity.isNotBlank() && sourceIdentity.length <= 2048)
+            return VodItem(validated.url, validated.title, stableId("episode\u0000$identity"),
+                sourceIdentity?.let { stableId("vod-ad-line\u0000$identity\u0000$it") } ?: validated.advertisementKey)
         }
         fun direct(url: String, title: String = ""): VodItem {
             require(url.length <= 8192) { "视频地址过长" }
@@ -22,7 +24,7 @@ class VodItem private constructor(val url: String, val title: String, val key: S
             }
             val label = title.trim().ifEmpty { "视频点播" }
             require(label.length <= 80 && label.none { it.isISOControl() }) { "视频名称最多 80 个字符，不能包含控制字符" }
-            return VodItem(clean, label, stableId("vod\u0000$clean"))
+            return VodItem(clean, label, stableId("vod\u0000$clean"), stableId(clean))
         }
     }
 }

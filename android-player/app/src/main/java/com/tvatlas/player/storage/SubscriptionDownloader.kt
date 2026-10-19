@@ -68,7 +68,7 @@ class SubscriptionDownloader(private val client: (RouteTarget) -> OkHttpClient, 
                     log?.event("INFO", "SUBSCRIPTION_HTTP", "status=${response.code} host=${response.request.url.host}")
                     if (!response.isSuccessful) {
                         val message = when (response.code) {
-                            401, 403 -> "订阅服务拒绝访问（HTTP ${response.code}），请检查订阅是否到期或地址是否变更"
+                            401, 403 -> "订阅服务拒绝访问（HTTP ${response.code}），可能与访问限制、订阅凭证或请求频率有关；不代表现有节点失效"
                             404, 410 -> "订阅地址已失效（HTTP ${response.code}），请从服务商重新复制地址"
                             429 -> "更新过于频繁（HTTP 429），请稍后重试"
                             else -> "订阅下载失败（HTTP ${response.code}）"

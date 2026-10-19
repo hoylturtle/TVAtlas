@@ -39,7 +39,12 @@ class SubscriptionRepository(
         val old = db.dao().subscriptionNodes(id).associateBy { it.id }
         if (db.dao().coreNodes().count { it.subscriptionId != id } + parsed.nodes.size > ClashSubscription.MAX_NODES)
             throw SubscriptionException("最多启用 ${ClashSubscription.MAX_NODES} 个订阅节点，请先移除其他订阅")
-        try { core.validate(parsed.nodes.map { it.config }) } catch (_: IOException) { throw SubscriptionException("订阅节点未通过内核校验，已保留旧节点") }
+        try { core.validate(parsed.nodes.map { it.config }) } catch (error: IOException) {
+            log?.event("ERROR", "SUBSCRIPTION", "core validation failed existingNodes=${old.size} incomingNodes=${parsed.nodes.size}")
+            log?.error("SUBSCRIPTION_CORE", error)
+            val retained = if (old.isEmpty()) "本机暂无旧节点可用，本次未导入节点" else "原有 ${old.size} 个节点未修改"
+            throw SubscriptionException("${error.message ?: "代理内核校验失败"}；$retained")
+        }
         val keys = parsed.nodes.map { "node:${it.profile.id}" } + "subscription:$id:url"
         val previous = keys.associateWith { vault.secret(it) }
         try {

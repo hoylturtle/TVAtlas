@@ -37,7 +37,8 @@ class MihomoRuntime(private val context: Context, private val vault: CredentialV
         if (!executable.canExecute()) throw IOException("订阅内核不可用，请安装包含 Mihomo 的完整 APK")
         val args = mutableListOf(executable.absolutePath, "-d", home.absolutePath, "-f", config.absolutePath)
         if (check) args.add("-t")
-        val p = ProcessBuilder(args).redirectErrorStream(true).start()
+        val p = try { ProcessBuilder(args).redirectErrorStream(true).start() }
+        catch (error: IOException) { throw IOException("代理内核无法在本机启动（系统架构 ${android.os.Build.SUPPORTED_ABIS.joinToString()}），请检查安装包与设备兼容性", error) }
         Thread({ runCatching { p.inputStream.use { input -> val buffer = ByteArray(8192); while (input.read(buffer) >= 0) { /* Never log core output: it can contain node credentials. */ } } } }, "mihomo-output").apply { isDaemon = true; start() }
         return p
     }
@@ -49,7 +50,11 @@ class MihomoRuntime(private val context: Context, private val vault: CredentialV
             p = launch(config, true)
             val deadline = System.nanoTime() + 15_000_000_000L
             while (alive(p) && System.nanoTime() < deadline) Thread.sleep(25)
-            if (alive(p) || p.exitValue() != 0) throw IOException("订阅节点无法通过内核校验")
+            if (alive(p)) throw IOException("代理内核校验超时（15 秒），节点尚未更新")
+            val code = p.exitValue()
+            if (code != 0) throw IOException(if (code == 132 || code == 134 || code == 139)
+                "代理内核异常退出（退出码 $code，系统架构 ${android.os.Build.SUPPORTED_ABIS.joinToString()}），需检查设备兼容性"
+                else "代理内核拒绝订阅配置（退出码 $code），可能包含不兼容的节点参数")
         } finally { p?.destroy(); config.delete() }
     }
     @Synchronized fun endpoint(id: String): CoreEndpoint {

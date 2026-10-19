@@ -17,15 +17,15 @@ class RegionalRoutingTest {
             assertEquals(RouteTarget.proxy("$index"), resolver.resolve(StreamContext(channel(group), stream)).attempts.single().target)
         assertEquals(PlaybackRegion.JAPAN, channel("其他").copy(tvgId = "NHK.jp@HD").playbackRegion())
     }
-    @Test fun recentSuccessStartsImmediatelyAndFailureFallsBackWithinRegion() {
+    @Test fun savedSuccessSurvivesAgeAndFailureFallsBackWithinRegion() {
         val extra = nodes[0].copy(id = "fast", name = "HK 02")
         val now = 4_000_000L
         val health = mapOf("0" to NodeHealth(90, now), "fast" to NodeHealth(10, now))
         val resolver = DefaultRouteResolver(RuleConfig(), nodes + extra, health, now)
         val plan = resolver.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), now - 1))
         assertEquals(listOf("0", "fast"), plan.attempts.map { it.target.profile })
-        val expired = resolver.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), 1))
-        assertEquals(listOf("fast", "0"), expired.attempts.map { it.target.profile })
+        val saved = resolver.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), 1))
+        assertEquals(listOf("0", "fast"), saved.attempts.map { it.target.profile })
         val disabled = DefaultRouteResolver(RuleConfig(), nodes.map { if (it.id == "0") it.copy(enabled = false) else it } + extra, health, now)
         assertEquals(listOf("fast"), disabled.channelPlan(channel("香港"), SuccessfulRoute("s", RouteTarget.proxy("0"), now)).attempts.map { it.target.profile })
         val failedHealth = DefaultRouteResolver(RuleConfig(), nodes + extra, health + ("0" to NodeHealth(null, now)), now)

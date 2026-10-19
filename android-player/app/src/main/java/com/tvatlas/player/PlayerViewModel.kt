@@ -223,7 +223,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         context = { episode -> qualityContext(prepared[unifiedEpisodeSources[episode.url]]?.second ?: fallback.second) }) { episode ->
                         mediaClients[unifiedEpisodeSources[episode.url]] ?: fallback.first
                     }.order(choice.candidates)
-                    val items = ordered.map { com.tvatlas.core.vod.VodItem.episode(it.url, title.take(80), identity) }
+                    val items = ordered.map { com.tvatlas.core.vod.VodItem.episode(it.url, title.take(80), identity,
+                        unifiedEpisodeSources[it.url]?.let { source -> "$source:${it.line}" }) }
                     if (items.isEmpty()) throw IllegalArgumentException("暂无可用地址")
                     val clients = items.associate { it.url to (prepared[unifiedEpisodeSources[it.url]]?.first ?: fallback.first) }
                     val labels = items.associate { it.url to (prepared[unifiedEpisodeSources[it.url]]?.second ?: fallback.second) }
@@ -688,28 +689,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             repository.library.first().playlists.filter { it.enabled && now - (it.lastUpdatedAt ?: 0) >= interval }.forEach { playlist ->
                 try { repository.refresh(playlist); epg.invalidateLibrary() } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
             }
-            database.dao().subscriptions().first().filter { now - it.lastUpdatedAt >= interval }.forEach { sub ->
-                try { subscriptionRepository.refresh(sub.id); routeChanges.withLock { synchronizeSubscriptionClients() } }
-                catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { debugLog.error("AUTO_REFRESH", e) }
-            }
+            // Proxy subscriptions are downloaded only by explicit import/refresh actions.
+
         } finally { _busy.value = false; operations.unlock() }
     }
     init {
         debugLog.event("INFO", "STARTUP", "view-model ready elapsedMs=${android.os.SystemClock.elapsedRealtime() - constructionStarted}")
         initializeLibrary()
         viewModelScope.launch { library.first { it.channels.isNotEmpty() }.let { debugLog.event("INFO", "STARTUP", "library ready channels=${it.channels.size} nodes=${it.profiles.size}") } }
-        // Check due dates hourly; subscriptions retain their configured 24-hour default.
+        // Check media library due dates hourly; proxy subscriptions remain manual-only.
         viewModelScope.launch { while (isActive) { delay(3600000); if (autoRefreshJob?.isActive != true) autoRefreshJob = viewModelScope.launch { refreshDue() } } }
-        viewModelScope.launch {
-            while (isActive) {
-                delay(60000)
-                val target = playback.status.value.attempt?.target
-                if (playback.player.value != null && target != null) {
-                    if (target.type == RouteType.DIRECT) latency.measureDirect()
-                    else target.profile?.let { id -> latency.measure(library.value.profiles.filter { it.id == id }, staleOnly = true) }
-                }
-            }
-        }
         viewModelScope.launch {
             combine(traffic.state, settings.options) { usage, prefs -> usage.direct + usage.proxy to prefs.limitMiB }.collect { (bytes, limit) ->
                 if (limit == 0L || bytes < limit * 1048576L) limitWarned = false

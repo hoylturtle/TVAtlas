@@ -64,9 +64,9 @@ class DefaultRouteResolver(private val config: RuleConfig, private val profiles:
         val attempts = channel.streams.filter { onlyStreamId == null || it.id == onlyStreamId }
             .flatMap { resolve(StreamContext(channel, it)).attempts }.distinctBy { it.streamId to it.target }
         val preferred = history?.let { h -> attempts.firstOrNull { it.streamId == h.streamId && it.target == h.target } }
-        // Only reuse a current, valid automatic route. Removed/disabled nodes and manual
+        // Reuse saved successful automatic routes without a time-based retest. Removed/disabled nodes and manual
         // overrides cannot be reintroduced by history. Keep the remaining failover order.
-        if (preferred != null && history.at in (now - 30 * 60 * 1000L)..now &&
+        if (preferred != null && history.at in 1..now &&
             preferred.matchedRule.startsWith("地区自动路由：") &&
             preferred.target.profile?.let { health[it]?.let { node -> node.fresh(now) && node.delayMs == null } } != true) {
             return RoutePlan(listOf(preferred) + attempts.filterNot { it == preferred })

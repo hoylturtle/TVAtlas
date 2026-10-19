@@ -101,7 +101,7 @@ import com.tvatlas.player.storage.*
                         }
                         val enabled = library.profiles.count { it.subscriptionId == sub.id && it.enabled }
                         Text("${sub.nodeCount} 个节点 · $enabled 个已启用", style = MaterialTheme.typography.bodyMedium)
-                        Text("上次成功更新：${date(sub.lastUpdatedAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("上次成功更新：${if (sub.lastUpdatedAt > 0) date(sub.lastUpdatedAt) else "尚未成功更新"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         SubscriptionQuotaSummary(sub)
                         if (updatingId == sub.id) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在下载并校验节点…", style = MaterialTheme.typography.bodySmall) }
                         if (feedback?.id == sub.id) Text(feedback.message,
