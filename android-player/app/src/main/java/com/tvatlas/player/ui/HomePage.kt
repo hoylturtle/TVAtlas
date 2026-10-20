@@ -143,9 +143,13 @@ import kotlinx.coroutines.*
         val compact = maxHeight < 420.dp
         val posterWidth = if (maxWidth >= 700.dp) ((maxWidth - 76.dp) / 4).coerceIn(160.dp, 300.dp) else 168.dp
         val wideHome = maxWidth >= 700.dp
-        val heroHeight = if (compact) 96.dp else if (wideHome) (maxHeight * .24f).coerceIn(128.dp, 260.dp) else (maxHeight * .38f).coerceIn(200.dp, 310.dp)
+        val posterHeight = if (compact) 64.dp else if (wideHome) (maxHeight * .13f).coerceIn(64.dp, 148.dp)
+            else (posterWidth * .54f).coerceIn(80.dp, 128.dp)
+        // Reserve room for two shelves, including two-line titles, before sizing the TV hero.
+        val heroHeight = if (compact) 96.dp else if (wideHome)
+            minOf((maxHeight * .32f).coerceIn(112.dp, 260.dp), (maxHeight - posterHeight * 2 - 232.dp).coerceIn(112.dp, 260.dp))
+            else (maxHeight * .38f).coerceIn(200.dp, 310.dp)
         val condensedHero = compact || wideHome
-        val posterHeight = if (compact) 64.dp else (maxHeight * .16f).coerceIn(80.dp, 148.dp)
         val hero = movies.items.firstOrNull() ?: series.items.firstOrNull() ?: history.firstOrNull()?.unified()
         LazyColumn(state = scroll, modifier = Modifier.fillMaxSize().testTag("home-scroll"), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "hero") {
@@ -229,7 +233,7 @@ import kotlinx.coroutines.*
     Column(Modifier.width(width).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface.copy(alpha = .35f))
         .tvFocusOutline().clickable(onClick = onClick).testTag("home-movie:${item.id}")) {
         HomePoster(item.movie.poster, loader, allowNetwork, Modifier.fillMaxWidth().height(height))
-        Text(item.movie.name, Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 8.dp, vertical = 5.dp).testTag("home-title:${item.id}"),
+        Text(item.movie.name, Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(horizontal = 8.dp, vertical = 4.dp).testTag("home-title:${item.id}"),
             style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
         if (subtitle != null) Text(subtitle, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
