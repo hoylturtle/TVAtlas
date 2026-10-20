@@ -1,6 +1,6 @@
 # Foreign sources and release-year ordering
 
-Implemented in the development branch; not included in the already-published 1.5.5.
+Prepared for public release 1.5.6 after user testing; these changes were not included in 1.5.5.
 
 ## Live channels
 
