@@ -152,6 +152,20 @@ import kotlinx.coroutines.*
         val condensedHero = compact || wideHome
         val hero = movies.items.firstOrNull() ?: series.items.firstOrNull() ?: history.firstOrNull()?.unified()
         LazyColumn(state = scroll, modifier = Modifier.fillMaxSize().testTag("home-scroll"), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item(key = "live") {
+                Text("常看直播", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.titleLarge)
+                if (live.isEmpty()) Text("暂无频道，可在频道源中添加。", Modifier.padding(20.dp), color = Color.LightGray)
+                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(live, key = { it.id }) { channel ->
+                        Column(Modifier.width(posterWidth).height(118.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
+                            .then(if (channel.id == live.first().id) Modifier.focusRequester(primaryFocus).testTag("home-live-primary") else Modifier)
+                            .tvFocusOutline().clickable { onLive(channel) }.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ChannelArtwork(channel, allowNetwork = { allowNetwork }, modifier = Modifier.width(86.dp).height(42.dp))
+                            Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
             item(key = "hero") {
                 Box(Modifier.fillMaxWidth().height(heroHeight)) {
                     HomePoster(hero?.movie?.poster, loader, allowNetwork, Modifier.fillMaxSize(), large = true)
@@ -164,7 +178,7 @@ import kotlinx.coroutines.*
                         if (!compact) Text(hero?.movie?.let { listOf(it.category, it.year, it.area).filter(String::isNotBlank).joinToString(" · ") }
                             ?: "电影、剧集与直播，一处继续观看", maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.LightGray)
                         TvTextButton(onClick = { if (hero != null) onMovie(hero, null) else onLibrary(VodKind.MOVIE) },
-                            modifier = Modifier.focusRequester(primaryFocus).testTag("home-primary"),
+                            modifier = Modifier.then(if (live.isEmpty()) Modifier.focusRequester(primaryFocus) else Modifier).testTag("home-primary"),
                             colors = ButtonDefaults.textButtonColors(containerColor = Color.White, contentColor = Color.Black)) {
                             Text(if (hero == null) "浏览影视" else "查看详情")
                         }
@@ -182,26 +196,14 @@ import kotlinx.coroutines.*
                 HomeMovieShelf("最新剧集", series, VodKind.SERIES, posterWidth, posterHeight, loader, allowNetwork, onMovie, onLibrary)
             }
             if (history.isNotEmpty()) item(key = "continue") {
-                Text("继续观看", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.titleLarge)
+                Text("最近观看", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.titleLarge)
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(history, key = { it.movie.id }) { entry ->
                         HomeMovieCard(entry.unified(), posterWidth, posterHeight, loader, allowNetwork, "续播 · ${entry.episode}") { onMovie(entry.unified(), entry.episode) }
                     }
                 }
             }
-            item(key = "live") {
-                Text("常看直播", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.titleLarge)
-                if (live.isEmpty()) Text("暂无频道，可在频道源中添加。", Modifier.padding(20.dp), color = Color.LightGray)
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(live, key = { it.id }) { channel ->
-                        Column(Modifier.width(posterWidth).height(118.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer)
-                            .tvFocusOutline().clickable { onLive(channel) }.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ChannelArtwork(channel, allowNetwork = { allowNetwork }, modifier = Modifier.width(86.dp).height(42.dp))
-                            Text(channel.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
+
         }
     }
 }

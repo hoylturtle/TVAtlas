@@ -41,20 +41,19 @@ class HomeScreenTest {
         for (compact in listOf(false, true)) {
             compose.runOnIdle { short = compact }
             compose.waitForIdle()
+            compose.onNodeWithText("常看直播").assertIsDisplayed()
+            compose.onNodeWithTag("home-scroll").performScrollToNode(hasText(movies.first().movie.name))
             val viewport = compose.onNodeWithTag("home-page").getUnclippedBoundsInRoot()
             val firstTitle = compose.onNodeWithTag("home-title:${movies.first().id}", useUnmergedTree = true)
             firstTitle.assertIsDisplayed()
             assertTrue("Title must fit beneath poster", firstTitle.getUnclippedBoundsInRoot().bottom <= viewport.bottom)
-            if (!compact) {
-                val seriesTitle = compose.onNodeWithTag("home-title:${series.first().id}", useUnmergedTree = true)
-                seriesTitle.assertIsDisplayed()
-                assertTrue("TV first viewport includes both movie and series names", seriesTitle.getUnclippedBoundsInRoot().bottom <= viewport.bottom)
-            }
             compose.onNodeWithTag("home-movie:${movies.first().id}").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
                 .performKeyInput { pressKey(Key.Enter) }
             compose.runOnIdle { assertEquals(movies.first().id, selected) }
             compose.onNodeWithTag("home-scroll").performScrollToNode(hasText("最新剧集"))
             compose.onNodeWithText("最新剧集").assertIsDisplayed()
+            compose.onNodeWithTag("home-scroll").performScrollToNode(hasText(series.first().movie.name))
+            compose.onNodeWithTag("home-title:${series.first().id}", useUnmergedTree = true).assertIsDisplayed()
         }
     }
 
