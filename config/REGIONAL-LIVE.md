@@ -33,3 +33,8 @@ channels and channel-level settings. Built-in refresh overlays matching repairs
 again so a stale remote list cannot restore known replaced URLs. The daily
 playlist builder also reads this table. Update both copies together after
 revalidation; a static CDN address is not a permanent resolver.
+
+2026-10-20 expansion: added Al Jazeera English, DW English, France 24 French,
+France 24 English and NHK World Japan after bounded HLS and TS/fMP4 checks.
+France, Germany and Qatar now participate in the same bundled overlay and daily
+builder. See `docs/FOREIGN-SOURCES-2026-10-20.md` for provenance and limits.

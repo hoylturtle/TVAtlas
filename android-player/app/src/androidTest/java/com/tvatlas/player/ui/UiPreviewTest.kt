@@ -61,7 +61,7 @@ class UiPreviewTest {
                                     1 -> PlaylistPage(library, false, {}, {}, {})
                                     2 -> RoutingPage(library, {}, {}, {}, {}, listOf(SubscriptionRow("sub", "艾可云", 1791946800000, 3, 1024, 38L * 1024 * 1024 * 1024, 100L * 1024 * 1024 * 1024, quotaUpdatedAt = 1791946800000)), false, {}, {}, {}, {})
                                     4 -> Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        VodLibraryToolbar("影视片库", "最近更新 · 分类浏览 · 高清优先", short, onSearch = {}, onFilter = {}, onFiles = {})
+                                        VodLibraryToolbar("影视片库", "年份优先 · 分类浏览 · 高清优先", short, onSearch = {}, onFilter = {}, onFiles = {})
                                         AtlasTabs(listOf("电影", "剧集", "综艺", "动漫", "短剧"), 0, {})
                                         VodMovieGrid((1..12).map { CatalogMovie("fixture$it", "示例影片 $it · 完整片名", "动作片", emptyList()) }, null, false,
                                             Modifier.weight(1f), restoreFocusId = if (tv) "fixture1" else null, onSelect = {})

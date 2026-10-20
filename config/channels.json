@@ -1296,6 +1296,51 @@
       "match": [
         "Thai PBS"
       ]
+    },
+    {
+      "id": "al-jazeera-en",
+      "name": "Al Jazeera English",
+      "group": "卡塔尔 · 国际新闻",
+      "region": "QA",
+      "match": [
+        "Al Jazeera English"
+      ]
+    },
+    {
+      "id": "dw-en",
+      "name": "DW English",
+      "group": "德国 · 国际新闻",
+      "region": "DE",
+      "match": [
+        "DW English"
+      ]
+    },
+    {
+      "id": "france24-fr",
+      "name": "France 24 Français",
+      "group": "法国 · 国际新闻",
+      "region": "FR",
+      "match": [
+        "France 24 Français"
+      ]
+    },
+    {
+      "id": "france24-en",
+      "name": "France 24 English",
+      "group": "法国 · 国际新闻",
+      "region": "FR",
+      "match": [
+        "France 24 English"
+      ]
+    },
+    {
+      "id": "nhk-world-japan",
+      "name": "NHK World Japan",
+      "group": "日本 · 国际新闻",
+      "region": "JP",
+      "match": [
+        "NHK World Japan"
+      ]
     }
   ]
 }

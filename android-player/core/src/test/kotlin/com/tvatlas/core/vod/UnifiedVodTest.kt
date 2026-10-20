@@ -22,6 +22,9 @@ class UnifiedVodTest {
         val page = VodCatalog.parse("""{"list":[{"vod_id":"old","vod_name":"旧片新上架","type_name":"动作片","vod_year":"1999","vod_time":"2026-01-02 03:04:05"},{"vod_id":"new","vod_name":"新片旧记录","type_name":"动作片","vod_year":"2026","vod_time":"2025-12-01 00:00:00"},{"vod_id":"unknown","vod_name":"未知","type_name":"动作片","vod_time":"invalid"}]}""")
         val items = UnifiedVod.merge(page.movies.map { VodOffer("source", it) })
         assertEquals(listOf("旧片新上架", "新片旧记录", "未知"), UnifiedVod.sorted(items.reversed(), VodSort.DEFAULT).map { it.movie.name })
+        assertEquals(listOf("新片旧记录", "旧片新上架", "未知"), UnifiedVod.sorted(items, VodFilter().sort).map { it.movie.name })
+        assertFalse(UnifiedVod.matches(page.movies.first(), VodFilter(year = "2026")))
+        assertTrue(UnifiedVod.matches(page.movies[1], VodFilter(year = "2026")))
         assertEquals(0L, page.movies.last().updatedAt)
     }
     private fun movie(name: String = "同名作品", year: String = "2026", area: String = "大陆", category: String = "动作片") =

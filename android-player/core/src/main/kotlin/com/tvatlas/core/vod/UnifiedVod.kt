@@ -5,7 +5,7 @@ import com.tvatlas.core.model.stableId
 enum class VodKind(val label: String) { MOVIE("电影"), SERIES("剧集"), VARIETY("综艺"), ANIMATION("动漫"), SHORT_DRAMA("短剧"), OTHER("其他") }
 enum class VodSort(val label: String) { DEFAULT("最近更新"), YEAR("年份优先"), TITLE("片名") }
 data class VodFilter(val kind: VodKind = VodKind.MOVIE, val genre: String = "全部", val region: String = "全部",
-    val year: String = "全部", val sort: VodSort = VodSort.DEFAULT) {
+    val year: String = "全部", val sort: VodSort = VodSort.YEAR) {
     val primaryGroup: String get() = if (kind == VodKind.MOVIE) genre else region
 }
 data class VodOffer(val source: String, val movie: CatalogMovie)
@@ -80,7 +80,7 @@ object UnifiedVod {
     }
     fun sorted(items: List<UnifiedMovie>, sort: VodSort): List<UnifiedMovie> = when (sort) {
         VodSort.DEFAULT -> items.sortedByDescending { it.movie.updatedAt }
-        VodSort.YEAR -> items.sortedByDescending { Regex("(?:19|20)\\d{2}").find(it.movie.year)?.value?.toIntOrNull() ?: 0 }
+        VodSort.YEAR -> items.sortedWith(compareByDescending<UnifiedMovie> { Regex("(?:19|20)\\d{2}").find(it.movie.year)?.value?.toIntOrNull() ?: 0 }.thenByDescending { it.movie.updatedAt })
         VodSort.TITLE -> items.sortedBy { it.movie.name }
     }
     fun identity(movie: CatalogMovie): String {

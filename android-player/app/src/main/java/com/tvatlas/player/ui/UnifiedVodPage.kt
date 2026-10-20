@@ -34,7 +34,7 @@ import kotlinx.coroutines.*
     var genre by rememberSaveable { mutableStateOf("全部") }
     var region by rememberSaveable { mutableStateOf("全部") }
     var year by rememberSaveable { mutableStateOf("全部") }
-    var sortName by rememberSaveable { mutableStateOf(VodSort.DEFAULT.name) }
+    var sortName by rememberSaveable { mutableStateOf(VodSort.YEAR.name) }
     var query by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
     val filter = VodFilter(VodKind.valueOf(kindName).let { if (it == VodKind.OTHER) VodKind.SHORT_DRAMA else it }, genre, region, year, VodSort.valueOf(sortName)).let { it.copy(genre = UnifiedVod.genreLabel(it.kind, it.genre)) }
@@ -114,7 +114,7 @@ import kotlinx.coroutines.*
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 VodLibraryToolbar(
                     title = if (selected == null) "影视片库" else "影片详情",
-                    subtitle = if (selected == null) "最近更新 · 分类浏览 · 高清优先" else listOf(selected!!.movie.year, selected!!.movie.area).filter { it.isNotBlank() }.joinToString(" · "),
+                    subtitle = if (selected == null) "年份优先 · 分类浏览 · 高清优先" else listOf(selected!!.movie.year, selected!!.movie.area).filter { it.isNotBlank() }.joinToString(" · "),
                     compact = short,
                     onBack = if (selected != null) ({ backToLibrary() }) else null,
                     onSearch = if (selected == null) ({ searchDraft = query; searchOpen = true }) else null,

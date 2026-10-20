@@ -34,5 +34,9 @@
   {
     "name": "影视 • 暴風[直连]",
     "api": "https://bfzyapi.com/api.php/provide/vod/?ac=list"
+  },
+  {
+    "name": "Internet Archive · 公共领域经典电影与剧集",
+    "api": "https://archive.org/advancedsearch.php"
   }
 ]

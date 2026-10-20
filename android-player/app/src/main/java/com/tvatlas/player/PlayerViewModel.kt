@@ -142,11 +142,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val row = item as kotlinx.serialization.json.JsonObject
                     (row.getValue("name") as kotlinx.serialization.json.JsonPrimitive).content to (row.getValue("url") as kotlinx.serialization.json.JsonPrimitive).content
                 } },
-            fetch = { url -> resourceBytes(url, 2 * 1024 * 1024, "VOD_SUBSCRIPTION").toString(Charsets.UTF_8) },
+            fetch = { url -> if (url == com.tvatlas.player.vod.ArchiveVodCatalog.SOURCE)
+                """{"sites":[{"key":"archive-public-domain","name":"Internet Archive · 公共领域经典电影与剧集","type":1,"api":"https://archive.org/advancedsearch.php"}]}"""
+                else resourceBytes(url, 2 * 1024 * 1024, "VOD_SUBSCRIPTION").toString(Charsets.UTF_8) },
             validate = { api ->
                 requireNetwork(settings.options.first()); require(!needsConsent())
                 val client = com.tvatlas.player.vod.VodCatalogClient(prepareVodClient(vodSourceRoutes.get(api)).first, debugLog, eventTag = "VOD_VALIDATE")
-                client.load(api, 1, "").movies.any { it.episodes.isNotEmpty() }
+                val page = client.load(api, 1, "")
+                if (api == com.tvatlas.player.vod.ArchiveVodCatalog.SOURCE)
+                    page.movies.firstOrNull()?.let { client.load(api, 1, "", id = it.id).movies.any { movie -> movie.episodes.isNotEmpty() } } == true
+                else page.movies.any { it.episodes.isNotEmpty() }
             }, applyLive = { lists, removed -> repository.syncUnifiedLive(lists, removed); epg.invalidateLibrary() }).also { store ->
             activeVodSubscriptions = store
             viewModelScope.launch { store.state.map { it.sources.map { source -> source.api } }.distinctUntilChanged()
@@ -227,13 +232,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshHomeAutomatically() {
         if (!homePageActive || !appForeground) return
         val cacheOnly = !canLoadChannelArtwork()
-        homeMovies.browse(VodFilter(VodKind.MOVIE), "", cacheOnly = cacheOnly)
-        homeSeries.browse(VodFilter(VodKind.SERIES), "", cacheOnly = cacheOnly)
+        homeMovies.browse(VodFilter(VodKind.MOVIE, year = java.time.Year.now().value.toString()), "", cacheOnly = cacheOnly)
+        homeSeries.browse(VodFilter(VodKind.SERIES, year = java.time.Year.now().value.toString()), "", cacheOnly = cacheOnly)
     }
     fun refreshHome() = cloudNetworkAction {
         if (homePageActive && appForeground) {
-            homeMovies.browse(VodFilter(VodKind.MOVIE), "", force = true)
-            homeSeries.browse(VodFilter(VodKind.SERIES), "", force = true)
+            homeMovies.browse(VodFilter(VodKind.MOVIE, year = java.time.Year.now().value.toString()), "", force = true)
+            homeSeries.browse(VodFilter(VodKind.SERIES, year = java.time.Year.now().value.toString()), "", force = true)
         }
     }
 

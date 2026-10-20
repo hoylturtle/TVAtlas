@@ -10,6 +10,15 @@ import java.util.concurrent.TimeUnit
 class VodCatalogClient(client: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null, private val eventTag: String = "VOD_CATALOG") {
     private val client = client.newBuilder().followRedirects(true).followSslRedirects(true).callTimeout(25, TimeUnit.SECONDS).build()
     suspend fun load(api: String, page: Int, search: String, id: String? = null, type: String? = null, listingOnly: Boolean = false, year: String? = null, area: String? = null): CatalogPage {
+        if (api == ArchiveVodCatalog.SOURCE) {
+            log?.event("INFO", eventTag, "start host=archive.org publicDomain=true")
+            return try {
+                ArchiveVodCatalog.load(client, page, search, id, type, listingOnly, year, area).also {
+                    log?.event("INFO", eventTag, "loaded items=${it.movies.size} mediaAddressItems=${it.movies.count { movie -> movie.episodes.isNotEmpty() }}")
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { log?.error(eventTag, error); throw error }
+        }
         val url = api.toHttpUrl().newBuilder().setQueryParameter("ac", if (listingOnly) "list" else "detail")
             .setQueryParameter("pg", page.toString()).apply {
                 if (search.isNotBlank()) setQueryParameter("wd", search.take(100))

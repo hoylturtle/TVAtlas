@@ -5,7 +5,7 @@ import com.tvatlas.core.model.browseRegion
 
 /** Small bundled repairs override only matching overseas channels in the built-in subscription. */
 object RegionalLiveCatalog {
-    private val regions = setOf("澳门", "台湾", "日本", "韩国", "新加坡", "美国", "英国", "泰国")
+    private val regions = setOf("澳门", "台湾", "日本", "韩国", "新加坡", "美国", "英国", "泰国", "法国", "德国", "卡塔尔")
     fun merge(base: List<Channel>, repairs: List<Channel>): List<Channel> {
         val valid = repairs.filter { it.browseRegion() in regions && it.streams.isNotEmpty() }
         val names = valid.map { it.browseRegion() to it.name }.toSet()

@@ -50,7 +50,7 @@ fun Channel.browseRegion(): String = when {
     playbackRegion() != null -> requireNotNull(playbackRegion()).label
     cctvPrefix.containsMatchIn(name) || name.contains("央视") -> "大陆"
     else -> group.substringBefore('·').substringBefore('|').trim().takeIf {
-        it in setOf("美国", "英国", "加拿大", "澳大利亚", "法国", "德国", "新加坡", "马来西亚", "泰国", "印度")
+        it in setOf("美国", "英国", "加拿大", "澳大利亚", "法国", "德国", "新加坡", "马来西亚", "泰国", "印度", "卡塔尔")
     } ?: "其他"
 }
 

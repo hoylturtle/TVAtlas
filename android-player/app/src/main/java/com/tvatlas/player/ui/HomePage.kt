@@ -150,7 +150,7 @@ import kotlinx.coroutines.*
             minOf((maxHeight * .32f).coerceIn(112.dp, 260.dp), (maxHeight - posterHeight * 2 - 232.dp).coerceIn(112.dp, 260.dp))
             else (maxHeight * .38f).coerceIn(200.dp, 310.dp)
         val condensedHero = compact || wideHome
-        val hero = movies.items.firstOrNull() ?: series.items.firstOrNull() ?: history.firstOrNull()?.unified()
+        val hero = movies.items.firstOrNull() ?: series.items.firstOrNull()
         LazyColumn(state = scroll, modifier = Modifier.fillMaxSize().testTag("home-scroll"), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "live") {
                 Text("常看直播", Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.titleLarge)
@@ -216,12 +216,12 @@ import kotlinx.coroutines.*
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.width(10.dp))
-            Text(if (state.showingCache) "缓存片单" else "按来源更新", Modifier.weight(1f),
+            Text(if (state.showingCache) "缓存片单 · 当年作品" else "当年作品 · 年份优先", Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall, color = Color(0xFFA9A3B5), maxLines = 1)
             TvTextButton(onClick = { onLibrary(kind) }, modifier = Modifier.height(if (tv) 36.dp else 48.dp)) { Text("查看全部") }
         }
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(2.dp))
-        if (state.items.isEmpty()) Text(if (state.loading) "正在读取片单…" else state.error ?: state.notice ?: "暂无可用片单，可点击右上角更新。",
+        if (state.items.isEmpty()) Text(if (state.loading) "正在读取片单…" else state.error ?: state.notice ?: "暂无当年作品，可查看全部或稍后更新。",
             Modifier.padding(horizontal = 20.dp, vertical = 12.dp), style = MaterialTheme.typography.bodyMedium, color = Color.LightGray)
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(state.items.take(12), key = { it.id }) { item -> HomeMovieCard(item, width, height, loader, allowNetwork) { onMovie(item, null) } }

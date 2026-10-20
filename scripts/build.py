@@ -655,7 +655,7 @@ def collect_sources():
         )
 
     # Bounded, independently verified regional repairs are shared with the Android bundle.
-    for code, label in {"MO": "澳门", "TW": "台湾", "JP": "日本", "KR": "韩国", "SG": "新加坡", "US": "美国", "UK": "英国", "TH": "泰国"}.items():
+    for code, label in {"MO": "澳门", "TW": "台湾", "JP": "日本", "KR": "韩国", "SG": "新加坡", "US": "美国", "UK": "英国", "TH": "泰国", "FR": "法国", "DE": "德国", "QA": "卡塔尔"}.items():
         source = {"id": "curated-" + code.lower(), "region": code, "priority": 0}
         candidates = parse_playlist(ROOT / "config" / "regional-live.m3u", source)
         entries.extend(e for e in candidates if ('group-title="' + label + ' · ').encode() in e["extinf"])
