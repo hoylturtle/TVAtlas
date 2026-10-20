@@ -142,18 +142,21 @@ import kotlinx.coroutines.*
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0D111A)).testTag("home-page")) {
         val compact = maxHeight < 420.dp
         val posterWidth = if (maxWidth >= 700.dp) ((maxWidth - 76.dp) / 4).coerceIn(160.dp, 300.dp) else 168.dp
-        val posterHeight = if (compact) 64.dp else (posterWidth * .54f).coerceIn(96.dp, 148.dp)
+        val wideHome = maxWidth >= 700.dp
+        val heroHeight = if (compact) 96.dp else if (wideHome) (maxHeight * .24f).coerceIn(128.dp, 260.dp) else (maxHeight * .38f).coerceIn(200.dp, 310.dp)
+        val condensedHero = compact || wideHome
+        val posterHeight = if (compact) 64.dp else (maxHeight * .16f).coerceIn(80.dp, 148.dp)
         val hero = movies.items.firstOrNull() ?: series.items.firstOrNull() ?: history.firstOrNull()?.unified()
         LazyColumn(state = scroll, modifier = Modifier.fillMaxSize().testTag("home-scroll"), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "hero") {
-                Box(Modifier.fillMaxWidth().height(if (compact) 96.dp else (maxHeight * .38f).coerceIn(200.dp, 310.dp))) {
+                Box(Modifier.fillMaxWidth().height(heroHeight)) {
                     HomePoster(hero?.movie?.poster, loader, allowNetwork, Modifier.fillMaxSize(), large = true)
                     Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xFF0D111A), Color(0xFF0D111A).copy(alpha = .72f), Color.Transparent))))
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF0D111A)))))
-                    Column(Modifier.align(Alignment.CenterStart).fillMaxWidth(.72f).padding(start = 20.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)) {
-                        if (!compact) Text("发现好影片", style = MaterialTheme.typography.labelMedium, color = Color(0xFFC7BDD9))
+                    Column(Modifier.align(Alignment.CenterStart).fillMaxWidth(.72f).padding(start = 20.dp, end = 12.dp), verticalArrangement = Arrangement.spacedBy(if (condensedHero) 6.dp else 10.dp)) {
+                        if (!condensedHero) Text("发现好影片", style = MaterialTheme.typography.labelMedium, color = Color(0xFFC7BDD9))
                         Text(hero?.movie?.name ?: "欢迎使用 TVAtlas", style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineLarge,
-                            maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis, color = Color.White)
+                            maxLines = if (condensedHero) 1 else 2, overflow = TextOverflow.Ellipsis, color = Color.White)
                         if (!compact) Text(hero?.movie?.let { listOf(it.category, it.year, it.area).filter(String::isNotBlank).joinToString(" · ") }
                             ?: "电影、剧集与直播，一处继续观看", maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.LightGray)
                         TvTextButton(onClick = { if (hero != null) onMovie(hero, null) else onLibrary(VodKind.MOVIE) },
@@ -202,13 +205,15 @@ import kotlinx.coroutines.*
 @Composable private fun HomeMovieShelf(title: String, state: UnifiedVodState, kind: VodKind,
     width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, loader: ImageLoader?, allowNetwork: Boolean,
     onMovie: (UnifiedMovie, String?) -> Unit, onLibrary: (VodKind) -> Unit) {
+    val tv = atlasTv()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-            TvTextButton(onClick = { onLibrary(kind) }) { Text("查看全部") }
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.width(10.dp))
+            Text(if (state.showingCache) "缓存片单" else "按来源更新", Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall, color = Color(0xFFA9A3B5), maxLines = 1)
+            TvTextButton(onClick = { onLibrary(kind) }, modifier = Modifier.height(if (tv) 36.dp else 48.dp)) { Text("查看全部") }
         }
-        Text("按来源更新时间排序" + if (state.showingCache) " · 缓存片单" else "", Modifier.padding(horizontal = 20.dp),
-            style = MaterialTheme.typography.labelSmall, color = Color(0xFFA9A3B5))
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(2.dp))
         if (state.items.isEmpty()) Text(if (state.loading) "正在读取片单…" else state.error ?: state.notice ?: "暂无可用片单，可点击右上角更新。",
             Modifier.padding(horizontal = 20.dp, vertical = 12.dp), style = MaterialTheme.typography.bodyMedium, color = Color.LightGray)

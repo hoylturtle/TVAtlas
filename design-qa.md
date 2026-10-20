@@ -10,3 +10,11 @@ State: latest movie/series fixture data with local images, no network and no use
 Pending: emulator screenshots, aligned visual comparison and remote interaction results. Typography, spacing, colours, image quality and copy will be assessed from actual captures. No visual pass is claimed from compilation or JVM tests.
 
 final result: blocked
+
+## First captured comparison
+
+CI 39386593464 passed all checks and produced `home-tv.jpg`, `home-phone.jpg`, and `home-short.jpg`.
+- [P2] At 960 × 540 the original hero plus vertically stacked shelf captions pushed series artwork and titles below the first viewport, unlike the revised target's simultaneous film/series discovery.
+- Fix in progress: a condensed wide-screen hero, inline shelf metadata, bounded poster height and compact TV-only “view all” targets. Phone touch targets stay 48 dp.
+- Regression added: both first film and first series titles must fit in the initial TV viewport. Screenshots explicitly focus the first film card to match the source focus state.
+- Re-capture and comparison are required before changing the result to passed.

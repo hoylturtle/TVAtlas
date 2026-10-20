@@ -45,6 +45,11 @@ class HomeScreenTest {
             val firstTitle = compose.onNodeWithTag("home-title:${movies.first().id}", useUnmergedTree = true)
             firstTitle.assertIsDisplayed()
             assertTrue("Title must fit beneath poster", firstTitle.getUnclippedBoundsInRoot().bottom <= viewport.bottom)
+            if (!compact) {
+                val seriesTitle = compose.onNodeWithTag("home-title:${series.first().id}", useUnmergedTree = true)
+                seriesTitle.assertIsDisplayed()
+                assertTrue("TV first viewport includes both movie and series names", seriesTitle.getUnclippedBoundsInRoot().bottom <= viewport.bottom)
+            }
             compose.onNodeWithTag("home-movie:${movies.first().id}").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
                 .performKeyInput { pressKey(Key.Enter) }
             compose.runOnIdle { assertEquals(movies.first().id, selected) }
@@ -75,6 +80,8 @@ class HomeScreenTest {
             compose.runOnIdle { mode = index }
             compose.waitUntil(5000) { compose.onAllNodesWithTag("home-primary").fetchSemanticsNodes().isNotEmpty() }
             compose.waitForIdle()
+            if (index != 1) compose.onNodeWithTag("home-movie:${movies.first().id}")
+                .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
             val bitmap = compose.onNodeWithTag("home-preview").captureToImage().asAndroidBitmap()
             File(directory, name).outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 86, it) }
         }
