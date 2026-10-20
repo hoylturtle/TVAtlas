@@ -126,10 +126,12 @@ internal fun Modifier.atlasBackdrop(): Modifier = background(Brush.linearGradien
     }
 }
 
-@Composable internal fun AtlasIdlePicture(message: String, channel: com.tvatlas.core.model.Channel? = null, loading: Boolean = false) {
+@Composable internal fun AtlasIdlePicture(message: String, channel: com.tvatlas.core.model.Channel? = null, loading: Boolean = false,
+    programme: com.tvatlas.core.epg.Programme? = null, allowArtworkNetwork: () -> Boolean = { false }) {
     Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF2C1C4A), Color(0xFF08080D)))), contentAlignment = Alignment.Center) {
+        if (channel != null) ChannelBackdrop(channel, programme, allowArtworkNetwork, Modifier.fillMaxSize())
         Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            channel?.let { ChannelArtwork(it); Text(it.name, style = MaterialTheme.typography.titleMedium, color = Color.White) }
+            channel?.let { ChannelArtwork(it, allowNetwork = allowArtworkNetwork); Text(it.name, style = MaterialTheme.typography.titleMedium, color = Color.White) }
             if (loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             Text(message, style = MaterialTheme.typography.bodySmall, color = Color(0xFFD2CADF), maxLines = 3)
         }

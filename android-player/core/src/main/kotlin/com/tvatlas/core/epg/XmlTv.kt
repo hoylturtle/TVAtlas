@@ -10,7 +10,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import javax.xml.parsers.SAXParserFactory
 
-@Serializable data class Programme(val channel: String, val start: Long, val end: Long, val title: String)
+@Serializable data class Programme(val channel: String, val start: Long, val end: Long, val title: String, val imageUrl: String? = null)
 @Serializable data class Guide(val names: Map<String, List<String>> = emptyMap(), val programmes: List<Programme> = emptyList()) {
     fun channelId(tvgId: String?, name: String): String? = tvgId?.takeIf { id -> programmes.any { it.channel == id } }
         ?: names.entries.firstOrNull { (_, labels) -> labels.any { normalize(it) == normalize(name) } }?.key
@@ -37,12 +37,15 @@ object XmlTv {
         val programmes = mutableListOf<Programme>()
         var channel: String? = null; var programmeChannel: String? = null
         var start: Long? = null; var end: Long? = null; var capture: String? = null
-        val text = StringBuilder(); var title = ""
+        val text = StringBuilder(); var title = ""; var imageUrl: String? = null
         val handler = object : DefaultHandler() {
             override fun startElement(uri: String?, localName: String?, qName: String, attributes: Attributes) {
                 when (qName) {
                     "channel" -> { channel = attributes.getValue("id"); require(names.size < 20000) }
-                    "programme" -> { programmeChannel = attributes.getValue("channel"); start = time(attributes.getValue("start")); end = time(attributes.getValue("stop")); title = "" }
+                    "programme" -> { programmeChannel = attributes.getValue("channel"); start = time(attributes.getValue("start")); end = time(attributes.getValue("stop")); title = ""; imageUrl = null }
+                    "icon" -> if (programmeChannel != null && imageUrl == null) {
+                        imageUrl = attributes.getValue("src")?.takeIf { it.length <= 8192 && com.tvatlas.core.model.httpUri(it) != null }
+                    }
                     "display-name", "title" -> { capture = qName; text.setLength(0) }
                 }
             }
@@ -56,7 +59,7 @@ object XmlTv {
                         val id = programmeChannel; val at = start
                         if (!id.isNullOrBlank() && at != null && title.isNotBlank() && (end == null || end!! > at)) {
                             require(programmes.size < 200000) { "节目数量过多" }
-                            programmes.add(Programme(id, at, end ?: 0, title))
+                            programmes.add(Programme(id, at, end ?: 0, title, imageUrl))
                         }
                         programmeChannel = null
                     }

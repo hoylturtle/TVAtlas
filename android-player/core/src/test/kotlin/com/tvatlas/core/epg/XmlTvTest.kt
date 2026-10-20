@@ -3,6 +3,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class XmlTvTest {
+    @Test fun programmeImagesAreScopedValidatedAndOptionalInOldCaches() {
+        val guide = XmlTv.parse("""<tv><channel id="x"><icon src="https://example.com/logo.png"/></channel>
+            <programme channel="x" start="20261013120000 +0800" stop="20261013123000 +0800"><title>节目一</title><icon src="https://example.com/programme.jpg"/></programme>
+            <programme channel="x" start="20261013123000 +0800" stop="20261013130000 +0800"><title>节目二</title></programme>
+            <programme channel="x" start="20261013130000 +0800" stop="20261013133000 +0800"><title>节目三</title><icon src="file:///tmp/private.jpg"/></programme>
+            <programme channel="x" start="20261013133000 +0800" stop="20261013140000 +0800"><title>节目四</title><icon src="https://user:password@example.com/a.jpg"/></programme></tv>""".toByteArray())
+        assertEquals("https://example.com/programme.jpg", guide.programmes[0].imageUrl)
+        assertTrue(guide.programmes.drop(1).all { it.imageUrl == null })
+        val old = kotlinx.serialization.json.Json.decodeFromString<Programme>("""{"channel":"x","start":1,"end":2,"title":"旧缓存"}""")
+        assertNull(old.imageUrl)
+        val saved = kotlinx.serialization.json.Json.encodeToString(Programme.serializer(), guide.programmes[0])
+        assertEquals(guide.programmes[0], kotlinx.serialization.json.Json.decodeFromString<Programme>(saved))
+    }
+
     @Test fun timezoneMissingEndAndNameMatching() {
         val guide = XmlTv.parse("""<tv><channel id="CCTV1"><display-name>CCTV-1</display-name></channel>
             <programme channel="CCTV1" start="20261013120000 +0800"><title>午间新闻</title></programme>

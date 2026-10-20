@@ -543,7 +543,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
     val replay = { library.channels.firstOrNull { it.id == status.channelId }?.let { model.play(it, status.selectedStreamId, forceRestart = true) }; Unit }
     val picture: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize()) {
-            if (player == null) AtlasIdlePicture(if (compact && status.error != null && !status.loading) "播放未成功" else status.message,
+            if (player == null) CachedChannelIdlePicture(model.epg, model::canLoadChannelArtwork, if (compact && status.error != null && !status.loading) "播放未成功" else status.message,
                 library.channels.firstOrNull { it.id == status.channelId }, status.loading)
             else AndroidView(factory = { PlayerView(it).apply { resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT; useController = !tv && !immersive; keepScreenOn = true; isFocusable = !immersive && (!tv || pictureFocused); isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive) post { requestFocus() } } }, onReset = null, update = { it.player = player; it.subtitleView?.visibility = if (translation.enabled) android.view.View.GONE else android.view.View.VISIBLE; it.useController = !tv && !immersive; it.isFocusable = !immersive && (!tv || pictureFocused); it.isFocusableInTouchMode = !immersive && (!tv || pictureFocused); if (pictureFocused && !immersive && !it.hasFocus()) it.post { it.requestFocus() } },
                 onRelease = { it.player = null }, modifier = Modifier.fillMaxSize().focusProperties { canFocus = !immersive && (!tv || pictureFocused) }.onPreviewKeyEvent { event ->
