@@ -42,7 +42,7 @@ class HomeScreenTest {
             compose.runOnIdle { short = compact }
             compose.waitForIdle()
             compose.onNodeWithText("常看直播").assertIsDisplayed()
-            compose.onNodeWithTag("home-scroll").performScrollToNode(hasText(movies.first().movie.name))
+            compose.onNodeWithTag("home-scroll").performScrollToNode(hasTestTag("home-movie:${movies.first().id}"))
             val viewport = compose.onNodeWithTag("home-page").getUnclippedBoundsInRoot()
             val firstTitle = compose.onNodeWithTag("home-title:${movies.first().id}", useUnmergedTree = true)
             firstTitle.assertIsDisplayed()
@@ -52,7 +52,7 @@ class HomeScreenTest {
             compose.runOnIdle { assertEquals(movies.first().id, selected) }
             compose.onNodeWithTag("home-scroll").performScrollToNode(hasText("最新剧集"))
             compose.onNodeWithText("最新剧集").assertIsDisplayed()
-            compose.onNodeWithTag("home-scroll").performScrollToNode(hasText(series.first().movie.name))
+            compose.onNodeWithTag("home-scroll").performScrollToNode(hasTestTag("home-movie:${series.first().id}"))
             compose.onNodeWithTag("home-title:${series.first().id}", useUnmergedTree = true).assertIsDisplayed()
         }
     }
