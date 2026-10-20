@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -35,6 +36,7 @@ import com.tvatlas.core.model.Channel
 
 @Composable internal fun AppNavigationIcon(index: Int) {
     Icon(when (index) {
+        5 -> Icons.Default.Home
         0 -> Icons.Default.PlayArrow
         1 -> Icons.AutoMirrored.Filled.List
         4 -> AtlasSymbols.Screen

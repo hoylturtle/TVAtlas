@@ -10,6 +10,39 @@ import org.junit.Test
 import java.nio.file.Files
 
 class UnifiedVodRepositoryTest {
+    @Test fun homeCacheCanRestoreBothKindsWithoutNetworkOrChangingLibraryFilter() = runBlocking {
+        MockWebServer().use { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest) = MockResponse().setBody("""{"page":1,"pagecount":1,"list":[
+                    {"vod_id":"m","vod_name":"电影甲","type_name":"动作片","vod_time":100,"vod_play_from":"line","vod_play_url":"正片${'$'}https://example.invalid/m.mp4"},
+                    {"vod_id":"s","vod_name":"剧集甲","type_name":"国产剧","vod_time":200,"vod_play_from":"line","vod_play_url":"第1集${'$'}https://example.invalid/s.mp4"}]}""")
+            }
+            server.start()
+            val directory = Files.createTempDirectory("home-cache").toFile()
+            try {
+                val sources = listOf(server.url("/catalog").toString())
+                val first = UnifiedVodRepository(sources, directory, this) { VodCatalogClient(OkHttpClient()) }
+                first.browse(VodFilter(VodKind.MOVIE), "")
+                withTimeout(3000) { first.state.first { !it.loading && it.items.isNotEmpty() } }
+                first.browse(VodFilter(VodKind.SERIES), "")
+                withTimeout(3000) { first.state.first { !it.loading && it.items.isNotEmpty() } }
+                var calls = 0
+                val homeMovies = UnifiedVodRepository(sources, directory, this) { calls++; error("offline") }
+                val homeSeries = UnifiedVodRepository(sources, directory, this) { calls++; error("offline") }
+                homeMovies.browse(VodFilter(VodKind.MOVIE), "", cacheOnly = true)
+                homeSeries.browse(VodFilter(VodKind.SERIES), "", cacheOnly = true)
+                val movies = withTimeout(3000) { homeMovies.state.first { !it.loading && it.items.isNotEmpty() } }
+                val series = withTimeout(3000) { homeSeries.state.first { !it.loading && it.items.isNotEmpty() } }
+                assertEquals("电影甲", movies.items.single().movie.name)
+                assertEquals("剧集甲", series.items.single().movie.name)
+                assertEquals("剧集甲", first.state.value.items.single().movie.name)
+                assertEquals(0, calls)
+                assertTrue(movies.showingCache)
+                assertTrue(series.items.single().movie.episodes.isEmpty())
+            } finally { directory.deleteRecursively() }
+        }
+    }
+
     @Test fun leavingPageCancelsBrowseAndSubscriptionChangesCannotRestartIt() = runBlocking {
         val directory = Files.createTempDirectory("pause-vod").toFile()
         val started = CompletableDeferred<Unit>()

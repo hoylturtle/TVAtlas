@@ -30,7 +30,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 internal val atlasNavigationItems: List<Pair<Int, String>> get() =
-    listOf(0 to "直播", 4 to "影视", 1 to "频道源", 2 to "代理", 3 to "设置")
+    listOf(5 to "首页", 0 to "直播", 4 to "影视", 1 to "频道源", 2 to "代理", 3 to "设置")
 
 @Composable internal fun atlasTv(): Boolean {
     val context = LocalContext.current

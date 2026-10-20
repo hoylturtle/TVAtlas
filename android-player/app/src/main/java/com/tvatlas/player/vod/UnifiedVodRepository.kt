@@ -26,12 +26,12 @@ internal data class UnifiedVodState(val items: List<UnifiedMovie> = emptyList(),
 internal class UnifiedVodRepository(private var sources: List<String>, private val directory: File,
     private val scope: CoroutineScope, private val log: com.tvatlas.player.debug.DebugLog? = null,
     private val health: VodSourceHealth? = null, private val healthContext: (String) -> String = { "direct" },
-    private val canRecordHealth: (Boolean) -> Boolean = { true }, private val client: suspend (String) -> VodCatalogClient) {
+    private val canRecordHealth: (Boolean) -> Boolean = { true },
+    private val diskLock: Mutex = Mutex(), private val parallelism: Int = 3, private val client: suspend (String) -> VodCatalogClient) {
     private val _state = MutableStateFlow(UnifiedVodState())
     val state = _state.asStateFlow()
     private val types = ConcurrentHashMap<String, List<CatalogType>>()
     private val json = Json { ignoreUnknownKeys = true }
-    private val diskLock = Mutex()
     private var job: Job? = null
     private var generation = 0L
     private var currentKey = ""
@@ -39,6 +39,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
     private var offers = emptyList<VodOffer>()
     private var lastFilter: VodFilter? = null
     private var lastQuery = ""
+    private var lastCacheOnly = false
     private var refreshedAt = 0L
     private var visible = true
     private var interrupted = false
@@ -66,7 +67,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         // Subscription discovery may finish after the page's first browse has already started.
         // The repository owns restarting that request; a UI effect must not race this cancellation.
         val filter = lastFilter
-        if (filter != null && visible) browse(filter, lastQuery, force = true)
+        if (filter != null && visible) browse(filter, lastQuery, force = true, cacheOnly = lastCacheOnly)
         else _state.value = _state.value.copy(total = next.size)
     }
     fun refreshDue(interval: Long = 86400000L) {
@@ -74,16 +75,16 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         val filter = lastFilter ?: return
         if (interrupted) { browse(filter, lastQuery); return }
         if (lastQuery.isBlank() && !_state.value.loading && System.currentTimeMillis() - refreshedAt >= interval)
-            browse(filter, lastQuery, force = true)
+            browse(filter, lastQuery, force = true, cacheOnly = lastCacheOnly)
     }
-    fun browse(filter: VodFilter, query: String, more: Boolean = false, force: Boolean = false) {
+    fun browse(filter: VodFilter, query: String, more: Boolean = false, force: Boolean = false, cacheOnly: Boolean = false) {
         if (!visible) return
         val key = "$filter|$query"
         if (more && (_state.value.loading || !_state.value.canLoadMore)) return
         val append = more && currentKey == key && !interrupted
         interrupted = false
         val previous = if (currentKey == key) offers else emptyList()
-        lastFilter = filter; lastQuery = query
+        lastFilter = filter; lastQuery = query; lastCacheOnly = cacheOnly
         job?.cancel(); val token = ++generation
         if (!append) { offers = emptyList(); round = 0 }
         currentKey = key; round++
@@ -98,6 +99,11 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                 if (token != generation) return@launch
                 _state.value = _state.value.copy(showingCache = saved.isNotEmpty(), items = cachedItems)
             }
+            if (cacheOnly) {
+                _state.value = _state.value.copy(loading = false, canLoadMore = false,
+                    notice = if (offers.isEmpty()) "暂无缓存，可点击更新片单。" else "当前显示缓存片单，可点击更新。")
+                return@launch
+            }
             val sourceSnapshot = sources
             val contexts = sourceSnapshot.associateWith(healthContext)
             val available = withContext(Dispatchers.Default) { sourceSnapshot.filter { health?.eligible(it, contexts.getValue(it)) != false }
@@ -105,7 +111,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
             val cooling = sources.size - available.size
             _state.value = _state.value.copy(total = available.size)
             if (cooling > 0) _state.value = _state.value.copy(notice = "$cooling 个来源暂缓访问，可在频道源中重新检查")
-            val permits = Semaphore(3)
+            val permits = Semaphore(parallelism)
             var completed = 0; var failed = 0; var hasMore = false
             try {
                 log?.event("INFO", "VOD_BROWSE", "start round=$requestedRound sources=${sources.size} search=${query.isNotBlank()}")

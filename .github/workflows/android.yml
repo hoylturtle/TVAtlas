@@ -121,7 +121,9 @@ jobs:
         if: always()
         with:
           name: ui-previews
-          path: android-player/app/build/ui-previews/**/*.png
+          path: |
+            android-player/app/build/ui-previews/**/*.png
+            android-player/app/build/ui-previews/**/*.jpg
           if-no-files-found: warn
       - name: Show native test failure details
         if: failure()

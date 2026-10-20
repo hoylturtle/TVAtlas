@@ -25,7 +25,8 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private val log: com.tvatlas.player.debug.DebugLog? = null,
     private val onEnded: () -> Unit = {}, private val onClosed: () -> Unit = {},
     private val onMeasuredQuality: (VodItem, Int, String) -> Unit = { _, _, _ -> },
-    private val onMediaFailure: (VodItem, String, Int) -> Unit = { _, _, _ -> }) {
+    private val onMediaFailure: (VodItem, String, Int) -> Unit = { _, _, _ -> },
+    private val onStarted: () -> Unit = {}) {
     private val _state = MutableStateFlow(VodState())
     val state = _state.asStateFlow()
     private val adPreferences = context.getSharedPreferences("vod-reported-ad-addresses", Context.MODE_PRIVATE)
@@ -115,6 +116,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                     }
                     if (playbackState == Player.STATE_READY && !restored) {
                         restored = true
+                        onStarted()
                         if (!player.isCurrentMediaItemLive && player.isCurrentMediaItemSeekable) {
                             val position = if (resumePosition > 0) resumePosition else VodResume.position(saved, player.duration)
                             if (position > 0) player.seekTo(position)

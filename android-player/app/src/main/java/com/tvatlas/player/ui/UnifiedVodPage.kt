@@ -24,7 +24,8 @@ import com.tvatlas.core.vod.*
 import kotlinx.coroutines.*
 
 /** Film-first browsing: providers are kept in source management, never used as user-facing shelves. */
-@Composable internal fun UnifiedVodPage(model: com.tvatlas.player.PlayerViewModel, onFiles: () -> Unit) {
+@Composable internal fun UnifiedVodPage(model: com.tvatlas.player.PlayerViewModel, onFiles: () -> Unit,
+    homeKind: VodKind? = null, homeRequest: Int = 0, homeSearchRequest: Int = 0) {
     val repository = model.unifiedVod
     val state by repository.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { model.syncVodSubscriptions() }
@@ -76,6 +77,10 @@ import kotlinx.coroutines.*
         detailGeneration++; detailJob?.cancel(); model.cancelVodSelection()
         selected = null; detailLoading = false; detailError = null
     }
+    LaunchedEffect(homeRequest) {
+        homeKind?.let { kind -> kindName = kind.name; genre = "全部"; region = "全部"; year = "全部"; query = ""; search = "" }
+    }
+    LaunchedEffect(homeSearchRequest) { if (homeSearchRequest > 0) { searchDraft = query; searchOpen = true } }
     VodBrowseOnEntry(filter, search, scroll) {
         backToLibrary(); returnFocusId = null; browse(force = true)
     }

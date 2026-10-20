@@ -55,6 +55,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val vodQuality by lazy { com.tvatlas.player.vod.VodQualityCache(java.io.File(getApplication<Application>().noBackupFilesDir, "vod-quality.json")) }
     private fun qualityContext(label: String) = "$label|${connectivity.activeNetwork}"
     private fun clearVodQueue() { playbackSeries = null; playbackEpisode = null; _nextVodEpisode.value = null }
+    private var homePageActive = false
+    private val vodCatalogDiskLock = kotlinx.coroutines.sync.Mutex()
+    private var activeHomeMovies: com.tvatlas.player.vod.UnifiedVodRepository? = null
+    private var activeHomeSeries: com.tvatlas.player.vod.UnifiedVodRepository? = null
     private var vodPageActive = false
     fun setVodPageActive(active: Boolean) {
         vodPageActive = active
@@ -63,6 +67,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun setAppForeground(active: Boolean) {
         appForeground = active
         activeUnifiedVod?.setVisible(active && vodPageActive)
+        activeHomeMovies?.setVisible(active && homePageActive)
+        activeHomeSeries?.setVisible(active && homePageActive)
+        if (active && homePageActive) refreshHomeAutomatically()
         if (!active) cancelVodSelection()
         else if (vodPageActive) activeUnifiedVod?.refreshDue()
     }
@@ -72,6 +79,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             { com.tvatlas.player.vod.VodProgressStore(getApplication()) },
             { appForeground && allowCurrentNetwork(options.value) && !needsConsent() }, debugLog,
             onEnded = { if (options.value.vodAutoNext) advanceVodEpisode() },
+            onStarted = { playbackSeries?.let { series -> playbackEpisode?.let { episode -> homeHistory.record(series, episode) } } },
             onClosed = { cancelVodSelection(); clearVodQueue() },
             onMeasuredQuality = { item, height, label -> val context = qualityContext(label)
                 viewModelScope.launch { vodQuality.record(item.url, context, height, 0, actual = true) } },
@@ -142,7 +150,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }, applyLive = { lists, removed -> repository.syncUnifiedLive(lists, removed); epg.invalidateLibrary() }).also { store ->
             activeVodSubscriptions = store
             viewModelScope.launch { store.state.map { it.sources.map { source -> source.api } }.distinctUntilChanged()
-                .collect { activeUnifiedVod?.updateSources(it) } }
+                .collect { activeUnifiedVod?.updateSources(it); activeHomeMovies?.updateSources(it); activeHomeSeries?.updateSources(it) } }
         }
     }
     fun addMediaSubscription(name: String, url: String) = cloudNetworkAction {
@@ -192,12 +200,43 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     internal val unifiedVod by lazy {
         com.tvatlas.player.vod.UnifiedVodRepository(vodSubscriptions.state.value.sources.map { it.api },
             java.io.File(getApplication<Application>().noBackupFilesDir, "vod-catalog"), viewModelScope, debugLog,
-            health = vodHealth, healthContext = ::vodHealthContext, canRecordHealth = ::mayRecordVodHealth) { source ->
+            health = vodHealth, healthContext = ::vodHealthContext, canRecordHealth = ::mayRecordVodHealth, diskLock = vodCatalogDiskLock) { source ->
             requireNetwork(settings.options.first()); require(!needsConsent())
             val (client, _) = prepareVodClient(vodSourceRoutes.get(source))
             com.tvatlas.player.vod.VodCatalogClient(client, debugLog)
         }.also { activeUnifiedVod = it; it.setVisible(vodPageActive && appForeground) }
     }
+    internal val homeHistory by lazy { com.tvatlas.player.vod.HomeHistoryStore(
+        java.io.File(getApplication<Application>().noBackupFilesDir, "home-recent-vod.json"), viewModelScope) }
+    private fun homeRepository() = com.tvatlas.player.vod.UnifiedVodRepository(
+        vodSubscriptions.state.value.sources.map { it.api },
+        java.io.File(getApplication<Application>().noBackupFilesDir, "vod-catalog"), viewModelScope, debugLog,
+        health = vodHealth, healthContext = ::vodHealthContext, canRecordHealth = ::mayRecordVodHealth,
+        diskLock = vodCatalogDiskLock, parallelism = 2) { source ->
+        requireNetwork(settings.options.first()); require(!needsConsent())
+        val (client, _) = prepareVodClient(vodSourceRoutes.get(source))
+        com.tvatlas.player.vod.VodCatalogClient(client, debugLog)
+    }
+    internal val homeMovies by lazy { homeRepository().also { activeHomeMovies = it; it.setVisible(homePageActive && appForeground) } }
+    internal val homeSeries by lazy { homeRepository().also { activeHomeSeries = it; it.setVisible(homePageActive && appForeground) } }
+    fun setHomePageActive(active: Boolean) {
+        homePageActive = active
+        activeHomeMovies?.setVisible(active && appForeground)
+        activeHomeSeries?.setVisible(active && appForeground)
+    }
+    fun refreshHomeAutomatically() {
+        if (!homePageActive || !appForeground) return
+        val cacheOnly = !canLoadChannelArtwork()
+        homeMovies.browse(VodFilter(VodKind.MOVIE), "", cacheOnly = cacheOnly)
+        homeSeries.browse(VodFilter(VodKind.SERIES), "", cacheOnly = cacheOnly)
+    }
+    fun refreshHome() = cloudNetworkAction {
+        if (homePageActive && appForeground) {
+            homeMovies.browse(VodFilter(VodKind.MOVIE), "", force = true)
+            homeSeries.browse(VodFilter(VodKind.SERIES), "", force = true)
+        }
+    }
+
     private var unifiedEpisodeSources = emptyMap<String, String>()
     suspend fun unifiedDetails(movie: com.tvatlas.core.vod.UnifiedMovie): com.tvatlas.core.vod.UnifiedMovie {
         val result = unifiedVod.details(movie)

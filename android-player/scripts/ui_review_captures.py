@@ -7,7 +7,7 @@ import base64
 from pathlib import Path
 
 root = Path('app/build/ui-previews')
-for name in ['ui-short-1.png', 'ui-short-2.png', 'ui-short-3.png', 'ui-short-4.png', 'ui-tv-1.png', 'ui-tv-2.png', 'ui-tv-3.png', 'ui-tv-4.png',
+for name in ['home-tv.jpg', 'home-phone.jpg', 'home-short.jpg', 'ui-short-1.png', 'ui-short-2.png', 'ui-short-3.png', 'ui-short-4.png', 'ui-tv-1.png', 'ui-tv-2.png', 'ui-tv-3.png', 'ui-tv-4.png',
              'ui-phone-2.png', 'ui-phone-3.png', 'ui-phone-4.png']:
     files = list(root.rglob(name))
     if len(files) != 1 or files[0].stat().st_size > 300_000:

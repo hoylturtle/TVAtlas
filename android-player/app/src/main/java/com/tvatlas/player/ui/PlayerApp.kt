@@ -129,7 +129,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         val landscape = !tv && windowWidth < 840.dp && config.orientation == Configuration.ORIENTATION_LANDSCAPE
         var mediaRequestedCatalog by rememberSaveable { mutableStateOf<Boolean?>(null) }
         var mediaRequestId by rememberSaveable { mutableIntStateOf(0) }
-        var tab by rememberSaveable { mutableIntStateOf(0) }
+        var tab by rememberSaveable { mutableIntStateOf(5) }
+        var homeKind by remember { mutableStateOf<com.tvatlas.core.vod.VodKind?>(null) }
+        var homeSearchRequest by remember { mutableIntStateOf(0) }
         // Every navigation entry point shares this lifecycle, including restored pages and back.
         LaunchedEffect(tab) { model.setLivePageActive(tab == 0) }
         var channelSearchRequest by remember { mutableIntStateOf(0) }
@@ -165,17 +167,18 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 LiveBackAction.HIDE_CHANNELS -> { channelPanelOpen = false; fullscreen = true }
                 LiveBackAction.SHOW_MENU -> liveMenuOpen = true
                 LiveBackAction.SHOW_CHANNELS -> { fullscreen = false; landscapeChannels = true; channelPanelOpen = true }
-                LiveBackAction.CONFIRM_EXIT -> exitPrompt = true
+                LiveBackAction.CONFIRM_EXIT -> tab = 5
             }
         }
-        BackHandler(tab != 0 && !liveMenuOpen) { if (wide) liveMenuOpen = true else tab = 0 }
+        BackHandler(tab == 5 && !liveMenuOpen && !exitPrompt) { exitPrompt = true }
+        BackHandler(tab != 0 && tab != 5 && !liveMenuOpen) { tab = 5 }
         PlaybackOrientation(immersive || options.alwaysLandscape, tv && !options.alwaysLandscape)
         PlaybackSystemBars(immersive || tv || (theater && activePlayback))
         Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxSize().atlasBackdrop().then(if (immersive) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing)),
             contentWindowInsets = if (immersive) WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
-                if (!wide && !immersive && !theater) AtlasAppBar({ tab = 0; channelSearchRequest++ }, { tab = 3 }, busy)
+                if (!wide && !immersive && !theater) AtlasAppBar({ if (tab == 5) { mediaRequestedCatalog = true; mediaRequestId++; homeSearchRequest++; tab = 4 } else { tab = 0; channelSearchRequest++ } }, { tab = 3 }, busy)
             }, bottomBar = {
                 if (!wide && !immersive && !theater) AtlasBottomNavigation(tab) { tab = it }
             }) { padding ->
@@ -192,6 +195,10 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 CompositionLocalProvider(LocalTvMode provides (tv || wide)) {
                 pageMemory.SaveableStateProvider(tab) {
                 when (tab) {
+                    5 -> HomePage(model,
+                        onLive = { channel -> model.setHomePageActive(false); model.setLivePageActive(true); tab = 0; fullscreen = true; channelPanelOpen = false; model.play(channel) },
+                        onLibrary = { kind -> homeKind = kind; mediaRequestedCatalog = true; mediaRequestId++; tab = 4 },
+                        onSearch = { mediaRequestedCatalog = true; mediaRequestId++; homeSearchRequest++; tab = 4 })
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
                             VideoPane(model, status, library, modifier, diagnostics, tv, tv && !channelPanelOpen, true, immersive || wide || tv, !tv && !wide && !immersive,
@@ -245,7 +252,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                                 consumedMediaRequest = mediaRequestId
                             }
                         }
-                        if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }) else CloudLibraryPage(cloudState, controller::importShare,
+                        if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }, homeKind, mediaRequestId, homeSearchRequest) else CloudLibraryPage(cloudState, controller::importShare,
                             { share -> model.cloudNetworkAction { controller.open(share) } },
                             { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
                             { model.cloudNetworkAction { controller.refresh() } },
