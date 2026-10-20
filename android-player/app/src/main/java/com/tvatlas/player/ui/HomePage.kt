@@ -133,7 +133,12 @@ import kotlinx.coroutines.*
     val scroll = rememberLazyListState()
     val primaryFocus = remember { FocusRequester() }
     val tv = atlasTv()
-    LaunchedEffect(Unit) { if (tv) { withFrameNanos { }; primaryFocus.requestFocus() } }
+    LaunchedEffect(Unit) {
+        if (tv) {
+            withFrameNanos { }
+            if (scroll.firstVisibleItemIndex == 0 && scroll.firstVisibleItemScrollOffset == 0) primaryFocus.requestFocus()
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF0D111A)).testTag("home-page")) {
         val compact = maxHeight < 420.dp
         val posterWidth = if (maxWidth >= 700.dp) ((maxWidth - 76.dp) / 4).coerceIn(160.dp, 300.dp) else 168.dp

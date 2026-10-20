@@ -77,10 +77,18 @@ import kotlinx.coroutines.*
         detailGeneration++; detailJob?.cancel(); model.cancelVodSelection()
         selected = null; detailLoading = false; detailError = null
     }
+    var consumedHomeRequest by rememberSaveable { mutableIntStateOf(-1) }
+    var consumedHomeSearch by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(homeRequest) {
+        if (consumedHomeRequest == homeRequest) return@LaunchedEffect
+        consumedHomeRequest = homeRequest
         homeKind?.let { kind -> kindName = kind.name; genre = "全部"; region = "全部"; year = "全部"; query = ""; search = "" }
     }
-    LaunchedEffect(homeSearchRequest) { if (homeSearchRequest > 0) { searchDraft = query; searchOpen = true } }
+    LaunchedEffect(homeSearchRequest) {
+        if (homeSearchRequest > 0 && consumedHomeSearch != homeSearchRequest) {
+            consumedHomeSearch = homeSearchRequest; searchDraft = query; searchOpen = true
+        }
+    }
     VodBrowseOnEntry(filter, search, scroll) {
         backToLibrary(); returnFocusId = null; browse(force = true)
     }

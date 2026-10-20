@@ -130,8 +130,9 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
         var mediaRequestedCatalog by rememberSaveable { mutableStateOf<Boolean?>(null) }
         var mediaRequestId by rememberSaveable { mutableIntStateOf(0) }
         var tab by rememberSaveable { mutableIntStateOf(5) }
-        var homeKind by remember { mutableStateOf<com.tvatlas.core.vod.VodKind?>(null) }
-        var homeSearchRequest by remember { mutableIntStateOf(0) }
+        var homeKind by rememberSaveable { mutableStateOf<com.tvatlas.core.vod.VodKind?>(null) }
+        var homeBrowseRequest by rememberSaveable { mutableIntStateOf(0) }
+        var homeSearchRequest by rememberSaveable { mutableIntStateOf(0) }
         // Every navigation entry point shares this lifecycle, including restored pages and back.
         LaunchedEffect(tab) { model.setLivePageActive(tab == 0) }
         var channelSearchRequest by remember { mutableIntStateOf(0) }
@@ -197,7 +198,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                 when (tab) {
                     5 -> HomePage(model,
                         onLive = { channel -> model.setHomePageActive(false); model.setLivePageActive(true); tab = 0; fullscreen = true; channelPanelOpen = false; model.play(channel) },
-                        onLibrary = { kind -> homeKind = kind; mediaRequestedCatalog = true; mediaRequestId++; tab = 4 },
+                        onLibrary = { kind -> homeKind = kind; homeBrowseRequest++; mediaRequestedCatalog = true; mediaRequestId++; tab = 4 },
                         onSearch = { mediaRequestedCatalog = true; mediaRequestId++; homeSearchRequest++; tab = 4 })
                     0 -> {
                         val video: @Composable (Modifier) -> Unit = { modifier ->
@@ -252,7 +253,7 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                                 consumedMediaRequest = mediaRequestId
                             }
                         }
-                        if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }, homeKind, mediaRequestId, homeSearchRequest) else CloudLibraryPage(cloudState, controller::importShare,
+                        if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }, homeKind, homeBrowseRequest, homeSearchRequest) else CloudLibraryPage(cloudState, controller::importShare,
                             { share -> model.cloudNetworkAction { controller.open(share) } },
                             { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
                             { model.cloudNetworkAction { controller.refresh() } },
