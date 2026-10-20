@@ -11,3 +11,5 @@ Movie cards load fresh details and reuse existing episode choice, quality orderi
 Source lists, proxy nodes and settings remain accessible from main navigation. Home live cards explicitly activate the live-page lifecycle before issuing a play command. Film/series “view all” and search reuse the film-library destination with the requested category/search state.
 
 Validation: JVM regression covers independent cache-only shelves without network, provider-ID continuity and omission of media credentials from continued-viewing metadata. Native tests cover TV/short-landscape title visibility, remote confirmation, shelf scrolling, and TV/phone/short screenshot fixtures. Captures contain synthetic catalogue entries, not real user history.
+
+Final verification: CI 39388096535 passed 256 JVM tests, 130 Android instrumentation tests, release/static/signature checks and upgrade verification; release publication was skipped. Native captures and before/after comparison evidence are retained in `docs/home-review/`, with the final visual review in project-root `design-qa.md`.
