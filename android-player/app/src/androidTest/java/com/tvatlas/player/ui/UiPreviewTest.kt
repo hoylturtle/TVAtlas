@@ -87,7 +87,7 @@ class UiPreviewTest {
                 compose.waitForIdle()
             }
             if (page == 0) {
-                compose.onNodeWithText("翡翠台").performScrollTo()
+                compose.onNodeWithText("翡翠台", useUnmergedTree = true).performScrollTo()
                 compose.waitForIdle()
             }
             val bitmap = compose.onNodeWithTag("preview").captureToImage().asAndroidBitmap()
