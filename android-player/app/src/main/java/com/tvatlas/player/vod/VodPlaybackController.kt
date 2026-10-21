@@ -16,7 +16,7 @@ import okhttp3.OkHttpClient
 data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
     val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
     val feedback: String? = null, val insertionMarkers: Boolean? = null, val alternatives: Int = 0,
-    val error: String? = null, val qualityHeight: Int? = null, val resumeWarning: String? = null, val routeLabel: String = "直连")
+    val error: String? = null, val qualityHeight: Int? = null, val resumeWarning: String? = null, val routeLabel: String = "直连", val seekable: Boolean = false)
 
 /** All player commands run on the main thread. Source URLs never enter logs or persistence. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -94,7 +94,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
             catch (_: Exception) { warning = "续播记录暂不可用，本次从头播放"; null }
             if (token != generation) return@launch
             if (!canPlay()) { _state.value = _state.value.copy(error = "网络条件已变化，请确认后继续播放"); return@launch }
-            val player = ExoPlayer.Builder(context).setMediaSourceFactory(DefaultMediaSourceFactory(
+            val player = ExoPlayer.Builder(context).setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000).setMediaSourceFactory(DefaultMediaSourceFactory(
                 OkHttpDataSource.Factory(mediaClient()).setUserAgent("Mozilla/5.0 TVAtlas"))).build()
             active = player
             var restored = false
@@ -136,6 +136,8 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                     _state.value = _state.value.copy(qualityHeight = height)
                     onMeasuredQuality(item, height, routeLabel)
                 }
+                override fun onTimelineChanged(timeline: Timeline, reason: Int) { publish(player) }
+                override fun onAvailableCommandsChanged(availableCommands: Player.Commands) { publish(player) }
                 override fun onIsPlayingChanged(isPlaying: Boolean) { publish(player) }
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                     if (active !== player) return
@@ -180,7 +182,8 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     }
     private fun publish(player: ExoPlayer) {
         if (active === player) _state.value = _state.value.copy(playing = player.isPlaying,
-            ready = player.playbackState == Player.STATE_READY, live = player.isCurrentMediaItemLive)
+            ready = player.playbackState == Player.STATE_READY, live = player.isCurrentMediaItemLive,
+            seekable = player.isCurrentMediaItemSeekable && player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM))
     }
     fun toggle() {
         val p = active ?: run { _state.value.item?.let(::open); return }
@@ -201,9 +204,14 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         } else { active?.pause(); checkpoint() }
     }
     fun seekBy(delta: Long) {
-        active?.takeIf { it.isCurrentMediaItemSeekable && !it.isCurrentMediaItemLive }?.let {
-            it.seekTo((it.currentPosition + delta).coerceIn(0, it.duration.coerceAtLeast(0)))
+        val player = active ?: return
+        if (!player.isCurrentMediaItemSeekable || !player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)) {
+            notice("当前线路不支持快进／快退，可尝试其他线路")
+            return
         }
+        player.seekTo(VodSeek.target(player.currentPosition, delta, player.duration))
+        log?.event("INFO", "VOD_SEEK", "deltaMs=$delta durationKnown=${player.duration > 0}")
+        checkpoint()
     }
     fun restart() { active?.let { it.seekTo(0); if (canPlay()) it.play() }; checkpoint() }
     private fun checkpoint(finished: Boolean = false) {

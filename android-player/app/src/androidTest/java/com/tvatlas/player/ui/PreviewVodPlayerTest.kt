@@ -152,6 +152,17 @@ class PreviewVodPlayerTest {
                 assertTrue(controller.state.value.player!!.isCurrentMediaItemSeekable)
                 controller.pause()
                 controller.seekBy(30000)
+                val view = VodPlayerView(compose.activity) { controller.seekBy(it) }
+                view.player = controller.state.value.player
+                view.hideController()
+                val before = controller.state.value.player!!.currentPosition
+                assertTrue(view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT)))
+                assertTrue(view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_LEFT)))
+                assertTrue(controller.state.value.player!!.currentPosition <= before - 9000)
+                view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+                view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT))
+                assertTrue(controller.state.value.player!!.currentPosition >= before - 1000)
+                view.player = null
                 controller.pause()
                 controller.close()
             }

@@ -28,6 +28,9 @@ import com.tvatlas.player.vod.VodState
     preparing: Boolean = false, autoNext: Boolean = true, onAutoNext: (Boolean) -> Unit = {}, onNext: () -> Unit = {}) {
     val tv = atlasTv()
     var controlsVisible by remember { mutableStateOf(true) }
+    var seekMessage by remember { mutableStateOf<String?>(null) }
+    var seekRequest by remember { mutableIntStateOf(0) }
+    LaunchedEffect(seekRequest) { kotlinx.coroutines.delay(1500); seekMessage = null }
     var confirmAd by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var tracks by remember(state.player) { mutableStateOf(false) }
@@ -44,7 +47,12 @@ import com.tvatlas.player.vod.VodState
         }
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             state.player?.let { player ->
-                AndroidView(factory = { context -> PlayerView(context).apply {
+                AndroidView(factory = { context -> VodPlayerView(context) { delta ->
+                    controller.seekBy(delta)
+                    if (controller.state.value.seekable) {
+                        seekMessage = (if (delta > 0) "快进" else "快退") + "${kotlin.math.abs(delta) / 1000}秒"; seekRequest++
+                    }
+                }.apply {
                     this.player = player
                     useController = true
                     controllerShowTimeoutMs = 5000
@@ -52,6 +60,7 @@ import com.tvatlas.player.vod.VodState
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setShowNextButton(false); setShowPreviousButton(false)
+                    setShowFastForwardButton(true); setShowRewindButton(true)
                     isFocusable = true; post { requestFocus() }
                 } }, modifier = Modifier.fillMaxSize(),
                     update = { it.player = player; it.keepScreenOn = state.playing },
@@ -71,12 +80,15 @@ import com.tvatlas.player.vod.VodState
                         TvTextButton(onClick = onNext, enabled = !preparing) { Text("下一集") }
                     }
                     TvTextButton(onClick = onToggle) { Text(if (state.playing) "暂停" else "播放") }
-                    TvTextButton(onClick = onRestart, enabled = state.ready && !state.live) { Text("从头") }
+                    TvTextButton(onClick = { controller.seekBy(-30_000) }, enabled = state.seekable) { Text("快退30秒") }
+                    TvTextButton(onClick = { controller.seekBy(30_000) }, enabled = state.seekable) { Text("快进30秒") }
+                    TvTextButton(onClick = onRestart, enabled = state.seekable && !state.live) { Text("从头") }
                     TvTextButton(onClick = { tracks = true }, enabled = state.ready) { Text("音轨／字幕") }
                     TvTextButton(onClick = { confirmAd = true }, enabled = state.player != null) { Text("有广告，换线路") }
                     TvTextButton(onClick = { confirmClear = true }) { Text("清除广告标记") }
-                    TvTextButton(onClick = { controller.seekBy(30_000) }, enabled = state.ready && !state.live) { Text("快进30秒") }
                 }
+                if (tv && state.seekable) Text("菜单收起后，←／→ 快退／快进10秒；长按连续调整", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
+                if (state.ready && !state.seekable) Text("当前线路不支持拖动进度，可尝试其他线路", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
                 if (preparing) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("正在准备播放…", color = Color.LightGray) }
                 state.qualityHeight?.let { Text("实际视频分辨率：${it}P", color = Color.LightGray, style = MaterialTheme.typography.labelSmall) }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -86,6 +98,7 @@ import com.tvatlas.player.vod.VodState
                 } }
                 state.resumeWarning?.let { Text(it, color = Color.LightGray, style = MaterialTheme.typography.bodySmall) }
             }
+            seekMessage?.let { Text(it, Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = .7f)).padding(16.dp), color = Color.White) }
             if (state.player == null && state.error == null) CircularProgressIndicator(Modifier.align(Alignment.Center))
         }
         if (confirmAd) AlertDialog(onDismissRequest = { confirmAd = false },
