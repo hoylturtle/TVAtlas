@@ -43,7 +43,7 @@ jobs:
         run: python3 scripts/fetch_mihomo.py
       - name: Validate release publication without network writes
         run: python3 scripts/test_publish_release.py
-      - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --stacktrace
+      - run: gradle :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --max-workers=2 -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8" --stacktrace
       - name: Verify package version and APK signature
         id: package
         run: |
