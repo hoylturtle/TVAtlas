@@ -241,6 +241,8 @@ class PlaybackCoordinator(
         var lastLoadType = C.DATA_TYPE_UNKNOWN
         var loadErrorAt = 0L
         var failing = false
+        val preparingAt = SystemClock.elapsedRealtime()
+        var firstFrameRendered = false
         fun fail(failure: PlaybackFailure, drmCode: Int? = null) {
             if (token != generation || instance !== _player.value || failing) return
             failing = true
@@ -293,6 +295,11 @@ class PlaybackCoordinator(
             }
         })
         instance.addListener(object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                if (firstFrameRendered) return
+                firstFrameRendered = true
+                log?.event("INFO", "PLAYER", "first video frame elapsedMs=${SystemClock.elapsedRealtime() - preparingAt}")
+            }
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                 val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
                 log?.event("INFO", "SUBTITLE", "groups=${textGroups.size} selected=${textGroups.count { it.isSelected }} enabled=${subtitlesEnabled()}")
@@ -360,7 +367,7 @@ class PlaybackCoordinator(
                     }
                 }
                 if (instance.playWhenReady && now - waitingSince >= 20000) {
-                    log?.event("WARN", "PLAYER", "no progress for 20 seconds")
+                    log?.event("WARN", "PLAYER", "no progress for 20 seconds state=${instance.playbackState} firstFrame=$firstFrameRendered mediaBytes=${mediaBytes.get()} downloadedBytes=${downloadBytes.get()} bufferedMs=${instance.totalBufferedDuration} route=${observedTarget.get().type}")
                     fail(PlaybackFailure(if (lastLoadType == C.DATA_TYPE_MEDIA) FailureKind.SEGMENT else FailureKind.NETWORK))
                 }
             }

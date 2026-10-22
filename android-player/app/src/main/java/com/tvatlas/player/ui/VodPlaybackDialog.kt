@@ -34,6 +34,7 @@ import com.tvatlas.player.vod.VodState
     var confirmAd by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var tracks by remember(state.player) { mutableStateOf(false) }
+    val playerView = remember { arrayOfNulls<VodPlayerView>(1) }
     PlaybackOrientation(true, tv)
     Dialog(onDismissRequest = controller::close,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -41,9 +42,20 @@ import com.tvatlas.player.vod.VodState
         DisposableEffect(view) {
             val window = (view.parent as? DialogWindowProvider)?.window
             val bars = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+            val original = window?.callback
+            val callback = original?.let { VodPlaybackWindowCallback(it, { playerView[0] }) { event, handled ->
+                if (event.keyCode in setOf(4, 19, 20, 21, 22, 23, 66, 82, 85, 89, 90)) {
+                    (view.context.applicationContext as? com.tvatlas.player.AtlasApplication)?.debugLog
+                        ?.event("INFO", "INPUT_VOD", "keyCode=${event.keyCode} handled=$handled controls=${playerView[0]?.isControllerFullyVisible}")
+                }
+            } }
+            if (callback != null) window?.callback = callback
             bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             bars?.hide(WindowInsetsCompat.Type.systemBars())
-            onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+            onDispose {
+                if (window?.callback === callback && original != null) window?.callback = original
+                bars?.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             state.player?.let { player ->
@@ -61,10 +73,13 @@ import com.tvatlas.player.vod.VodState
                     resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setShowNextButton(false); setShowPreviousButton(false)
                     setShowFastForwardButton(true); setShowRewindButton(true)
-                    isFocusable = true; post { requestFocus() }
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    playerView[0] = this
+                    post { requestFocus() }
                 } }, modifier = Modifier.fillMaxSize(),
                     update = { it.player = player; it.keepScreenOn = state.playing },
-                    onRelease = { it.player = null; it.keepScreenOn = false })
+                    onRelease = { if (playerView[0] === it) playerView[0] = null; it.player = null; it.keepScreenOn = false })
             }
             if (controlsVisible || preparing || state.player == null || state.error != null || state.resumeWarning != null || state.feedback != null) Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = .65f)).padding(horizontal = 8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

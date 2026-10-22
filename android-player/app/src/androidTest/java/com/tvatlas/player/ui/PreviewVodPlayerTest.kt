@@ -20,6 +20,59 @@ import java.util.concurrent.atomic.AtomicBoolean
 class PreviewVodPlayerTest {
     @get:Rule val compose = createAndroidComposeRule<OrientationTestActivity>()
 
+    @Test fun dialogRemoteWorksWhenAnotherViewOwnsFocusAndPreservesVisibleMenuActions() {
+        compose.setContent { AtlasTheme {} }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val seeks = java.util.concurrent.atomic.AtomicLong(0)
+        val clicks = java.util.concurrent.atomic.AtomicInteger(0)
+        lateinit var dialog: android.app.Dialog
+        lateinit var player: androidx.media3.exoplayer.ExoPlayer
+        lateinit var view: VodPlayerView
+        lateinit var other: android.widget.Button
+        var created = false
+        try {
+            compose.runOnIdle {
+                player = androidx.media3.exoplayer.ExoPlayer.Builder(compose.activity).build()
+                dialog = android.app.Dialog(compose.activity)
+                view = VodPlayerView(compose.activity) { seeks.addAndGet(it) }.apply {
+                    this.player = player
+                    controllerShowTimeoutMs = 0
+                }
+                other = android.widget.Button(compose.activity).apply {
+                    text = "Other control"; isFocusableInTouchMode = true
+                    setOnClickListener { clicks.incrementAndGet() }
+                }
+                created = true
+                dialog.setContentView(android.widget.LinearLayout(compose.activity).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    addView(view, android.widget.LinearLayout.LayoutParams(600, 300))
+                    addView(other)
+                })
+                dialog.show()
+                val window = dialog.window!!
+                window.callback = VodPlaybackWindowCallback(window.callback, { view })
+                view.hideController()
+                assertTrue(other.requestFocus())
+            }
+            instrumentation.waitForIdleSync()
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_LEFT)
+            compose.runOnIdle { assertEquals(-10_000L, seeks.get()) }
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+            compose.runOnIdle { assertEquals(0L, seeks.get()) }
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            compose.waitUntil(5000) { view.isControllerFullyVisible }
+            compose.runOnIdle { assertTrue(other.requestFocus()) }
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            compose.runOnIdle { assertEquals(1, clicks.get()); assertEquals(0L, seeks.get()) }
+            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.runOnIdle { assertFalse(dialog.isShowing) }
+        } finally {
+            compose.runOnIdle {
+                if (created) { dialog.dismiss(); view.player = null; player.release() }
+            }
+        }
+    }
+
     @Test fun reportedAdvertisementIsRememberedAcrossControllersAndCanBeCleared() {
         compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
