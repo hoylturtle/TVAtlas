@@ -53,6 +53,7 @@ object WebDavDirectory {
         }
         val builder = factory.newDocumentBuilder().apply { setEntityResolver { _, _ -> InputSource(StringReader("")) } }
         val doc = builder.parse(InputSource(StringReader(xml)))
+        require(doc.documentElement.namespaceURI == "DAV:" && doc.documentElement.localName == "multistatus") { "Not a WebDAV directory" }
         val responses = doc.getElementsByTagNameNS("DAV:", "response")
         val baseUrl = requireNotNull(directory.toHttpUrlOrNull())
         val currentPath = baseUrl.pathSegments.filter { it.isNotEmpty() }

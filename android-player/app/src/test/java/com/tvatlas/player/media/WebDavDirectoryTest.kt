@@ -20,6 +20,9 @@ class WebDavDirectoryTest {
     }
     @Test fun refusesExternalEntitiesAndEncodedPathEscapes() {
         assertThrows(IllegalArgumentException::class.java) {
+            WebDavDirectory.parse("https://nas.test/m/", "https://nas.test/m/", "<html><body>Sign in</body></html>")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
             WebDavDirectory.parse("https://nas.test/m/", "https://nas.test/m/", "<!DOCTYPE d [<!ENTITY x SYSTEM 'file:///secret'>]><d/>")
         }
         for (url in listOf("https://nas.test/media2/movie.mp4", "https://nas.test/media/%2e%2e/private.mp4", "https://nas.test/media/x%2f../private.mp4", "http://nas.test/media/a.mp4", "https://user:pass@nas.test/media/a.mp4"))
