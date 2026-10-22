@@ -54,7 +54,7 @@ class MediaFolders(private val context: Context, private val scope: CoroutineSco
     fun addLocal(uri: Uri) = scope.launch {
         initialized.join()
         try {
-            require(DocumentsContract.isTreeUri(uri))
+            require(uri.scheme == "content" && uri.pathSegments.firstOrNull() == "tree" && uri.pathSegments.size >= 2)
             withContext(Dispatchers.IO) { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             val root = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
             val name = withContext(Dispatchers.IO) {
