@@ -8,6 +8,14 @@ import kotlinx.serialization.Serializable
 class VodItem private constructor(val url: String, val title: String, val key: String, val advertisementKey: String) {
     override fun toString() = "VodItem(url=[redacted], key=[redacted])"
     companion object {
+        /** Only app-selected local documents, never accepted from remote catalogue parsers. */
+        fun localDocument(url: String, title: String): VodItem {
+            val uri = java.net.URI(url)
+            require(uri.scheme == "content" && !uri.authority.isNullOrBlank() && url.length <= 8192)
+            val label = title.trim().take(80)
+            require(label.isNotBlank() && label.none { it.isISOControl() })
+            return VodItem(url, label, stableId("local-document\u0000$url"), stableId(url))
+        }
         fun episode(url: String, title: String, identity: String, sourceIdentity: String? = null): VodItem {
             require(identity.isNotBlank() && identity.length <= 1024)
             val validated = direct(url, title)

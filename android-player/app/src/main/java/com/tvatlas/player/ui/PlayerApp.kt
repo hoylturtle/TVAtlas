@@ -244,16 +244,18 @@ internal val colors = darkColorScheme(primary = Color(0xFF8B5CF6), onPrimary = C
                     }
                     4 -> {
                         var catalogOpen by rememberSaveable { mutableStateOf(true) }
+                        var localFilesOpen by rememberSaveable { mutableStateOf(false) }
                         val controller = model.cloudLibrary
                         val cloudState by controller.state.collectAsStateWithLifecycle()
                         var consumedMediaRequest by rememberSaveable { mutableIntStateOf(-1) }
                         LaunchedEffect(mediaRequestId) {
                             if (consumedMediaRequest != mediaRequestId) {
-                                mediaRequestedCatalog?.let { catalogOpen = it }
+                                mediaRequestedCatalog?.let { catalogOpen = it; localFilesOpen = false }
                                 consumedMediaRequest = mediaRequestId
                             }
                         }
-                        if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }, homeKind, homeBrowseRequest, homeSearchRequest) else CloudLibraryPage(cloudState, controller::importShare,
+                        if (localFilesOpen) MediaFoldersPage(model, { localFilesOpen = false; catalogOpen = true }, { localFilesOpen = false; catalogOpen = false })
+                        else if (catalogOpen) UnifiedVodPage(model, { catalogOpen = false }, homeKind, homeBrowseRequest, homeSearchRequest, onLocalFiles = { localFilesOpen = true }) else CloudLibraryPage(cloudState, controller::importShare,
                             { share -> model.cloudNetworkAction { controller.open(share) } },
                             { file -> model.cloudNetworkAction { controller.enter(file) } }, controller::back,
                             { model.cloudNetworkAction { controller.refresh() } },

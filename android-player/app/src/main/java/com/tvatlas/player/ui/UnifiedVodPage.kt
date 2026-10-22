@@ -25,7 +25,7 @@ import kotlinx.coroutines.*
 
 /** Film-first browsing: providers are kept in source management, never used as user-facing shelves. */
 @Composable internal fun UnifiedVodPage(model: com.tvatlas.player.PlayerViewModel, onFiles: () -> Unit,
-    homeKind: VodKind? = null, homeRequest: Int = 0, homeSearchRequest: Int = 0) {
+    homeKind: VodKind? = null, homeRequest: Int = 0, homeSearchRequest: Int = 0, onLocalFiles: (() -> Unit)? = null) {
     val repository = model.unifiedVod
     val state by repository.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { model.syncVodSubscriptions() }
@@ -109,6 +109,7 @@ import kotlinx.coroutines.*
                         modifier = Modifier.fillMaxWidth().selectionOutline(filter.kind == kind)) { Text(kind.label) }
                 }
                 Spacer(Modifier.weight(1f))
+                onLocalFiles?.let { action -> AtlasActionButton(onClick = action, modifier = Modifier.fillMaxWidth()) { Text("本地／NAS") } }
                 AtlasActionButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
             }
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -119,7 +120,7 @@ import kotlinx.coroutines.*
                     onBack = if (selected != null) ({ backToLibrary() }) else null,
                     onSearch = if (selected == null) ({ searchDraft = query; searchOpen = true }) else null,
                     onFilter = if (selected == null) ({ filtersOpen = true }) else null,
-                    onFiles = if (!wide) onFiles else null)
+                    onFiles = if (!wide) onFiles else null, onLocalFiles = if (!wide) onLocalFiles else null)
                 if (!wide && selected == null) AtlasTabs(UnifiedVod.browseKinds.map { it.label }, UnifiedVod.browseKinds.indexOf(filter.kind)) { index ->
                     kindName = UnifiedVod.browseKinds[index].name; genre = "全部"; region = "全部"; year = "全部"
                 }
@@ -138,7 +139,9 @@ import kotlinx.coroutines.*
                             else "正在加载${filter.kind.label}片单 · ${state.completed}/${state.total} 个来源", style = MaterialTheme.typography.bodyMedium)
                         if (state.items.isEmpty()) Text("首次打开此分类可能较慢，已返回的影片会陆续显示。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     }
-                    if (!state.loading && !short) state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (state.showingCache && state.cacheUpdatedAt != null) Text("缓存保存于 " + remember(state.cacheUpdatedAt) { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(state.cacheUpdatedAt!!)) }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (state.loading && state.items.isNotEmpty()) Text("已完成 ${state.completed}/${state.total} 个来源 · ${state.failed} 个暂不可用", style = MaterialTheme.typography.labelSmall)
+                    if (!state.loading) state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     state.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     if (state.items.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         if (state.loading) Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -220,7 +223,7 @@ import kotlinx.coroutines.*
 /** Compact tools beside the page title; filtering never occupies a row of large tiles. */
 @Composable internal fun VodLibraryToolbar(title: String, subtitle: String, compact: Boolean,
     onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, onFilter: (() -> Unit)? = null,
-    onFiles: (() -> Unit)? = null) {
+    onFiles: (() -> Unit)? = null, onLocalFiles: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().background(AtlasPageStyle.toolbar, AtlasPageStyle.corner).padding(horizontal = 8.dp)
         .testTag("vod-toolbar"), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) TvIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
@@ -230,6 +233,7 @@ import kotlinx.coroutines.*
         }
         if (onSearch != null) TvIconButton(onClick = onSearch, modifier = Modifier.testTag("vod-search-open")) { Icon(Icons.Default.Search, "搜索") }
         if (onFilter != null) TvTextButton(onClick = onFilter) { Text("筛选", style = MaterialTheme.typography.labelLarge) }
+        if (onLocalFiles != null) TvTextButton(onClick = onLocalFiles) { Text("本地／NAS", style = MaterialTheme.typography.labelLarge) }
         if (onFiles != null) TvTextButton(onClick = onFiles) { Text("网盘", style = MaterialTheme.typography.labelLarge) }
     }
 }

@@ -2,6 +2,9 @@
 package com.tvatlas.player.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,10 +30,13 @@ import com.tvatlas.player.vod.VodState
     onToggle: () -> Unit, onRestart: () -> Unit, nextEpisode: String? = null,
     preparing: Boolean = false, autoNext: Boolean = true, onAutoNext: (Boolean) -> Unit = {}, onNext: () -> Unit = {}) {
     val tv = atlasTv()
+    val controlsHeight = (LocalConfiguration.current.screenHeightDp * .7f).dp
     var controlsVisible by remember { mutableStateOf(true) }
     var seekMessage by remember { mutableStateOf<String?>(null) }
     var seekRequest by remember { mutableIntStateOf(0) }
     LaunchedEffect(seekRequest) { kotlinx.coroutines.delay(1500); seekMessage = null }
+    var linesOpen by remember { mutableStateOf(false) }
+    var skipsOpen by remember { mutableStateOf(false) }
     var confirmAd by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var tracks by remember(state.player) { mutableStateOf(false) }
@@ -81,7 +87,7 @@ import com.tvatlas.player.vod.VodState
                     update = { it.player = player; it.keepScreenOn = state.playing },
                     onRelease = { if (playerView[0] === it) playerView[0] = null; it.player = null; it.keepScreenOn = false })
             }
-            if (controlsVisible || preparing || state.player == null || state.error != null || state.resumeWarning != null || state.feedback != null) Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = .65f)).padding(horizontal = 8.dp)) {
+            if (controlsVisible || preparing || state.player == null || state.error != null || state.resumeWarning != null || state.feedback != null) Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().heightIn(max = controlsHeight).verticalScroll(rememberScrollState()).background(Color.Black.copy(alpha = .65f)).padding(horizontal = 8.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(8.dp)) {
                         Text(state.item?.title.orEmpty(), color = Color.White, maxLines = 1)
@@ -98,6 +104,8 @@ import com.tvatlas.player.vod.VodState
                     TvTextButton(onClick = { controller.seekBy(-30_000) }, enabled = state.seekable) { Text("快退30秒") }
                     TvTextButton(onClick = { controller.seekBy(30_000) }, enabled = state.seekable) { Text("快进30秒") }
                     TvTextButton(onClick = onRestart, enabled = state.seekable && !state.live) { Text("从头") }
+                    TvTextButton(onClick = { linesOpen = true }, enabled = state.lines.isNotEmpty()) { Text("本片线路") }
+                    TvTextButton(onClick = { skipsOpen = true }, enabled = state.seekable && !state.live) { Text("跳过片段") }
                     TvTextButton(onClick = { tracks = true }, enabled = state.ready) { Text("音轨／字幕") }
                     TvTextButton(onClick = { confirmAd = true }, enabled = state.player != null) { Text("有广告，换线路") }
                     TvTextButton(onClick = { confirmClear = true }) { Text("清除广告标记") }
@@ -112,6 +120,14 @@ import com.tvatlas.player.vod.VodState
                     TvTextButton(onClick = controller::dismissNotice) { Text("知道了") }
                 } }
                 state.resumeWarning?.let { Text(it, color = Color.LightGray, style = MaterialTheme.typography.bodySmall) }
+                if (state.versionChanged) Row {
+                    TvButton(onClick = controller::confirmResume, enabled = state.resumeProposal != null) { Text("继续原进度") }
+                    TvTextButton(onClick = controller::resumeFromBeginning) { Text("从头播放") }
+                }
+            }
+            if (state.undoSkipPosition != null) Row(Modifier.align(Alignment.BottomCenter).background(Color.Black.copy(alpha = .8f)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("已跳过标记片段", color = Color.White)
+                TvTextButton(onClick = controller::undoSkip) { Text("撤销本次跳过") }
             }
             seekMessage?.let { Text(it, Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = .7f)).padding(16.dp), color = Color.White) }
             if (state.player == null && state.error == null) CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -129,6 +145,8 @@ import com.tvatlas.player.vod.VodState
             title = { Text("清除全部广告标记？") }, text = { Text("本机之前避开的所有视频地址将恢复参与自动选线。") },
             confirmButton = { TvTextButton(onClick = { confirmClear = false; controller.clearAdvertisementReports() }) { Text("清除") } },
             dismissButton = { TvTextButton(onClick = { confirmClear = false }) { Text("取消") } })
+        if (linesOpen) VodLinesDialog(state, controller) { linesOpen = false }
+        if (skipsOpen) VodSkipDialog(state, controller) { skipsOpen = false }
         if (tracks) state.player?.let { PlaybackTrackDialog(it) { tracks = false } }
     }
 }

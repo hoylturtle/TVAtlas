@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal data class UnifiedVodState(val items: List<UnifiedMovie> = emptyList(), val loading: Boolean = false,
     val completed: Int = 0, val total: Int = 0, val failed: Int = 0, val canLoadMore: Boolean = true,
-    val error: String? = null, val notice: String? = null, val showingCache: Boolean = false)
+    val error: String? = null, val notice: String? = null, val showingCache: Boolean = false, val cacheUpdatedAt: Long? = null)
 @Serializable private data class ShelfOffer(val source: String, val movie: CatalogMovie)
 @Serializable private data class CachedShelf(val updated: Long, val offers: List<ShelfOffer>)
 @Serializable private data class CachedCatalog(val updated: Long, val page: CatalogPage)
@@ -84,6 +84,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         val append = more && currentKey == key && !interrupted
         interrupted = false
         val previous = if (currentKey == key) offers else emptyList()
+        val previousCacheTime = _state.value.cacheUpdatedAt
         lastFilter = filter; lastQuery = query; lastCacheOnly = cacheOnly
         job?.cancel(); val token = ++generation
         if (!append) { offers = emptyList(); round = 0 }
@@ -92,12 +93,13 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         _state.value = UnifiedVodState(if (append || previous.isNotEmpty()) _state.value.items else emptyList(), loading = true, total = sources.size, showingCache = previous.isNotEmpty())
         job = scope.launch {
             if (!append) {
-                val saved = if (previous.isNotEmpty()) previous else loadShelf(key, filter, query)
+                val savedShelf = if (previous.isNotEmpty()) previous to previousCacheTime else loadShelf(key, filter, query)
+                val saved = savedShelf.first
                 if (token != generation) return@launch
                 offers = saved
                 val cachedItems = withContext(Dispatchers.Default) { UnifiedVod.sorted(UnifiedVod.merge(saved), filter.sort) }
                 if (token != generation) return@launch
-                _state.value = _state.value.copy(showingCache = saved.isNotEmpty(), items = cachedItems)
+                _state.value = _state.value.copy(showingCache = saved.isNotEmpty(), items = cachedItems, cacheUpdatedAt = savedShelf.second)
             }
             if (cacheOnly) {
                 _state.value = _state.value.copy(loading = false, canLoadMore = false,
@@ -138,7 +140,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                         val snapshot = offers; val revision = completed
                         val merged = withContext(Dispatchers.Default) { UnifiedVod.sorted(UnifiedVod.merge(snapshot), filter.sort) }
                         if (token == generation && revision >= _state.value.completed) {
-                            _state.value = _state.value.copy(items = merged, completed = revision, showingCache = failed == completed && merged.isNotEmpty(),
+                            _state.value = _state.value.copy(items = merged, completed = revision, showingCache = failed == completed && merged.isNotEmpty(), cacheUpdatedAt = if (failed < completed) System.currentTimeMillis() else _state.value.cacheUpdatedAt,
                                 failed = failed, canLoadMore = offers.size < 1200,
                                 error = if (offers.size >= 1200) "本次已加载 1200 条记录，请使用分类或搜索缩小范围" else null)
                             if (result != null && snapshot.isNotEmpty()) saveShelf(key, snapshot)
@@ -217,24 +219,27 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         if (found.isEmpty()) throw IllegalArgumentException("暂时未找到可用播放信息，请稍后重试")
         withContext(Dispatchers.Default) { UnifiedVod.merge(found.toList()).first() }
     }
-    private suspend fun loadShelf(key: String, filter: VodFilter, query: String): List<VodOffer> = withContext(Dispatchers.IO) {
+    private suspend fun loadShelf(key: String, filter: VodFilter, query: String): Pair<List<VodOffer>, Long?> = withContext(Dispatchers.IO) {
         val exact = File(directory, "shelf-" + stableId(key) + ".json")
         val candidates = listOf(exact) + directory.listFiles().orEmpty()
             .filter { it.name.startsWith("shelf-") && it.extension == "json" && it != exact }
             .sortedByDescending { it.lastModified() }.take(12)
         val found = mutableListOf<VodOffer>()
+        var updated: Long? = null
         var bytes = 0L
         for (file in candidates) {
             if (!file.isFile || file.length() > 8 * 1024 * 1024 || bytes + file.length() > 16 * 1024 * 1024) continue
             bytes += file.length()
             val cached = runCatching { json.decodeFromString<CachedShelf>(file.readText()) }.getOrNull() ?: continue
             if (System.currentTimeMillis() - cached.updated !in 0..604800000L) continue
+            val startSize = found.size
             found += cached.offers.asSequence().filter { it.source in sources && UnifiedVod.matches(it.movie, filter) &&
                 (query.isBlank() || it.movie.name.contains(query.trim(), ignoreCase = true)) }
                 .take(1200).map { VodOffer(it.source, it.movie.copy(episodes = emptyList())) }.toList()
+            if (found.size > startSize) updated = minOf(updated ?: cached.updated, cached.updated)
             if (file == exact && found.isNotEmpty() || found.size >= 1200) break
         }
-        found.distinctBy { it.source to it.movie.id }.take(1200)
+        found.distinctBy { it.source to it.movie.id }.take(1200) to updated
     }
     private suspend fun saveShelf(key: String, offers: List<VodOffer>) = diskLock.withLock {
         withContext(Dispatchers.IO) {

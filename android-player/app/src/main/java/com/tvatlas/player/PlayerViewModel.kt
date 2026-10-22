@@ -70,7 +70,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         activeHomeMovies?.setVisible(active && homePageActive)
         activeHomeSeries?.setVisible(active && homePageActive)
         if (active && homePageActive) refreshHomeAutomatically()
-        if (!active) cancelVodSelection()
+        if (!active) { cancelVodSelection(); mediaFoldersActive?.pause() }
         else if (vodPageActive) activeUnifiedVod?.refreshDue()
     }
     private var vodActive: com.tvatlas.player.vod.VodPlaybackController? = null
@@ -87,6 +87,31 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 viewModelScope.launch {
                     if (code in 4001..4005) vodQuality.reject(item.url, context) else vodQuality.invalidate(item.url, context)
                 } }).also { vodActive = it }
+    }
+    private var mediaFoldersActive: com.tvatlas.player.media.MediaFolders? = null
+    val mediaFolders by lazy { com.tvatlas.player.media.MediaFolders(getApplication(), viewModelScope).also { mediaFoldersActive = it } }
+    fun openMediaFile(entry: com.tvatlas.player.media.MediaEntry) {
+        val current = mediaFolders.state.value
+        val folder = current.selected ?: return
+        if (entry.directory || entry !in current.entries) return
+        cancelVodSelection(); clearVodQueue()
+        val local = !folder.webDav
+        val item = try {
+            if (local) com.tvatlas.core.vod.VodItem.localDocument(entry.uri, entry.name)
+            else com.tvatlas.core.vod.VodItem.direct(entry.uri, entry.name.take(80))
+        } catch (_: Exception) { _message.value = "文件地址无效，请重新选择"; return }
+        val action: () -> Unit = {
+            viewModelScope.launch {
+                try {
+                    autoRefreshJob?.cancelAndJoin()
+                    stopPlayback(false)
+                    val client = if (local) pool.direct else com.tvatlas.player.media.WebDavDirectory.client(folder)
+                    vod.open(item, client, if (local) "本地文件" else "NAS · ${folder.name}")
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { _message.value = "文件暂时无法播放，请检查设备连接" }
+            }
+        }
+        if (local) action() else cloudNetworkAction(action)
     }
     fun openVod(url: String, title: String) {
         cancelVodSelection(); clearVodQueue()
@@ -124,7 +149,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val items = ordered.map { com.tvatlas.core.vod.VodItem.direct(it.url, title.take(80)) }
                     if (items.isEmpty()) { _message.value = "这一集没有可播放地址"; return@launch }
                     stopPlayback(false)
-                    vod.open(items.first(), client, label, items.drop(1))
+                    vod.open(items.first(), client, label, items.drop(1), lineNames = ordered.associate { it.url to it.line.ifBlank { "播放线路" } })
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) { debugLog.error("VOD_SELECT", error); _message.value = "自动选线失败，请重试或检查网络" }
                 finally { if (token == vodChoiceGeneration) _vodSelecting.value = false }
@@ -278,7 +303,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     _nextVodEpisode.value = series?.let { VodEpisodeChoices.next(VodEpisodeChoices.of(it.movie), choice.name)?.name }
                     stopPlayback(false)
                     vod.open(items.first(), fallback.first, fallback.second, items.drop(1),
-                        alternativeClients = clients, alternativeLabels = labels)
+                        alternativeClients = clients, alternativeLabels = labels, lineNames = ordered.associate { episode ->
+                            val source = unifiedEpisodeSources[episode.url]
+                            val provider = vodSubscriptions.state.value.sources.firstOrNull { it.api == source }?.name.orEmpty()
+                            episode.url to listOf(provider, episode.line).filter { it.isNotBlank() }.joinToString(" · ").take(120).ifBlank { "播放线路" }
+                        })
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
                     debugLog.error("VOD_UNIFIED", error); _message.value = "播放信息暂不可用，请重试或检查网络"
@@ -356,9 +385,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun toggleVod() {
         if (vod.state.value.playing || vod.state.value.player?.playWhenReady == true) vod.pause()
+        else if (vod.state.value.item?.url?.startsWith("content://") == true) vod.toggle()
         else cloudNetworkAction { vod.toggle() }
     }
-    fun restartVod() = cloudNetworkAction { vod.restart() }
+    fun restartVod() { if (vod.state.value.item?.url?.startsWith("content://") == true) vod.restart() else cloudNetworkAction { vod.restart() } }
     private var cloudActive: com.tvatlas.player.cloud.CloudLibraryController? = null
     val cloudLibrary by lazy {
         com.tvatlas.player.cloud.CloudLibraryController(viewModelScope,

@@ -177,6 +177,55 @@ class PreviewVodPlayerTest {
         }
     }
 
+    @Test fun localContentPlaysOfflineAndManualSkipCanBeUndone() {
+        compose.setContent { AtlasTheme {} }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val file = java.io.File(context.cacheDir, "updates/local-playback-fixture.mp4").apply {
+            parentFile!!.mkdirs()
+            instrumentation.context.assets.open("vod-fixture.mp4").use { input -> outputStream().use { input.copyTo(it) } }
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", file)
+        val item = VodItem.localDocument(uri.toString(), "离线视频")
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        lateinit var controller: VodPlaybackController
+        var created = false
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        try {
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { false })
+                created = true; controller.open(item, label = "本地文件")
+            }
+            compose.waitUntil(20000) { controller.state.value.ready }
+            compose.runOnIdle {
+                assertTrue(controller.state.value.seekable)
+                controller.state.value.skipRanges.toList().forEach(controller::removeSkip)
+                controller.saveSkip(1000, 5000)
+                controller.state.value.player!!.seekTo(2000)
+                controller.state.value.player!!.play()
+            }
+            compose.waitUntil(10000) { controller.state.value.undoSkipPosition != null }
+            compose.runOnIdle {
+                assertTrue(controller.state.value.player!!.currentPosition >= 5000)
+                controller.undoSkip(); controller.pause()
+                assertTrue(controller.state.value.player!!.currentPosition < 5000)
+                assertNull(controller.state.value.undoSkipPosition)
+                controller.close(); controller.open(item, label = "本地文件")
+            }
+            compose.waitUntil(20000) { controller.state.value.ready }
+            compose.runOnIdle { assertTrue(controller.state.value.skipsEnabled); assertEquals(1, controller.state.value.skipRanges.size) }
+        } finally {
+            compose.runOnIdle {
+                if (created) { controller.state.value.skipRanges.toList().forEach(controller::removeSkip); controller.close() }
+                scope.cancel()
+            }
+            file.delete()
+        }
+    }
+
     @Test fun nativePlayerSeeksResumesAndHonoursNetworkPolicy() {
         compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
