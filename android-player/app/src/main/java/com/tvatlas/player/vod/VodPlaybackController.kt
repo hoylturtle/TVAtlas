@@ -135,6 +135,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                 androidx.media3.datasource.DefaultDataSource.Factory(context, OkHttpDataSource.Factory(mediaClient()).setUserAgent("Mozilla/5.0 TVAtlas")))).build()
             active = player
             val preparingAt = android.os.SystemClock.elapsedRealtime()
+            var firstFrameRecorded = false
             var restored = false
             player.setAudioAttributes(AudioAttributes.DEFAULT, true)
             player.setHandleAudioBecomingNoisy(true)
@@ -179,7 +180,10 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                     onMeasuredQuality(item, height, routeLabel)
                 }
                 override fun onRenderedFirstFrame() {
-                    if (active === player) updateLine(item, "已出画面", player.videoSize.height.takeIf { it > 0 }, android.os.SystemClock.elapsedRealtime() - preparingAt)
+                    if (active === player && !firstFrameRecorded) {
+                        firstFrameRecorded = true
+                        updateLine(item, "已出画面", player.videoSize.height.takeIf { it > 0 }, android.os.SystemClock.elapsedRealtime() - preparingAt)
+                    }
                 }
                 override fun onTimelineChanged(timeline: Timeline, reason: Int) { publish(player) }
                 override fun onAvailableCommandsChanged(availableCommands: Player.Commands) { publish(player) }
