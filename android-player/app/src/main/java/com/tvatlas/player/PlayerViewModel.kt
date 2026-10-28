@@ -323,9 +323,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                         com.tvatlas.player.vod.stremio.StremioAddonClient(client).streams(entry, target.first, target.second, choice.name)
                     }
                     unsupported += response.unsupported
-                    if (stremioAddons.find(entry.source) != null) response.episodes.forEach {
-                        unifiedEpisodeSources = unifiedEpisodeSources + (it.url to entry.source)
-                        results.add(it)
+                    if (stremioAddons.find(entry.source) != null) response.episodes.forEach { episode ->
+                        // Keep the URL, its provider and its request headers from the same response.
+                        // Multiple plugins frequently return the same CDN URL.
+                        if (results.size < 120 && results.none { it.url == episode.url } && plain.none { it.url == episode.url }) {
+                            unifiedEpisodeSources = unifiedEpisodeSources + (episode.url to entry.source)
+                            results.add(episode)
+                        }
                     }
                 } catch (timeout: TimeoutCancellationException) { failures++ }
                 catch (cancelled: CancellationException) { throw cancelled }
