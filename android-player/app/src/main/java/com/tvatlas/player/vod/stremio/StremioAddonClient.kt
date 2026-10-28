@@ -38,15 +38,16 @@ internal class StremioAddonClient(client: OkHttpClient) {
     private suspend fun readEntry(entry: AddonEntry, resource: String, type: String, id: String, extra: Map<String, String> = emptyMap()): String =
         if (entry.address == OpenFilmsAddon.ADDRESS) OpenFilmsAddon.response(resource, type, id, extra["search"].orEmpty())
         else read(resource(entry.address, resource, type, id, extra))
-    suspend fun manifest(address: String) = StremioProtocol.manifest(read(address.toHttpUrl())).also {
+    suspend fun manifest(address: String) = withContext(Dispatchers.Default) { StremioProtocol.manifest(read(address.toHttpUrl())).also {
         require(!it.configurationRequired) { "此插件需要先配置，请添加配置完成后的地址" }
-    }
+    } }
     suspend fun catalog(entry: AddonEntry, page: Int, query: String, id: String?, type: String?, offset: Int = 0): CatalogPage {
         val kind = type?.takeIf { it in setOf("movie", "series") } ?: id?.substringBefore(':') ?: "movie"
         if (id != null) {
             val rawId = id.substringAfter(':')
             if (entry.manifest.supports("meta", kind, rawId)) {
-                val movie = StremioProtocol.detail(readEntry(entry, "meta", kind, rawId), entry.source, kind)
+                val text = readEntry(entry, "meta", kind, rawId)
+                val movie = withContext(Dispatchers.Default) { StremioProtocol.detail(text, entry.source, kind) }
                 require(movie.id == id) { "插件返回了不匹配的影片" }
                 return CatalogPage(listOf(movie), 1, 1)
             }
@@ -58,12 +59,14 @@ internal class StremioAddonClient(client: OkHttpClient) {
         val extra = linkedMapOf<String, String>()
         if (query.isNotBlank()) extra["search"] = query.take(100)
         if (catalog.skip && page > 1) extra["skip"] = offset.toString()
-        val movies = StremioProtocol.catalog(readEntry(entry, "catalog", kind, catalog.id, extra), kind, entry.source)
+        val text = readEntry(entry, "catalog", kind, catalog.id, extra)
+        val movies = withContext(Dispatchers.Default) { StremioProtocol.catalog(text, kind, entry.source) }
         return CatalogPage(movies, page, if (catalog.skip && movies.isNotEmpty()) page + 1 else page)
     }
     suspend fun streams(entry: AddonEntry, type: String, id: String, name: String): AddonStreams {
         if (!entry.manifest.supports("stream", type, id)) return AddonStreams(emptyList(), 0)
-        return StremioProtocol.streams(readEntry(entry, "stream", type, id), name)
+        val text = readEntry(entry, "stream", type, id)
+        return withContext(Dispatchers.Default) { StremioProtocol.streams(text, name) }
     }
 }
 

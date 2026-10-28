@@ -39,7 +39,7 @@ object StremioProtocol {
                 else -> null
             }
         }.filter { it.name in setOf("catalog", "meta", "stream", "subtitles") }
-        require(resources.any { it.name in setOf("catalog", "meta", "stream") }) { "此插件暂不提供可兼容的目录或播放接口，独立字幕插件尚未支持" }
+        require(resources.any { it.name in setOf("catalog", "meta", "stream") && it.types.any { type -> type in setOf("movie", "series") } }) { "此插件暂不提供可兼容的目录或播放接口，独立字幕插件尚未支持" }
         val catalogs = (row["catalogs"] as? JsonArray).orEmpty().take(30).mapNotNull {
             val c = it as? JsonObject ?: return@mapNotNull null
             if (!safeId(c.text("id")) || c.text("type") !in types) return@mapNotNull null
