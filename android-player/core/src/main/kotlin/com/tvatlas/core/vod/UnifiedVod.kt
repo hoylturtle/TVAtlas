@@ -84,6 +84,8 @@ object UnifiedVod {
         VodSort.TITLE -> items.sortedBy { it.movie.name }
     }
     fun identity(movie: CatalogMovie): String {
+        if (Regex("tt\\d{5,12}").matches(movie.imdbId)) return "${kind(movie.category)}|imdb:${movie.imdbId}"
+        if (movie.discoveryOnly && movie.identityNamespace.isNotBlank()) return "${kind(movie.category)}|addon:${movie.identityNamespace}:${movie.id}"
         val title = movie.name.lowercase().replace(Regex("[\\s\\p{P}]+"), "")
         val year = Regex("(?:19|20)\\d{2}").find(movie.year)?.value ?: "unknown"
         val identityAreas = if (movie.area.isBlank()) regions(movie) else movie.area.split(Regex("[,，/、;；]+"))

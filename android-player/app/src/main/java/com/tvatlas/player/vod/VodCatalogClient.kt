@@ -7,9 +7,13 @@ import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.TimeUnit
 
-class VodCatalogClient(client: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null, private val eventTag: String = "VOD_CATALOG") {
+internal class VodCatalogClient(client: OkHttpClient, private val log: com.tvatlas.player.debug.DebugLog? = null, private val eventTag: String = "VOD_CATALOG", private val addon: ((String) -> com.tvatlas.player.vod.stremio.AddonEntry?)? = null) {
     private val client = client.newBuilder().followRedirects(true).followSslRedirects(true).callTimeout(25, TimeUnit.SECONDS).build()
-    suspend fun load(api: String, page: Int, search: String, id: String? = null, type: String? = null, listingOnly: Boolean = false, year: String? = null, area: String? = null): CatalogPage {
+    suspend fun load(api: String, page: Int, search: String, id: String? = null, type: String? = null, listingOnly: Boolean = false, year: String? = null, area: String? = null, addonOffset: Int = 0): CatalogPage {
+        if (api.startsWith("stremio:")) {
+            val entry = addon?.invoke(api) ?: error("插件已停用或移除，请返回片库刷新")
+            return com.tvatlas.player.vod.stremio.StremioAddonClient(client).catalog(entry, page, search, id, type, addonOffset)
+        }
         if (api == ArchiveVodCatalog.SOURCE) {
             log?.event("INFO", eventTag, "start host=archive.org publicDomain=true")
             return try {

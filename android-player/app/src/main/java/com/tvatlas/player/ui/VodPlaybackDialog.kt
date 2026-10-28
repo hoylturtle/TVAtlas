@@ -37,6 +37,7 @@ import com.tvatlas.player.vod.VodState
     LaunchedEffect(seekRequest) { kotlinx.coroutines.delay(1500); seekMessage = null }
     var linesOpen by remember { mutableStateOf(false) }
     var skipsOpen by remember { mutableStateOf(false) }
+    var confirmProviderAd by remember { mutableStateOf(false) }
     var confirmAd by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var tracks by remember(state.player) { mutableStateOf(false) }
@@ -108,6 +109,7 @@ import com.tvatlas.player.vod.VodState
                     TvTextButton(onClick = { skipsOpen = true }, enabled = state.seekable && !state.live) { Text("跳过片段") }
                     TvTextButton(onClick = { tracks = true }, enabled = state.ready) { Text("音轨／字幕") }
                     TvTextButton(onClick = { confirmAd = true }, enabled = state.player != null) { Text("有广告，换线路") }
+                    if (state.canBlockSource) TvTextButton(onClick = { confirmProviderAd = true }) { Text("屏蔽此来源") }
                     TvTextButton(onClick = { confirmClear = true }) { Text("清除广告标记") }
                 }
                 if (tv && state.seekable) Text("菜单收起后，←／→ 快退／快进10秒；长按连续调整", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
@@ -141,8 +143,12 @@ import com.tvatlas.player.vod.VodState
             } + "\n本机会避开这条影片线路，并尝试 ${state.alternatives} 条备用线路；没有备用则暂停。不同版本进度可能有偏差。也可取消后手动快进。") },
             confirmButton = { TvTextButton(onClick = { confirmAd = false; controller.reportAdvertisement() }) { Text("标记并换线") } },
             dismissButton = { TvTextButton(onClick = { confirmAd = false }) { Text("取消") } })
+        if (confirmProviderAd) AlertDialog(onDismissRequest = { confirmProviderAd = false },
+            title = { Text("屏蔽当前影视来源？") }, text = { Text("本机将避开此来源的所有影片线路，并尝试其他来源。不会删除片目；可通过清除广告标记恢复。") },
+            confirmButton = { TvTextButton(onClick = { confirmProviderAd = false; controller.blockCurrentProvider() }) { Text("屏蔽并换线") } },
+            dismissButton = { TvTextButton(onClick = { confirmProviderAd = false }) { Text("取消") } })
         if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
-            title = { Text("清除全部广告标记？") }, text = { Text("本机之前避开的所有视频地址将恢复参与自动选线。") },
+            title = { Text("清除全部广告标记？") }, text = { Text("本机之前避开的视频地址和已屏蔽的来源将恢复参与自动选线。") },
             confirmButton = { TvTextButton(onClick = { confirmClear = false; controller.clearAdvertisementReports() }) { Text("清除") } },
             dismissButton = { TvTextButton(onClick = { confirmClear = false }) { Text("取消") } })
         if (linesOpen) VodLinesDialog(state, controller) { linesOpen = false }

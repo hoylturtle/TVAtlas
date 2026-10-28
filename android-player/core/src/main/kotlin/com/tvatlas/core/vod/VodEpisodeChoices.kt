@@ -6,10 +6,22 @@ object VodEpisodeChoices {
     fun of(movie: CatalogMovie): List<VodEpisodeChoice> {
         val groups = linkedMapOf<String, MutableList<CatalogEpisode>>()
         movie.episodes.forEach { episode -> groups.getOrPut(key(episode.name)) { mutableListOf() }.add(episode) }
-        return groups.entries.sortedBy { it.key.removePrefix("episode:").toLongOrNull() ?: Long.MAX_VALUE }.map { (key, episodes) -> VodEpisodeChoice(if (key == "feature") "正片" else episodes.first().name, episodes.sortedByDescending { it.qualityHeight }.distinctBy { it.url }) }
+        return groups.entries.sortedWith(compareBy<Map.Entry<String, MutableList<CatalogEpisode>>> {
+            if (it.key.startsWith("season:")) it.key.split(':').getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE else 0
+        }.thenBy {
+            if (it.key.startsWith("season:")) it.key.substringAfterLast(':').toLongOrNull() ?: Long.MAX_VALUE
+            else it.key.removePrefix("episode:").toLongOrNull() ?: Long.MAX_VALUE
+        }).map { (key, episodes) -> VodEpisodeChoice(if (key == "feature") "正片" else episodes.first().name, episodes.sortedByDescending { it.qualityHeight }.distinctBy { it.url }) }
     }
     /** Only a contiguous, explicit episode number can advance automatically; no guessing for extras or feature films. */
     fun next(choices: List<VodEpisodeChoice>, currentName: String): VodEpisodeChoice? {
+        val seasonal = Regex("s(\\d+)e(\\d+)", RegexOption.IGNORE_CASE).matchEntire(currentName)
+        if (seasonal != null) {
+            val season = seasonal.groupValues[1].toIntOrNull() ?: return null
+            val episode = seasonal.groupValues[2].toIntOrNull() ?: return null
+            if (episode == Int.MAX_VALUE) return null
+            return choices.singleOrNull { key(it.name) == "season:$season:episode:${episode + 1}" }
+        }
         val current = key(currentName).takeIf { it.startsWith("episode:") }?.substringAfter(':')?.toIntOrNull() ?: return null
         if (current == Int.MAX_VALUE) return null
         return choices.singleOrNull { key(it.name) == "episode:${current + 1}" }
@@ -17,6 +29,11 @@ object VodEpisodeChoices {
     fun identity(name: String): String = key(name)
     private fun key(name: String): String {
         val compact = name.lowercase().replace(Regex("\\s+"), "")
+        val seasonal = Regex("s(\\d+)e(\\d+)").matchEntire(compact)
+        if (seasonal != null) {
+            val season = seasonal.groupValues[1].toIntOrNull(); val episode = seasonal.groupValues[2].toIntOrNull()
+            if (season != null && episode != null) return "season:$season:episode:$episode"
+        }
         val numbered = Regex("(?:第)?0*(\\d+)(?:集|话|話|期)?").matchEntire(compact)
             ?: Regex("(?:ep?|episode)0*(\\d+)").matchEntire(compact)
         if (numbered != null) return "episode:${numbered.groupValues[1].trimStart('0').ifBlank { "0" }}"

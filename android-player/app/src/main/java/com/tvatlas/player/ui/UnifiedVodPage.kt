@@ -25,7 +25,7 @@ import kotlinx.coroutines.*
 
 /** Film-first browsing: providers are kept in source management, never used as user-facing shelves. */
 @Composable internal fun UnifiedVodPage(model: com.tvatlas.player.PlayerViewModel, onFiles: () -> Unit,
-    homeKind: VodKind? = null, homeRequest: Int = 0, homeSearchRequest: Int = 0, onLocalFiles: (() -> Unit)? = null) {
+    homeKind: VodKind? = null, homeRequest: Int = 0, homeSearchRequest: Int = 0, onLocalFiles: (() -> Unit)? = null, onAddons: (() -> Unit)? = null) {
     val repository = model.unifiedVod
     val state by repository.state.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { model.syncVodSubscriptions() }
@@ -108,6 +108,7 @@ import kotlinx.coroutines.*
                     TvTextButton(onClick = { kindName = kind.name; genre = "全部"; region = "全部"; year = "全部" },
                         modifier = Modifier.fillMaxWidth().selectionOutline(filter.kind == kind)) { Text(kind.label) }
                 }
+                onAddons?.let { action -> AtlasActionButton(onClick = action, modifier = Modifier.fillMaxWidth()) { Text("影视插件") } }
                 Spacer(Modifier.weight(1f))
                 onLocalFiles?.let { action -> AtlasActionButton(onClick = action, modifier = Modifier.fillMaxWidth()) { Text("本地／NAS") } }
                 AtlasActionButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) { Text("网盘文件") }
@@ -120,7 +121,7 @@ import kotlinx.coroutines.*
                     onBack = if (selected != null) ({ backToLibrary() }) else null,
                     onSearch = if (selected == null) ({ searchDraft = query; searchOpen = true }) else null,
                     onFilter = if (selected == null) ({ filtersOpen = true }) else null,
-                    onFiles = if (!wide) onFiles else null, onLocalFiles = if (!wide) onLocalFiles else null)
+                    onFiles = if (!wide) onFiles else null, onLocalFiles = if (!wide) onLocalFiles else null, onAddons = if (!wide) onAddons else null)
                 if (!wide && selected == null) AtlasTabs(UnifiedVod.browseKinds.map { it.label }, UnifiedVod.browseKinds.indexOf(filter.kind)) { index ->
                     kindName = UnifiedVod.browseKinds[index].name; genre = "全部"; region = "全部"; year = "全部"
                 }
@@ -223,7 +224,7 @@ import kotlinx.coroutines.*
 /** Compact tools beside the page title; filtering never occupies a row of large tiles. */
 @Composable internal fun VodLibraryToolbar(title: String, subtitle: String, compact: Boolean,
     onBack: (() -> Unit)? = null, onSearch: (() -> Unit)? = null, onFilter: (() -> Unit)? = null,
-    onFiles: (() -> Unit)? = null, onLocalFiles: (() -> Unit)? = null) {
+    onFiles: (() -> Unit)? = null, onLocalFiles: (() -> Unit)? = null, onAddons: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().background(AtlasPageStyle.toolbar, AtlasPageStyle.corner).padding(horizontal = 8.dp)
         .testTag("vod-toolbar"), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) TvIconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回片库") }
@@ -233,8 +234,20 @@ import kotlinx.coroutines.*
         }
         if (onSearch != null) TvIconButton(onClick = onSearch, modifier = Modifier.testTag("vod-search-open")) { Icon(Icons.Default.Search, "搜索") }
         if (onFilter != null) TvTextButton(onClick = onFilter) { Text("筛选", style = MaterialTheme.typography.labelLarge) }
-        if (onLocalFiles != null) TvTextButton(onClick = onLocalFiles) { Text("本地／NAS", style = MaterialTheme.typography.labelLarge) }
-        if (onFiles != null) TvTextButton(onClick = onFiles) { Text("网盘", style = MaterialTheme.typography.labelLarge) }
+        if (onAddons != null) {
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                TvTextButton(onClick = { menu = true }) { Text("更多", style = MaterialTheme.typography.labelLarge) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("影视插件") }, onClick = { menu = false; onAddons() })
+                    onLocalFiles?.let { action -> DropdownMenuItem(text = { Text("本地／NAS") }, onClick = { menu = false; action() }) }
+                    onFiles?.let { action -> DropdownMenuItem(text = { Text("网盘文件") }, onClick = { menu = false; action() }) }
+                }
+            }
+        } else {
+            if (onLocalFiles != null) TvTextButton(onClick = onLocalFiles) { Text("本地／NAS", style = MaterialTheme.typography.labelLarge) }
+            if (onFiles != null) TvTextButton(onClick = onFiles) { Text("网盘", style = MaterialTheme.typography.labelLarge) }
+        }
     }
 }
 

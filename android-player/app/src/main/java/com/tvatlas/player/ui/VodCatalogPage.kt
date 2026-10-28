@@ -219,7 +219,7 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
                 MoviePoster(movie, loader, allowNetwork, Modifier.fillMaxWidth().then(if (short) Modifier.height(posterHeight) else Modifier.aspectRatio(if (compact) 1.1f else .85f)))
                 Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(movie.name, modifier = Modifier.testTag("vod-title:${movie.id}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    if (!short) Text(movie.category.ifBlank { "影片" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (!short) Text(if (movie.discoveryOnly) "片目 · 待查询线路" else movie.category.ifBlank { "影片" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -258,9 +258,9 @@ internal fun readVodSources(context: android.content.Context): List<Pair<String,
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(movie.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(movie.category.ifBlank { "影片" }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                        Text(if (movie.episodes.isEmpty() && loading) "正在准备播放信息" else if (movie.episodes.isEmpty()) "暂无可用播放线路" else "共 ${episodes.size} 集 · 自动选择可用线路", style = MaterialTheme.typography.bodySmall)
+                        Text(if (movie.episodes.isEmpty() && loading) "正在准备播放信息" else if (movie.episodes.isEmpty()) "暂无可用播放线路" else if (movie.discoveryOnly) "${episodes.size} 个选集 · 播放时查询线路" else "共 ${episodes.size} 集 · 自动选择可用线路", style = MaterialTheme.typography.bodySmall)
                         episodes.firstOrNull()?.let { episode -> TvButton(onClick = { onPlay(episode) }, enabled = !loading) {
-                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Text("立即播放")
+                            Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp)); Text(if (movie.discoveryOnly) "查询播放线路" else "立即播放")
                         } }
                     }
                 }

@@ -13,12 +13,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 
-data class VodLineInfo(val id: String, val name: String, val route: String, val status: String = "未验证", val height: Int? = null, val firstFrameMs: Long? = null)
+data class VodLineInfo(val id: String, val name: String, val route: String, val status: String = "未验证", val height: Int? = null, val firstFrameMs: Long? = null, val advertisement: String = "广告情况未知")
 data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
     val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
     val feedback: String? = null, val insertionMarkers: Boolean? = null, val alternatives: Int = 0,
     val error: String? = null, val qualityHeight: Int? = null, val resumeWarning: String? = null, val routeLabel: String = "直连", val seekable: Boolean = false, val lines: List<VodLineInfo> = emptyList(), val currentLine: String? = null,
-    val skipRanges: List<VodSkipRange> = emptyList(), val skipsEnabled: Boolean = false, val undoSkipPosition: Long? = null, val resumeProposal: Long? = null, val versionChanged: Boolean = false)
+    val skipRanges: List<VodSkipRange> = emptyList(), val skipsEnabled: Boolean = false, val undoSkipPosition: Long? = null, val resumeProposal: Long? = null, val versionChanged: Boolean = false, val canBlockSource: Boolean = false)
 
 /** All player commands run on the main thread. Source URLs never enter logs or persistence. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -44,7 +44,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private fun lineSnapshot(current: VodItem): List<VodLineInfo> = lineItems.mapIndexed { index, item ->
         val id = adKey(item.url)
         (lineResults[id] ?: VodLineInfo(id, namesByUrl[item.url] ?: "线路 ${index + 1}", lineRoutes[item.url] ?: routeLabel))
-            .let { if (reported(item)) it.copy(status = "已标记有广告") else if (item.url == current.url && it.status == "未验证") it.copy(status = "连接中") else it }
+            .let { if (reported(item)) it.copy(status = "已标记有广告或来源已屏蔽", advertisement = "本机已避开") else if (item.url == current.url && it.status == "未验证") it.copy(status = "连接中") else it }
     }
     private fun updateLine(item: VodItem, status: String, height: Int? = null, firstFrameMs: Long? = null) {
         val id = adKey(item.url)
@@ -55,8 +55,10 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private var reportAction: (() -> Unit)? = null
     private fun adKey(url: String): String = java.security.MessageDigest.getInstance("SHA-256")
         .digest(url.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
-    private fun reported(item: VodItem) = adPreferences.getBoolean(item.advertisementKey, false) ||
-        adPreferences.getBoolean(adKey(item.url), false)
+    fun reported(item: VodItem) = adPreferences.getBoolean(item.advertisementKey, false) ||
+        adPreferences.getBoolean(adKey(item.url), false) ||
+        item.providerKey?.let { adPreferences.getBoolean("provider:$it", false) } == true
+    fun providerBlocked(source: String) = adPreferences.getBoolean("provider:" + com.tvatlas.core.model.stableId("vod-provider\u0000$source"), false)
     private fun playAllowed() = _state.value.item?.url?.startsWith("content://") == true || canPlay()
     private var active: ExoPlayer? = null
     private var generation = 0L
@@ -122,7 +124,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         lineResults[currentId]?.let { lineResults[currentId] = it.copy(status = "连接中", firstFrameMs = null) }
         val skipSettings = skips.read(item.url)
         _state.value = VodState(item = item, routeLabel = routeLabel, alternatives = alternatives.count { it.advertisementKey != item.advertisementKey },
-            lines = lineSnapshot(item), currentLine = adKey(item.url), skipRanges = skipSettings.ranges, skipsEnabled = skipSettings.enabled)
+            lines = lineSnapshot(item), currentLine = adKey(item.url), skipRanges = skipSettings.ranges, skipsEnabled = skipSettings.enabled, canBlockSource = item.providerKey != null)
         openJob = scope.launch {
             var warning: String? = null
             val saved = try { historyLock.withLock { withContext(Dispatchers.IO) {
@@ -345,6 +347,11 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         _state.value = _state.value.copy(undoSkipPosition = null)
     }
     fun reportAdvertisement() { reportAction?.invoke() }
+    fun blockCurrentProvider() {
+        val key = _state.value.item?.providerKey ?: return
+        adPreferences.edit().putBoolean("provider:$key", true).apply()
+        reportAction?.invoke()
+    }
     fun clearAdvertisementReports() {
         adPreferences.edit().clear().apply()
         notice("已清除本机的广告地址标记，可重新选择影片播放")

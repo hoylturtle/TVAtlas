@@ -23,7 +23,7 @@ import com.tvatlas.core.vod.VodPlaybackSafety
                     TvTextButton(onClick = { controller.chooseLine(line.id); close() }, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth()) {
                             Text((if (line.id == state.currentLine) "当前 · " else "") + line.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(listOfNotNull(line.route, line.status, line.height?.let { "${it}P" }, line.firstFrameMs?.let { "首帧 ${it}ms" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall)
+                            Text(listOfNotNull(line.route, line.status, line.advertisement, line.height?.let { "${it}P" }, line.firstFrameMs?.let { "首帧 ${it}ms" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }

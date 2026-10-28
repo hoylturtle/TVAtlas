@@ -164,6 +164,15 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         }
     }
     private suspend fun fetch(source: String, number: Int, filter: VodFilter, query: String, force: Boolean, networkUsed: () -> Unit): CatalogPage {
+        if (source.startsWith("stremio:")) {
+            if (filter.kind !in setOf(VodKind.MOVIE, VodKind.SERIES)) return CatalogPage(emptyList(), number, number)
+            val type = if (filter.kind == VodKind.MOVIE) "movie" else "series"
+            val key = "addon|$type|$number|$query"
+            return (if (force) null else cached(source, key)) ?: run {
+                val offset = (1 until number).sumOf { previous -> cached(source, "addon|$type|$previous|$query")?.movies?.size ?: 0 }
+                networkUsed(); client(source).load(source, number, query, type = type, addonOffset = offset)
+            }.also { save(source, key, it) }
+        }
         // Recent feed first: avoid waiting for taxonomy and rotating an arbitrary genre on entry.
         if (query.isBlank() && filter.genre == "全部" && filter.region == "全部" && filter.year == "全部") {
             val key = "recent|$number"
@@ -188,7 +197,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
         val permits = Semaphore(4)
         val found = mutableListOf<VodOffer>()
         withTimeoutOrNull(9000) {
-            sources.sortedBy { source -> selected.offers.none { it.source == source } }.map { source -> launch {
+            sources.filter { source -> !selected.movie.discoveryOnly || selected.offers.any { it.source == source } }.sortedBy { source -> selected.offers.none { it.source == source } }.map { source -> launch {
                 permits.withPermit {
                     val context = healthContext(source)
                     if (health?.eligible(source, context) == false) return@withPermit
@@ -198,9 +207,14 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                         withTimeout(6000) {
                             val api = client(source)
                             val known = selected.offers.filter { it.source == source }
-                            val movies = if (known.isNotEmpty()) known.take(2).flatMap { api.load(source, 1, "", it.movie.id).movies }
+                            val movies = if (known.isNotEmpty()) known.take(2).flatMap { offer ->
+                                val details = api.load(source, 1, "", offer.movie.id).movies
+                                if (details.isEmpty() && source.startsWith("stremio:") && offer.movie.typeId == "movie")
+                                    listOf(offer.movie.copy(episodes = listOf(com.tvatlas.core.vod.stremio.StremioProtocol.pendingEpisode(source, offer.movie.id, "正片"))))
+                                else details
+                            }
                                 else api.load(source, 1, selected.movie.name).movies.take(30)
-                            movies.filter { UnifiedVod.identity(it) == UnifiedVod.identity(selected.movie) }.map { VodOffer(source, it) }
+                            movies.filter { UnifiedVod.identity(it) == UnifiedVod.identity(selected.movie) || source.startsWith("stremio:") && known.any { offer -> offer.movie.id == it.id } }.map { VodOffer(source, it) }
                         }
                     } catch (timeout: TimeoutCancellationException) {
                         failed = true
@@ -216,6 +230,7 @@ internal class UnifiedVodRepository(private var sources: List<String>, private v
                 }
             } }.joinAll()
         }
+        if (found.isEmpty() && selected.movie.discoveryOnly) return@coroutineScope selected
         if (found.isEmpty()) throw IllegalArgumentException("暂时未找到可用播放信息，请稍后重试")
         withContext(Dispatchers.Default) { UnifiedVod.merge(found.toList()).first() }
     }

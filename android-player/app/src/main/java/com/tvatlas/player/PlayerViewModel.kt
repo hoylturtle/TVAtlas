@@ -156,6 +156,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+    private var activeStremioAddons: com.tvatlas.player.vod.stremio.StremioAddonStore? = null
+    internal val stremioAddons by lazy {
+        com.tvatlas.player.vod.stremio.StremioAddonStore(com.tvatlas.player.storage.CredentialVault(
+            getApplication<Application>(), "stremio_addons", "tvatlas.stremio.v1"), viewModelScope).also { store ->
+            activeStremioAddons = store
+            viewModelScope.launch { store.state.map { it.entries }.distinctUntilChanged().collect { updateVodSources() } }
+        }
+    }
+    private fun combinedVodSources() = vodSubscriptions.state.value.sources.map { it.api } + stremioAddons.catalogSources()
+    private fun updateVodSources() {
+        val sources = activeVodSubscriptions?.state?.value?.sources.orEmpty().map { it.api } + activeStremioAddons?.catalogSources().orEmpty()
+        activeUnifiedVod?.updateSources(sources); activeHomeMovies?.updateSources(sources); activeHomeSeries?.updateSources(sources)
+    }
+    internal suspend fun addStremioAddon(address: String) {
+        requireNetwork(settings.options.first()); require(!needsConsent())
+        stremioAddons.add(address, prepareVodClient().first)
+    }
+    internal suspend fun setStremioAddonEnabled(source: String, enabled: Boolean) = stremioAddons.enable(source, enabled)
+    internal suspend fun removeStremioAddon(source: String) = stremioAddons.remove(source)
     private var activeUnifiedVod: com.tvatlas.player.vod.UnifiedVodRepository? = null
     private var activeVodSubscriptions: com.tvatlas.player.vod.VodSubscriptionStore? = null
     internal val vodSubscriptions by lazy {
@@ -180,7 +199,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }, applyLive = { lists, removed -> repository.syncUnifiedLive(lists, removed); epg.invalidateLibrary() }).also { store ->
             activeVodSubscriptions = store
             viewModelScope.launch { store.state.map { it.sources.map { source -> source.api } }.distinctUntilChanged()
-                .collect { activeUnifiedVod?.updateSources(it); activeHomeMovies?.updateSources(it); activeHomeSeries?.updateSources(it) } }
+                .collect { updateVodSources() } }
         }
     }
     fun addMediaSubscription(name: String, url: String) = cloudNetworkAction {
@@ -228,24 +247,24 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     internal val unifiedVod by lazy {
-        com.tvatlas.player.vod.UnifiedVodRepository(vodSubscriptions.state.value.sources.map { it.api },
+        com.tvatlas.player.vod.UnifiedVodRepository(combinedVodSources(),
             java.io.File(getApplication<Application>().noBackupFilesDir, "vod-catalog"), viewModelScope, debugLog,
             health = vodHealth, healthContext = ::vodHealthContext, canRecordHealth = ::mayRecordVodHealth, diskLock = vodCatalogDiskLock) { source ->
             requireNetwork(settings.options.first()); require(!needsConsent())
             val (client, _) = prepareVodClient(vodSourceRoutes.get(source))
-            com.tvatlas.player.vod.VodCatalogClient(client, debugLog)
+            com.tvatlas.player.vod.VodCatalogClient(client, debugLog, addon = stremioAddons::find)
         }.also { activeUnifiedVod = it; it.setVisible(vodPageActive && appForeground) }
     }
     internal val homeHistory by lazy { com.tvatlas.player.vod.HomeHistoryStore(
         java.io.File(getApplication<Application>().noBackupFilesDir, "home-recent-vod.json"), viewModelScope) }
     private fun homeRepository() = com.tvatlas.player.vod.UnifiedVodRepository(
-        vodSubscriptions.state.value.sources.map { it.api },
+        combinedVodSources(),
         java.io.File(getApplication<Application>().noBackupFilesDir, "vod-catalog"), viewModelScope, debugLog,
         health = vodHealth, healthContext = ::vodHealthContext, canRecordHealth = ::mayRecordVodHealth,
         diskLock = vodCatalogDiskLock, parallelism = 2) { source ->
         requireNetwork(settings.options.first()); require(!needsConsent())
         val (client, _) = prepareVodClient(vodSourceRoutes.get(source))
-        com.tvatlas.player.vod.VodCatalogClient(client, debugLog)
+        com.tvatlas.player.vod.VodCatalogClient(client, debugLog, addon = stremioAddons::find)
     }
     internal val homeMovies by lazy { homeRepository().also { activeHomeMovies = it; it.setVisible(homePageActive && appForeground) } }
     internal val homeSeries by lazy { homeRepository().also { activeHomeSeries = it; it.setVisible(homePageActive && appForeground) } }
@@ -274,6 +293,47 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         unifiedEpisodeSources = result.offers.flatMap { offer -> offer.movie.episodes.map { it.url to offer.source } }.asReversed().toMap()
         return result
     }
+    private suspend fun resolveAddonChoice(choice: VodEpisodeChoice): List<com.tvatlas.core.vod.CatalogEpisode> = coroutineScope {
+        val pending = choice.candidates.filter { it.streamId.isNotBlank() }
+        val plain = choice.candidates.filter { it.streamId.isBlank() && unifiedEpisodeSources[it.url]?.let { source -> !source.startsWith("stremio:") || stremioAddons.find(source) != null } != false }
+        val permits = kotlinx.coroutines.sync.Semaphore(3)
+        val requests = pending.flatMap { episode ->
+            val type = episode.streamId.substringBefore(':'); val id = episode.streamId.substringAfter(':')
+            val origin = unifiedEpisodeSources[episode.url]
+            val canonical = Regex("tt\\d{5,12}(?::\\d+:\\d+)?").matches(id)
+            stremioAddons.state.value.entries.filter { it.enabled && !vod.providerBlocked(it.source) && (canonical || it.source == origin) && it.manifest.supports("stream", type, id) }
+                .map { Triple(it, episode, type to id) }
+        }.distinctBy { it.first.source to it.second.streamId }
+        if (pending.isNotEmpty() && requests.isEmpty() && plain.isEmpty()) throw IllegalArgumentException("尚无匹配的可用播放插件（可能未添加、已停用或已屏蔽），请在影视插件中检查；片目插件不能单独播放")
+        val results = mutableListOf<com.tvatlas.core.vod.CatalogEpisode>()
+        var unsupported = 0; var failures = 0
+        val completed = withTimeoutOrNull(12000) {
+            requests.map { (entry, _, target) -> async {
+                permits.acquire()
+                try {
+                    val response = withTimeout(8000) {
+                        val client = prepareVodClient(vodSourceRoutes.get(entry.source)).first
+                        com.tvatlas.player.vod.stremio.StremioAddonClient(client).streams(entry, target.first, target.second, choice.name)
+                    }
+                    unsupported += response.unsupported
+                    if (stremioAddons.find(entry.source) != null) response.episodes.forEach {
+                        unifiedEpisodeSources = unifiedEpisodeSources + (it.url to entry.source)
+                        results.add(it)
+                    }
+                } catch (timeout: TimeoutCancellationException) { failures++ }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { failures++ }
+                finally { permits.release() }
+            } }.awaitAll()
+            true
+        } == true
+        if (pending.isNotEmpty()) debugLog.event("INFO", "VOD_ADDON", "providers=${requests.size} lines=${results.size} unsupported=$unsupported failed=$failures completed=$completed")
+        if (plain.isEmpty() && results.isEmpty() && pending.isNotEmpty()) throw IllegalArgumentException(
+            if (unsupported > 0) "插件返回了 $unsupported 条暂不支持的来源；BT、外部网页与压缩包不能直接播放"
+            else if (!completed || failures > 0) "播放插件暂未成功响应，请检查网络后重试或更换插件"
+            else "插件未找到这部影片的 HTTP 播放线路，可稍后重试或添加其他插件")
+        plain + results
+    }
     fun openUnifiedChoice(choice: com.tvatlas.core.vod.VodEpisodeChoice, identity: String, title: String) {
         cancelVodSelection(); val token = vodChoiceGeneration
         val series = latestSeries?.takeIf { identity == it.id + ":" + VodEpisodeChoices.identity(choice.name) }
@@ -283,34 +343,41 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 _vodSelecting.value = true
                 try {
                     autoRefreshJob?.cancelAndJoin()
-                    val prepared = choice.candidates.mapNotNull { unifiedEpisodeSources[it.url] }.distinct().associateWith { source ->
+                    val resolved = resolveAddonChoice(choice).filterNot { episode ->
+                        val source = unifiedEpisodeSources[episode.url]
+                        vod.reported(com.tvatlas.core.vod.VodItem.episode(episode.url, title.take(80), identity,
+                            source?.let { "$it:${episode.line}" }, source))
+                    }
+                    if (resolved.isEmpty()) throw IllegalArgumentException("可用线路均已标记广告或来源已屏蔽，可清除广告标记后重试")
+                    val prepared = resolved.mapNotNull { unifiedEpisodeSources[it.url] }.distinct().associateWith { source ->
                         prepareVodClient(vodSourceRoutes.get(source))
                     }
                     val fallback = prepared.values.firstOrNull() ?: throw IllegalArgumentException("请重新打开影片获取播放信息")
                     val mediaClients = prepared.mapValues { (_, value) -> com.tvatlas.player.vod.vodMediaClient(value.first, { canLoadChannelArtwork() }, debugLog) }
                     val ordered = com.tvatlas.player.vod.VodLineSelector(fallback.first, cache = vodQuality,
                         context = { episode -> qualityContext(prepared[unifiedEpisodeSources[episode.url]]?.second ?: fallback.second) }) { episode ->
-                        mediaClients[unifiedEpisodeSources[episode.url]] ?: fallback.first
-                    }.order(choice.candidates)
+                        com.tvatlas.player.vod.stremio.addonMediaClient(mediaClients[unifiedEpisodeSources[episode.url]] ?: fallback.first, episode)
+                    }.order(resolved)
                     val items = ordered.map { com.tvatlas.core.vod.VodItem.episode(it.url, title.take(80), identity,
-                        unifiedEpisodeSources[it.url]?.let { source -> "$source:${it.line}" }) }
+                        unifiedEpisodeSources[it.url]?.let { source -> "$source:${it.line}" }, unifiedEpisodeSources[it.url]) }
                     if (items.isEmpty()) throw IllegalArgumentException("暂无可用地址")
-                    val clients = items.associate { it.url to (prepared[unifiedEpisodeSources[it.url]]?.first ?: fallback.first) }
+                    val clients = ordered.associate { it.url to com.tvatlas.player.vod.stremio.addonMediaClient(prepared[unifiedEpisodeSources[it.url]]?.first ?: fallback.first, it) }
                     val labels = items.associate { it.url to (prepared[unifiedEpisodeSources[it.url]]?.second ?: fallback.second) }
                     ensureActive()
                     if (!appForeground || token != vodChoiceGeneration) return@launch
+                    require(ordered.all { episode -> unifiedEpisodeSources[episode.url]?.let { !it.startsWith("stremio:") || stremioAddons.find(it) != null } != false }) { "插件已停用，请重新选择影片" }
                     playbackSeries = series; playbackEpisode = choice.name
                     _nextVodEpisode.value = series?.let { VodEpisodeChoices.next(VodEpisodeChoices.of(it.movie), choice.name)?.name }
                     stopPlayback(false)
                     vod.open(items.first(), fallback.first, fallback.second, items.drop(1),
                         alternativeClients = clients, alternativeLabels = labels, lineNames = ordered.associate { episode ->
                             val source = unifiedEpisodeSources[episode.url]
-                            val provider = vodSubscriptions.state.value.sources.firstOrNull { it.api == source }?.name.orEmpty()
+                            val provider = vodSubscriptions.state.value.sources.firstOrNull { it.api == source }?.name ?: stremioAddons.find(source.orEmpty())?.manifest?.name.orEmpty()
                             episode.url to listOf(provider, episode.line).filter { it.isNotBlank() }.joinToString(" · ").take(120).ifBlank { "播放线路" }
                         })
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
-                    debugLog.error("VOD_UNIFIED", error); _message.value = "播放信息暂不可用，请重试或检查网络"
+                    debugLog.error("VOD_UNIFIED", error); _message.value = if (error is IllegalArgumentException) error.message ?: "暂无可用播放线路" else "播放信息暂不可用，请重试或检查网络"
                     vodActive?.notice("这一集暂时无法播放，可返回片库重新获取播放信息。")
                 }
                 finally { if (token == vodChoiceGeneration) _vodSelecting.value = false }

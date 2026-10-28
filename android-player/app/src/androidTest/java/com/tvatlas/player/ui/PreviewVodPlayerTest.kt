@@ -73,6 +73,70 @@ class PreviewVodPlayerTest {
         }
     }
 
+    @Test fun addonHttpStreamPlaysThroughExistingNativePlayer() {
+        compose.setContent { AtlasTheme {} }
+        val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("vod-fixture.mp4").use { it.readBytes() }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        val server = MockWebServer()
+        var created = false
+        lateinit var controller: VodPlaybackController
+        try {
+            server.start()
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse = when {
+                    request.path?.startsWith("/stream/") == true -> MockResponse().setBody("""{"streams":[{"name":"Test HTTP","url":"${server.url("/movie.mp4")}"}]}""")
+                    request.path == "/movie.mp4" -> MockResponse().setHeader("Content-Type", "video/mp4").setBody(Buffer().write(bytes))
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+            val manifest = com.tvatlas.core.vod.stremio.StremioProtocol.manifest("""{"id":"test","name":"Test","resources":["stream"],"types":["movie"],"catalogs":[]}""")
+            val entry = com.tvatlas.player.vod.stremio.AddonEntry(server.url("/manifest.json").toString(), manifest)
+            val episode = runBlocking { com.tvatlas.player.vod.stremio.StremioAddonClient(OkHttpClient()).streams(entry, "movie", "tt1234567", "正片").episodes.single() }
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+                created = true
+                controller.open(VodItem.episode(episode.url, "插件视频", "addon-test", "test:line", entry.source))
+            }
+            compose.waitUntil(20000) { controller.state.value.ready }
+            compose.runOnIdle { assertTrue(controller.state.value.seekable); assertTrue(controller.state.value.canBlockSource); controller.seekBy(1000) }
+        } finally {
+            compose.runOnIdle { if (created) controller.close(); scope.cancel() }
+            server.shutdown()
+        }
+    }
+
+    @Test fun providerBlockSurvivesNewUrlsAndCanBeCleared() {
+        compose.setContent { AtlasTheme {} }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        lateinit var controller: VodPlaybackController
+        val bad = VodItem.episode("https://example.invalid/one.mp4", "测试", "episode1", "source:line", "provider")
+        val changed = VodItem.episode("https://example.invalid/new-token.mp4", "测试", "episode2", "otherline", "provider")
+        val alternative = VodItem.episode("https://example.invalid/good.mp4", "测试", "episode1", "other:line", "other")
+        try {
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+                controller.clearAdvertisementReports()
+                controller.open(bad, alternatives = listOf(alternative))
+                controller.blockCurrentProvider()
+                assertEquals(alternative, controller.state.value.item)
+                controller.close()
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true })
+                assertTrue(controller.reported(changed)); assertFalse(controller.reported(alternative))
+                controller.clearAdvertisementReports(); assertFalse(controller.reported(changed))
+            }
+        } finally { compose.runOnIdle { controller.clearAdvertisementReports(); controller.close(); scope.cancel() } }
+    }
+
     @Test fun reportedAdvertisementIsRememberedAcrossControllersAndCanBeCleared() {
         compose.setContent { AtlasTheme {} }
         val context = InstrumentationRegistry.getInstrumentation().targetContext

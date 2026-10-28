@@ -5,7 +5,7 @@ import com.tvatlas.core.model.stableId
 import kotlinx.serialization.Serializable
 
 /** Temporary URLs stay in memory; only the opaque content key is used in resume storage. */
-class VodItem private constructor(val url: String, val title: String, val key: String, val advertisementKey: String) {
+class VodItem private constructor(val url: String, val title: String, val key: String, val advertisementKey: String, val providerKey: String? = null) {
     override fun toString() = "VodItem(url=[redacted], key=[redacted])"
     companion object {
         /** Only app-selected local documents, never accepted from remote catalogue parsers. */
@@ -16,12 +16,12 @@ class VodItem private constructor(val url: String, val title: String, val key: S
             require(label.isNotBlank() && label.none { it.isISOControl() })
             return VodItem(url, label, stableId("local-document\u0000$url"), stableId(url))
         }
-        fun episode(url: String, title: String, identity: String, sourceIdentity: String? = null): VodItem {
+        fun episode(url: String, title: String, identity: String, sourceIdentity: String? = null, providerIdentity: String? = null): VodItem {
             require(identity.isNotBlank() && identity.length <= 1024)
             val validated = direct(url, title)
             require(sourceIdentity == null || sourceIdentity.isNotBlank() && sourceIdentity.length <= 2048)
             return VodItem(validated.url, validated.title, stableId("episode\u0000$identity"),
-                sourceIdentity?.let { stableId("vod-ad-line\u0000$identity\u0000$it") } ?: validated.advertisementKey)
+                sourceIdentity?.let { stableId("vod-ad-line\u0000$identity\u0000$it") } ?: validated.advertisementKey, providerIdentity?.let { stableId("vod-provider\u0000$it") })
         }
         fun direct(url: String, title: String = ""): VodItem {
             require(url.length <= 8192) { "视频地址过长" }

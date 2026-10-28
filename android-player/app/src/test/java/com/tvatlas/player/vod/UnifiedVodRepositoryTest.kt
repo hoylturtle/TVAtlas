@@ -10,6 +10,31 @@ import org.junit.Test
 import java.nio.file.Files
 
 class UnifiedVodRepositoryTest {
+    @Test fun addonCatalogueDetailsAndDiskCacheUseOpaqueSourceAndDeferredStreams() = runBlocking {
+        val directory = Files.createTempDirectory("addon-shelf").toFile()
+        val entry = com.tvatlas.player.vod.stremio.AddonEntry(com.tvatlas.core.vod.stremio.OpenFilmsAddon.ADDRESS, com.tvatlas.core.vod.stremio.OpenFilmsAddon.manifest)
+        try {
+            val repository = UnifiedVodRepository(listOf(entry.source), directory, this) {
+                VodCatalogClient(OkHttpClient(), addon = { source -> entry.takeIf { source == entry.source } })
+            }
+            repository.browse(VodFilter(), "")
+            val state = withTimeout(3000) { repository.state.first { !it.loading && it.items.isNotEmpty() } }
+            assertEquals(2, state.items.size)
+            val detail = repository.details(state.items.first())
+            assertTrue(detail.movie.discoveryOnly)
+            assertEquals(1, detail.movie.episodes.size)
+            assertTrue(detail.movie.episodes.single().streamId.startsWith("movie:"))
+            assertTrue(detail.movie.episodes.single().url.startsWith("stremio://"))
+            val saved = directory.listFiles()!!.filter { it.extension == "json" }.joinToString { it.readText() }
+            assertFalse(saved.contains(entry.address)); assertFalse(saved.contains("archive.org/download/"))
+            val offline = UnifiedVodRepository(listOf(entry.source), directory, this) { error("network must not be used") }
+            offline.browse(VodFilter(), "", cacheOnly = true)
+            val cached = withTimeout(3000) { offline.state.first { !it.loading && it.items.isNotEmpty() } }
+            assertEquals(2, cached.items.size); assertTrue(cached.items.all { it.movie.episodes.isEmpty() })
+            repository.updateSources(emptyList()); assertTrue(repository.state.value.items.isEmpty())
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun homeCacheCanRestoreBothKindsWithoutNetworkOrChangingLibraryFilter() = runBlocking {
         MockWebServer().use { server ->
             server.dispatcher = object : Dispatcher() {

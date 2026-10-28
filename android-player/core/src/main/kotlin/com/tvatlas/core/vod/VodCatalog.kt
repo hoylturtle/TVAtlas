@@ -4,10 +4,10 @@ import com.tvatlas.core.model.httpUri
 import kotlinx.serialization.json.*
 import kotlinx.serialization.Serializable
 
-@Serializable data class CatalogEpisode(val name: String, val url: String, val line: String, val qualityHeight: Int = 0)
+@Serializable data class CatalogEpisode(val name: String, val url: String, val line: String, val qualityHeight: Int = 0, val streamId: String = "", val headers: Map<String, String> = emptyMap())
 @Serializable data class CatalogMovie(val id: String, val name: String, val category: String, val episodes: List<CatalogEpisode>,
     val poster: String? = null, val summary: String = "",
-    val year: String = "", val area: String = "", val genres: String = "", val typeId: String = "", val updatedAt: Long = 0)
+    val year: String = "", val area: String = "", val genres: String = "", val typeId: String = "", val updatedAt: Long = 0, val imdbId: String = "", val discoveryOnly: Boolean = false, val identityNamespace: String = "")
 @Serializable data class CatalogType(val id: String, val name: String)
 @Serializable data class CatalogPage(val movies: List<CatalogMovie>, val page: Int, val pages: Int, val types: List<CatalogType> = emptyList())
 object VodCatalog {
