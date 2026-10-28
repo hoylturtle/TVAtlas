@@ -175,6 +175,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
     internal suspend fun setStremioAddonEnabled(source: String, enabled: Boolean) = stremioAddons.enable(source, enabled)
     internal suspend fun removeStremioAddon(source: String) = stremioAddons.remove(source)
+    internal fun vodSourceBlocked(source: String) = getApplication<Application>().getSharedPreferences("vod-reported-ad-addresses", android.content.Context.MODE_PRIVATE)
+        .getBoolean("provider:" + com.tvatlas.core.model.stableId("vod-provider\u0000$source"), false)
+    internal fun restoreVodSource(source: String) {
+        getApplication<Application>().getSharedPreferences("vod-reported-ad-addresses", android.content.Context.MODE_PRIVATE)
+            .edit().remove("provider:" + com.tvatlas.core.model.stableId("vod-provider\u0000$source")).apply()
+    }
+
     private var activeUnifiedVod: com.tvatlas.player.vod.UnifiedVodRepository? = null
     private var activeVodSubscriptions: com.tvatlas.player.vod.VodSubscriptionStore? = null
     internal val vodSubscriptions by lazy {
