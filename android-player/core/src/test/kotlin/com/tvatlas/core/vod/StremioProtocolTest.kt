@@ -44,6 +44,10 @@ class StremioProtocolTest {
         assertEquals(1080, result.episodes.single().qualityHeight)
         assertEquals("Bearer secret", result.episodes.single().headers["Authorization"])
     }
+    @Test fun subtitleOnlyAddonIsNotPresentedAsAWorkingFilmSource() {
+        try { StremioProtocol.manifest("""{"id":"subs","name":"Subtitles","resources":["subtitles"],"types":["movie"],"catalogs":[]}"""); fail() }
+        catch (e: IllegalArgumentException) { assertTrue(e.message.orEmpty().contains("字幕")) }
+    }
     @Test fun malformedResponsesDoNotEchoTokens() {
         try { StremioProtocol.catalog("private-token<html>", "movie"); fail() }
         catch (e: IllegalArgumentException) { assertFalse(e.message.orEmpty().contains("private-token")) }
