@@ -44,6 +44,10 @@ class StremioProtocolTest {
         assertEquals(1080, result.episodes.single().qualityHeight)
         assertEquals("Bearer secret", result.episodes.single().headers["Authorization"])
     }
+    @Test fun nullableUnusedSourceFieldsDoNotRejectValidHttpMedia() {
+        val result = StremioProtocol.streams("""{"streams":[{"url":"https://media.example/movie.mp4","infoHash":null,"ytId":null,"externalUrl":null}]}""", "正片")
+        assertEquals(1, result.episodes.size); assertEquals(0, result.unsupported)
+    }
     @Test fun subtitleOnlyAddonIsNotPresentedAsAWorkingFilmSource() {
         try { StremioProtocol.manifest("""{"id":"subs","name":"Subtitles","resources":["subtitles"],"types":["movie"],"catalogs":[]}"""); fail() }
         catch (e: IllegalArgumentException) { assertTrue(e.message.orEmpty().contains("字幕")) }

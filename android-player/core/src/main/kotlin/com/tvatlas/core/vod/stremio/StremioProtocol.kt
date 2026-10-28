@@ -87,7 +87,7 @@ object StremioProtocol {
         val episodes = root.getValue("streams").jsonArray.take(100).mapNotNull {
             val row = it as? JsonObject ?: return@mapNotNull null
             val url = row.text("url")
-            if (url.length > 8192 || httpUri(url) == null || listOf("infoHash", "ytId", "nzbUrl", "rarUrls", "zipUrls", "7zipUrls", "tgzUrls", "tarUrls").any(row::containsKey)) { unsupported++; return@mapNotNull null }
+            if (url.length > 8192 || httpUri(url) == null || listOf("infoHash", "ytId", "nzbUrl", "rarUrls", "zipUrls", "7zipUrls", "tgzUrls", "tarUrls").any { row[it] != null && row[it] != JsonNull }) { unsupported++; return@mapNotNull null }
             val hints = row["behaviorHints"] as? JsonObject
             val requestHeaders = (hints?.get("proxyHeaders") as? JsonObject)?.get("request") as? JsonObject
             val headers = requestHeaders.orEmpty().entries.associate { (key, value) -> key to ((value as? JsonPrimitive)?.contentOrNull ?: "") }
