@@ -128,7 +128,7 @@ import com.tvatlas.player.vod.VodState
                 }
             }
             if (state.undoSkipPosition != null) Row(Modifier.align(Alignment.BottomCenter).background(Color.Black.copy(alpha = .8f)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("已跳过标记片段", color = Color.White)
+                Text(if (state.lastSkipConfirmed) "已跳过已确认广告" else "已跳过标记片段", color = Color.White)
                 TvTextButton(onClick = controller::undoSkip) { Text("撤销本次跳过") }
             }
             seekMessage?.let { Text(it, Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = .7f)).padding(16.dp), color = Color.White) }
@@ -136,7 +136,7 @@ import com.tvatlas.player.vod.VodState
         }
         if (confirmAd) AlertDialog(onDismissRequest = { confirmAd = false },
             title = { Text("标记广告并换线路？") },
-            text = { Text(when (state.insertionMarkers) {
+            text = { Text(if (state.confirmedAdRanges.isNotEmpty()) "本版本已确认 ${state.confirmedAdRanges.size} 段插入广告，可在跳过片段中查看或关闭自动跳过。仍有其他广告时可标记并换线。" else when (state.insertionMarkers) {
                 true -> "播放列表检测到插入标记，但不能据此确认是广告。"
                 false -> "已检查的播放列表片段未发现插入标记，仍无法排除广告已混入视频。"
                 null -> "当前无法判断广告是剪进视频还是动态插入。"

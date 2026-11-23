@@ -73,6 +73,70 @@ class PreviewVodPlayerTest {
         }
     }
 
+    @Test fun confirmedAdsSkipDuringPlaybackUndoProtectsOverlapAndPreferenceSurvivesReopen() {
+        compose.setContent { AtlasTheme {} }
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        val body = assets.open("confirmed-skip/fixture.m3u8").bufferedReader().use { it.readText() }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val storage = object : VodProgressStorage {
+            override fun load(key: String): VodBookmark? = null
+            override fun save(key: String, bookmark: VodBookmark) {}
+        }
+        val server = MockWebServer()
+        lateinit var controller: VodPlaybackController
+        var created = false
+        val preferences = context.getSharedPreferences("vod-confirmed-ad-skip", Context.MODE_PRIVATE)
+        val previous = preferences.getBoolean("enabled", true)
+        try {
+            server.start()
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                    val file = request.requestUrl!!.pathSegments.last()
+                    return if (file == "fixture.m3u8") MockResponse().setHeader("Content-Type", "application/vnd.apple.mpegurl").setBody(body)
+                    else if (file.matches(Regex("segment[0-9]{2}\\.ts"))) MockResponse().setHeader("Content-Type", "video/mp2t").setBody(Buffer().write(assets.open("confirmed-skip/$file").use { it.readBytes() }))
+                    else MockResponse().setResponseCode(404)
+                }
+            }
+            val url = server.url("/fixture.m3u8")
+            val snapshot = ConfirmedVodAds.snapshot(url.toString(), body)!!
+            val rule = ConfirmedAdRule("native-test-only", url.host, url.encodedPath, url.encodedPath, null, snapshot.fingerprint, snapshot.segments.size, listOf(2..3))
+            val item = VodItem.direct(url.toString(), "自动跳过测试")
+            compose.runOnIdle {
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true }, confirmedAdRules = listOf(rule))
+                created = true
+                controller.setConfirmedAdSkipping(true)
+                controller.open(item)
+            }
+            compose.waitUntil(20000) { controller.state.value.confirmedAdSkips == 1 }
+            compose.runOnIdle {
+                controller.pause()
+                assertTrue(controller.state.value.player!!.currentPosition >= 4000)
+                assertEquals(1, controller.state.value.confirmedAdRanges.size)
+                // Overlapping manual and confirmed ranges must not cause an immediate re-skip after undo.
+                controller.saveSkip(1000,5000)
+                controller.undoSkip()
+                controller.toggle()
+            }
+            Thread.sleep(700)
+            compose.runOnIdle {
+                controller.pause()
+                assertEquals(1, controller.state.value.confirmedAdSkips)
+                assertTrue(controller.state.value.player!!.currentPosition < 5000)
+                controller.setConfirmedAdSkipping(false)
+                controller.state.value.skipRanges.toList().forEach(controller::removeSkip)
+                controller.close()
+                controller = VodPlaybackController(context, scope, OkHttpClient(), { storage }, { true }, confirmedAdRules = listOf(rule))
+                controller.open(item)
+                assertFalse(controller.state.value.confirmedAdSkipping)
+            }
+        } finally {
+            compose.runOnIdle { if (created) { controller.setConfirmedAdSkipping(previous); controller.close() }; scope.cancel() }
+            preferences.edit().putBoolean("enabled", previous).commit()
+            server.shutdown()
+        }
+    }
+
     @Test fun addonHttpStreamPlaysThroughExistingNativePlayer() {
         compose.setContent { AtlasTheme {} }
         val bytes = InstrumentationRegistry.getInstrumentation().context.assets.open("vod-fixture.mp4").use { it.readBytes() }

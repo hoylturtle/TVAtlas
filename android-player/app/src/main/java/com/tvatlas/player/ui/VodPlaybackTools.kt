@@ -37,9 +37,16 @@ import com.tvatlas.core.vod.VodPlaybackSafety
     var start by remember(state.item?.url) { mutableStateOf("") }
     var end by remember(state.item?.url) { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = close, title = { Text("手动跳过片段") }, text = {
+    AlertDialog(onDismissRequest = close, title = { Text("广告与片段跳过") }, text = {
         Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("仅用于当前视频地址，不识别或删除画面。启用后可撤销本次跳过。", style = MaterialTheme.typography.bodySmall)
+            Row {
+                Text("自动跳过已确认广告", Modifier.weight(1f))
+                Switch(state.confirmedAdSkipping, controller::setConfirmedAdSkipping)
+            }
+            Text(if (state.confirmedAdRanges.isEmpty()) "未匹配已确认的广告规则，仍可能有广告；不会据此自动跳过。"
+                else "已匹配 ${state.confirmedAdRanges.size} 段已确认广告 · 本次跳过 ${state.confirmedAdSkips} 次，可撤销。", style = MaterialTheme.typography.bodySmall)
+            HorizontalDivider()
+            Text("手动区间只用于当前视频地址。跳过不会改写视频或续播时间轴。", style = MaterialTheme.typography.bodySmall)
             Row {
                 Text("自动跳过已标记区间", Modifier.weight(1f))
                 Switch(state.skipsEnabled, controller::setSkipsEnabled, enabled = state.skipRanges.isNotEmpty())

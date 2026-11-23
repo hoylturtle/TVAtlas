@@ -18,7 +18,7 @@ data class VodState(val item: VodItem? = null, val player: ExoPlayer? = null,
     val playing: Boolean = false, val ready: Boolean = false, val live: Boolean = false,
     val feedback: String? = null, val insertionMarkers: Boolean? = null, val alternatives: Int = 0,
     val error: String? = null, val qualityHeight: Int? = null, val resumeWarning: String? = null, val routeLabel: String = "直连", val seekable: Boolean = false, val lines: List<VodLineInfo> = emptyList(), val currentLine: String? = null,
-    val skipRanges: List<VodSkipRange> = emptyList(), val skipsEnabled: Boolean = false, val undoSkipPosition: Long? = null, val resumeProposal: Long? = null, val versionChanged: Boolean = false, val canBlockSource: Boolean = false)
+    val skipRanges: List<VodSkipRange> = emptyList(), val skipsEnabled: Boolean = false, val undoSkipPosition: Long? = null, val resumeProposal: Long? = null, val versionChanged: Boolean = false, val canBlockSource: Boolean = false, val confirmedAdRanges: List<VodSkipRange> = emptyList(), val confirmedAdSkipping: Boolean = true, val confirmedAdSkips: Int = 0, val lastSkipConfirmed: Boolean = false)
 
 /** All player commands run on the main thread. Source URLs never enter logs or persistence. */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -28,11 +28,14 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private val onEnded: () -> Unit = {}, private val onClosed: () -> Unit = {},
     private val onMeasuredQuality: (VodItem, Int, String) -> Unit = { _, _, _ -> },
     private val onMediaFailure: (VodItem, String, Int) -> Unit = { _, _, _ -> },
-    private val onStarted: () -> Unit = {}) {
+    private val onStarted: () -> Unit = {},
+    private val confirmedAdRules: List<ConfirmedAdRule> = ConfirmedVodAds.rules) {
     private val _state = MutableStateFlow(VodState())
     val state = _state.asStateFlow()
     private val adPreferences = context.getSharedPreferences("vod-reported-ad-addresses", Context.MODE_PRIVATE)
     private val skips = VodSkipStore(context)
+    private val confirmedAdOptions = context.getSharedPreferences("vod-confirmed-ad-skip", Context.MODE_PRIVATE)
+    private val confirmedAdMessages = mutableListOf<androidx.media3.exoplayer.PlayerMessage>()
     private var skipJob: Job? = null
     private var suppressedRange: VodSkipRange? = null
     private var lastSkipRange: VodSkipRange? = null
@@ -71,12 +74,21 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     private var routeLabel = "直连"
     private fun mediaClient(): OkHttpClient {
         val token = generation
-        return vodMediaClient(transport, canPlay, log) { found ->
+        val session = ConfirmedAdPlaylistSession(_state.value.item?.url.orEmpty(), confirmedAdRules)
+        return vodMediaClient(transport, canPlay, log, onConfirmedAds = { match ->
+            scope.launch {
+                if (token == generation) {
+                    _state.value = _state.value.copy(confirmedAdRanges = match?.ranges.orEmpty())
+                    active?.let(::scheduleConfirmedAds)
+                    if (match != null) log?.event("INFO", "VOD_AD_SKIP", "matched rule=${match.ruleId} ranges=${match.ranges.size}")
+                }
+            }
+        }, adSession = session, onAdEvidence = { found ->
             scope.launch {
                 if (token == generation) _state.value = _state.value.copy(
                     insertionMarkers = found || _state.value.insertionMarkers == true)
             }
-        }
+        })
     }
     init { scope.launch { while (isActive) { delay(5000); checkpoint() } } }
     fun open(item: VodItem, client: OkHttpClient? = null, label: String? = null, alternatives: List<VodItem> = emptyList(), resumePosition: Long = 0,
@@ -124,7 +136,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
         lineResults[currentId]?.let { lineResults[currentId] = it.copy(status = "连接中", firstFrameMs = null) }
         val skipSettings = skips.read(item.url)
         _state.value = VodState(item = item, routeLabel = routeLabel, alternatives = alternatives.count { it.advertisementKey != item.advertisementKey },
-            lines = lineSnapshot(item), currentLine = adKey(item.url), skipRanges = skipSettings.ranges, skipsEnabled = skipSettings.enabled, canBlockSource = item.providerKey != null)
+            lines = lineSnapshot(item), currentLine = adKey(item.url), skipRanges = skipSettings.ranges, skipsEnabled = skipSettings.enabled, confirmedAdSkipping = confirmedAdOptions.getBoolean("enabled", true), canBlockSource = item.providerKey != null)
         openJob = scope.launch {
             var warning: String? = null
             val saved = try { historyLock.withLock { withContext(Dispatchers.IO) {
@@ -236,20 +248,49 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
                 while (isActive && active === player) {
                     delay(250)
                     val current = _state.value
-                    if (!current.skipsEnabled || !player.isPlaying || !player.isCurrentMediaItemSeekable) continue
+                    if (!player.isPlaying || !player.isCurrentMediaItemSeekable || player.isCurrentMediaItemLive) continue
                     val position = player.currentPosition
-                    if (suppressedRange?.let { position >= it.endMs } == true) suppressedRange = null
-                    val range = current.skipRanges.firstOrNull { position >= it.startMs && position < it.endMs && it.endMs <= player.duration && it != suppressedRange } ?: continue
-                    lastSkipRange = range
-                    _state.value = current.copy(undoSkipPosition = position)
-                    player.seekTo(range.endMs)
-                    scope.launch {
-                        delay(8000)
-                        if (active === player && _state.value.undoSkipPosition == position) _state.value = _state.value.copy(undoSkipPosition = null)
-                    }
+                    if (suppressedRange?.let { position >= it.endMs || position < it.startMs - 1000 } == true) suppressedRange = null
+                    val confirmed = if (current.confirmedAdSkipping) current.confirmedAdRanges.firstOrNull { position >= it.startMs && position < it.endMs && !skipSuppressed(it) } else null
+                    val manual = if (current.skipsEnabled) current.skipRanges.firstOrNull { position >= it.startMs && position < it.endMs && !skipSuppressed(it) } else null
+                    val range = confirmed ?: manual ?: continue
+                    applySkip(player, range, confirmed != null)
                 }
             }
         }
+    }
+    private fun scheduleConfirmedAds(player: ExoPlayer) {
+        confirmedAdMessages.forEach { it.cancel() }; confirmedAdMessages.clear()
+        if (!_state.value.confirmedAdSkipping) return
+        val token = generation
+        _state.value.confirmedAdRanges.forEach { range ->
+            confirmedAdMessages += player.createMessage { _, _ ->
+                if (active === player && token == generation && _state.value.confirmedAdSkipping && range in _state.value.confirmedAdRanges)
+                    applySkip(player, range, true)
+            }.setLooper(android.os.Looper.getMainLooper()).setPosition(range.startMs).setDeleteAfterDelivery(false).send()
+        }
+    }
+    private fun skipSuppressed(range: VodSkipRange) = suppressedRange?.let { range.startMs < it.endMs && range.endMs > it.startMs } == true
+    private fun applySkip(player: ExoPlayer, range: VodSkipRange, confirmed: Boolean) {
+        val position = player.currentPosition
+        if (active !== player || !player.playWhenReady || player.isCurrentMediaItemLive || !player.isCurrentMediaItemSeekable ||
+            !player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) || player.duration <= 0 || range.endMs > player.duration ||
+            position < range.startMs || position >= range.endMs || skipSuppressed(range)) return
+        val previous = _state.value
+        lastSkipRange = range
+        _state.value = previous.copy(undoSkipPosition = position, lastSkipConfirmed = confirmed,
+            confirmedAdSkips = previous.confirmedAdSkips + if (confirmed) 1 else 0)
+        player.seekTo(range.endMs)
+        if (confirmed) log?.event("INFO", "VOD_AD_SKIP", "skipped startMs=${range.startMs} endMs=${range.endMs}")
+        scope.launch {
+            delay(8000)
+            if (active === player && _state.value.undoSkipPosition == position) _state.value = _state.value.copy(undoSkipPosition = null)
+        }
+    }
+    fun setConfirmedAdSkipping(enabled: Boolean) {
+        confirmedAdOptions.edit().putBoolean("enabled", enabled).apply()
+        _state.value = _state.value.copy(confirmedAdSkipping = enabled)
+        active?.let(::scheduleConfirmedAds)
     }
     private fun publish(player: ExoPlayer) {
         if (active === player) _state.value = _state.value.copy(playing = player.isPlaying,
@@ -343,7 +384,14 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     }
     fun undoSkip() {
         val position = _state.value.undoSkipPosition ?: return
-        suppressedRange = lastSkipRange; active?.seekTo(position)
+        val last = lastSkipRange
+        suppressedRange = last?.let { range ->
+            val current = _state.value
+            val enabled = (if (current.skipsEnabled) current.skipRanges else emptyList()) +
+                (if (current.confirmedAdSkipping) current.confirmedAdRanges else emptyList())
+            VodPlaybackSafety.merge(enabled + range).firstOrNull { it.startMs <= range.startMs && it.endMs >= range.endMs } ?: range
+        }
+        active?.seekTo(position)
         _state.value = _state.value.copy(undoSkipPosition = null)
     }
     fun reportAdvertisement() { reportAction?.invoke() }
@@ -364,6 +412,7 @@ class VodPlaybackController(private val context: Context, private val scope: Cor
     }
     fun close() { releasePlayer(); lineItems = emptyList(); lineClients = emptyMap(); lineRoutes = emptyMap(); namesByUrl = emptyMap(); lineResults.clear(); onClosed() }
     private fun releasePlayer() {
+        confirmedAdMessages.forEach { it.cancel() }; confirmedAdMessages.clear()
         skipJob?.cancel()
         checkpoint(finished = active?.playbackState == Player.STATE_ENDED); generation++; openJob?.cancel(); bufferJob?.cancel()
         reportAction = null

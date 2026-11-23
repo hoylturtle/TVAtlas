@@ -1,17 +1,26 @@
 package com.tvatlas.player.vod
 
 import okhttp3.OkHttpClient
+import com.tvatlas.core.vod.ConfirmedAdPlaylistSession
+import com.tvatlas.core.vod.ConfirmedAdMatch
+import com.tvatlas.core.vod.ConfirmedVodAds
 
-internal fun vodMediaClient(transport: OkHttpClient, canPlay: () -> Boolean, log: com.tvatlas.player.debug.DebugLog?, onAdEvidence: ((Boolean) -> Unit)? = null) = transport.newBuilder().followRedirects(true).followSslRedirects(true)
+internal fun vodMediaClient(transport: OkHttpClient, canPlay: () -> Boolean, log: com.tvatlas.player.debug.DebugLog?, onConfirmedAds: ((ConfirmedAdMatch?) -> Unit)? = null, adSession: ConfirmedAdPlaylistSession? = null, onAdEvidence: ((Boolean) -> Unit)? = null) = transport.newBuilder().followRedirects(true).followSslRedirects(true)
         .callTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS).addInterceptor { chain ->
             val response = chain.proceed(chain.request())
             val type = response.header("Content-Type").orEmpty().lowercase()
-            if (onAdEvidence != null && response.isSuccessful && (response.request.url.encodedPath.endsWith(".m3u8", true) || "mpegurl" in type)) {
-                // Inspect only a bounded prefix of an already requested playlist. Never remove segments.
-                val text = response.peekBody(65536).string()
-                if (text.trimStart('\uFEFF', ' ', '\n', '\r').startsWith("#EXTM3U"))
-                    onAdEvidence(hasVodInsertionMarkers(text))
+            if ((onAdEvidence != null || onConfirmedAds != null) && response.isSuccessful && (response.request.url.encodedPath.endsWith(".m3u8", true) || "mpegurl" in type)) {
+                // Peek the existing request only. Playback bytes and the media timeline stay unchanged.
+                val candidate = adSession?.accepts(response.request.url.toString()) == true
+                val text = response.peekBody(if (candidate) ConfirmedVodAds.MAX_BYTES.toLong() + 1 else 65536).string()
+                if (text.trimStart('\uFEFF', ' ', '\n', '\r').startsWith("#EXTM3U")) {
+                    onAdEvidence?.invoke(hasVodInsertionMarkers(text))
+                    if (candidate && onConfirmedAds != null) {
+                        val result = adSession?.inspect(response.request.url.toString(), text)
+                        if (result?.relevant == true) onConfirmedAds(result.match)
+                    }
+                }
             }
             response
         }.addNetworkInterceptor { chain ->
