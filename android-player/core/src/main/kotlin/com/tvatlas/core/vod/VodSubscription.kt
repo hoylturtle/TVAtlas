@@ -18,7 +18,11 @@ object VodSubscription {
         val unsupportedNames = mutableSetOf<String>()
         val sources = sites.mapNotNull { node ->
             val row = node as? JsonObject ?: return@mapNotNull null
-            val type = (row["type"] as? JsonPrimitive)?.intOrNull
+            val rawType = row["type"] as? JsonPrimitive
+            // Desktop configs use explicit CMS aliases; numeric Spider types keep their meaning.
+            val type = rawType?.intOrNull ?: rawType?.contentOrNull?.trim()?.lowercase()?.let {
+                if (it in setOf("cms", "maccms", "apple", "apples", "苹果cms")) 1 else null
+            }
             val api = (row["api"] as? JsonPrimitive)?.contentOrNull.orEmpty()
             val name = (row["name"] as? JsonPrimitive)?.contentOrNull.orEmpty().take(80)
             if (type != 1 || api.startsWith("csp_", true) || api.endsWith(".js", true)) { unsupported++; unsupportedNames += name; return@mapNotNull null }
